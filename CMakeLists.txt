@@ -2,6 +2,13 @@ cmake_minimum_required (VERSION 2.8.2)
 project (yer-face)
 set(EXECUTABLE_OUTPUT_PATH "bin")
 
+set(CMAKE_C_FLAGS "-Wall -O2")
+set(CMAKE_C_FLAGS_DEBUG "-Wall -O2")
+set(CMAKE_C_FLAGS_RELEASE "-Wall -O2")
+set(CMAKE_CXX_FLAGS "-Wall -O2")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -O2")
+set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O2")
+
 include(CTest)
 
 if (CMAKE_VERSION VERSION_LESS 3.2)
@@ -32,10 +39,9 @@ if (CMAKE_VERSION VERSION_LESS 2.8.11)
                         "${gmock_SOURCE_DIR}/include")
 endif()
 
+find_package( OpenCV REQUIRED )
+
 include_directories("src")
 
-add_executable(yer-face src/yer-face.cpp src/adder.cpp)
-target_link_libraries(yer-face)
-
-add_executable(test-adder src/adder.cpp test/adder.test.cpp)
-target_link_libraries(test-adder gtest gmock_main)
+add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/FrameDerivatives.cpp)
+target_link_libraries(yer-face ${OpenCV_LIBS})
