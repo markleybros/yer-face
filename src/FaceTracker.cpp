@@ -76,7 +76,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
 			staleCounter = opticalTrackStaleFramesInterval;
 		}
-	} else if(trackerState == TRACKING) {
+	}
+	if(trackerState == TRACKING || trackerState == STALE) {
 		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
 		if(!trackSuccess) {
 			fprintf(stderr, "FaceTracker WARNING! Track lost. Will keep searching...\n");
