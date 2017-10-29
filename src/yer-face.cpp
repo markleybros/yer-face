@@ -40,7 +40,7 @@ int main( int argc, const char** argv ) {
 		"{eyes_cascade|/usr/local/share/OpenCV/haarcascades/haarcascade_eye.xml|}"
 		"{capture_file|/dev/video0|}");
 
-	parser.about("Yer Face. The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
+	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
 		parser.printMessage();
 		return 1;
