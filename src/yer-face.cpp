@@ -1,3 +1,4 @@
+
 #include "opencv2/objdetect.hpp"
 #include "opencv2/videoio.hpp"
 #include "opencv2/highgui.hpp"
@@ -9,11 +10,10 @@
 
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
-
+#include "Metrics.hpp"
 
 #include <iostream>
 #include <stdio.h>
-#include <list>
 
 using namespace std;
 using namespace cv;
@@ -24,13 +24,11 @@ String eyes_cascade_name;
 String capture_file;
 String window_name = "Performance Capture Tests";
 
-double timer = -1;
-list<double> frameTimes;
-
 double imageScaleFactor = 0.5;
 
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
+Metrics *metrics;
 
 int main( int argc, const char** argv ) {
 	//Command line options.
@@ -64,9 +62,12 @@ int main( int argc, const char** argv ) {
 		return 1;
 	}
 
+	metrics = new Metrics();
+
 	while(capture.read(frame)) {
 		// Start timer
-		timer = (double)getTickCount();
+		metrics->startFrame();
+
 		if(frame.empty()) {
 			fprintf(stderr, "Breaking on no frame ready...");
 			break;
@@ -76,29 +77,14 @@ int main( int argc, const char** argv ) {
 		faceTracker->processCurrentFrame();
 		faceTracker->renderPreviewHUD();
 
-		// Calculate Frames per second (FPS)
-		timer = ((double)getTickCount() - timer) / getTickFrequency();
-		frameTimes.push_front(timer);
-		double averageTime = 0.0;
-		double worstTime = 0.0;
-		int numTimes = 0;
-		for(double frameTime : frameTimes) {
-			averageTime = averageTime + frameTime;
-			if(frameTime > worstTime) {
-				worstTime = frameTime;
-			}
-			numTimes++;
-		}
-		averageTime = averageTime / (double)numTimes;
-		while(frameTimes.size() > 30) {
-			frameTimes.pop_back();
-		}
+		metrics->endFrame();
+
 		Mat previewFrame = frameDerivatives->getPreviewFrame();
 
 		//Display some metrics on frame.
-		char metrics[256];
-		sprintf(metrics, "Times: <Avg %.02fms, Worst %.02fms>", averageTime * 1000.0, worstTime * 1000.0);
-		putText(previewFrame, metrics, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+		char metricsString[256];
+		sprintf(metricsString, "Times: <Avg %.02fms, Worst %.02fms>", metrics->getAverageTimeSeconds() * 1000.0, metrics->getWorstTimeSeconds() * 1000.0);
+		putText(previewFrame, metricsString, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
 		//Display preview frame.
 		imshow(window_name, previewFrame);

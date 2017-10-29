@@ -2,12 +2,8 @@ cmake_minimum_required (VERSION 2.8.2)
 project (yer-face)
 set(EXECUTABLE_OUTPUT_PATH "bin")
 
-set(CMAKE_C_FLAGS "-Wall -O2")
-set(CMAKE_C_FLAGS_DEBUG "-Wall -O2")
-set(CMAKE_C_FLAGS_RELEASE "-Wall -O2")
-set(CMAKE_CXX_FLAGS "-Wall -O2")
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall -O2")
-set(CMAKE_CXX_FLAGS_RELEASE "-Wall -O2")
+set(CMAKE_C_FLAGS "-Wall -O2 -std=c++11 ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "-Wall -O2 -std=c++11 ${CMAKE_CXX_FLAGS}")
 
 include(CTest)
 
@@ -43,5 +39,5 @@ find_package( OpenCV REQUIRED )
 
 include_directories("src")
 
-add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/FrameDerivatives.cpp)
+add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/FrameDerivatives.cpp src/Metrics.cpp)
 target_link_libraries(yer-face ${OpenCV_LIBS})
