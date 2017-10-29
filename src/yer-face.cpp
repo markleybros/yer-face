@@ -62,14 +62,14 @@ int main( int argc, const char** argv ) {
 		return 1;
 	}
 
-	metrics = new Metrics();
+	metrics = new Metrics(30);
 
 	while(capture.read(frame)) {
 		// Start timer
 		metrics->startFrame();
 
 		if(frame.empty()) {
-			fprintf(stderr, "Breaking on no frame ready...");
+			fprintf(stderr, "Breaking on no frame ready...\n");
 			break;
 		}
 
@@ -82,15 +82,18 @@ int main( int argc, const char** argv ) {
 		Mat previewFrame = frameDerivatives->getPreviewFrame();
 
 		//Display some metrics on frame.
-		char metricsString[256];
-		sprintf(metricsString, "Times: <Avg %.02fms, Worst %.02fms>", metrics->getAverageTimeSeconds() * 1000.0, metrics->getWorstTimeSeconds() * 1000.0);
-		putText(previewFrame, metricsString, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+		char metricsStringA[256];
+		snprintf(metricsStringA, 256, "Times: <Avg %.02fms, Worst %.02fms>", metrics->getAverageTimeSeconds() * 1000.0, metrics->getWorstTimeSeconds() * 1000.0);
+		char metricsStringB[256];
+		snprintf(metricsStringB, 256, "FPS: <%.02f>", metrics->getFPS());
+		putText(previewFrame, metricsStringA, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+		putText(previewFrame, metricsStringB, Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
 		//Display preview frame.
 		imshow(window_name, previewFrame);
 		char c = (char)waitKey(1);
 		if(c == 27) {
-			fprintf(stderr, "Breaking on user escape...");
+			fprintf(stderr, "Breaking on user escape...\n");
 			break;
 		}
 	}

@@ -6,17 +6,23 @@ using namespace cv;
 
 namespace YerFace {
 
+Metrics::Metrics(unsigned int myFrameBufferSize) {
+	frameBufferSize = myFrameBufferSize;
+}
+
 void Metrics::startFrame(void) {
 	timer = (double)getTickCount();
+	frameTickStartTimes.push_front(timer);
 }
 
 void Metrics::endFrame(void) {
-	timer = ((double)getTickCount() - timer) / getTickFrequency();
-	frameTimes.push_front(timer);
+	double now = (double)getTickCount();
+	timer = (now - timer) / getTickFrequency();
+	frameProcessTimes.push_front(timer);
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
 	int numTimes = 0;
-	for(double frameTime : frameTimes) {
+	for(double frameTime : frameProcessTimes) {
 		averageTimeSeconds = averageTimeSeconds + frameTime;
 		if(frameTime > worstTimeSeconds) {
 			worstTimeSeconds = frameTime;
@@ -24,8 +30,12 @@ void Metrics::endFrame(void) {
 		numTimes++;
 	}
 	averageTimeSeconds = averageTimeSeconds / (double)numTimes;
-	while(frameTimes.size() > 30) {
-		frameTimes.pop_back();
+	fps = 1.0 / (((now - frameTickStartTimes.back()) / getTickFrequency()) / frameTickStartTimes.size());
+	while(frameProcessTimes.size() >= frameBufferSize) {
+		frameProcessTimes.pop_back();
+	}
+	while(frameTickStartTimes.size() >= frameBufferSize) {
+		frameTickStartTimes.pop_back();
 	}
 }
 
@@ -35,6 +45,10 @@ double Metrics::getAverageTimeSeconds(void) {
 
 double Metrics::getWorstTimeSeconds(void) {
 	return worstTimeSeconds;
+}
+
+double Metrics::getFPS(void) {
+	return fps;
 }
 
 } //namespace YerFace

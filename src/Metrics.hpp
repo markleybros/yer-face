@@ -9,15 +9,20 @@ namespace YerFace {
 
 class Metrics {
 public:
+	Metrics(unsigned int myFrameBufferSize);
 	void startFrame(void);
 	void endFrame(void);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
+	double getFPS(void);
 private:
+	unsigned int frameBufferSize;
 	double timer;
-	list<double> frameTimes;
+	list<double> frameProcessTimes;
+	list<double> frameTickStartTimes;
 	double averageTimeSeconds;
 	double worstTimeSeconds;
+	double fps;
 };
 
 }; //namespace YerFace
