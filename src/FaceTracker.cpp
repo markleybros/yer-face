@@ -34,6 +34,7 @@ FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameD
 }
 
 TrackerState FaceTracker::processCurrentFrame(void) {
+	bool transitionedToTrackingThisFrame = false;
 	if(trackerState == DETECTING || trackerState == LOST || trackerState == STALE) {
 		classificationBoxSet = false;
 		std::vector<Rect> faces;
@@ -61,6 +62,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 				(double)classificationBox.height / classificationScaleFactor);
 			//Switch to TRACKING
 			trackerState = TRACKING;
+			transitionedToTrackingThisFrame = true;
 			#if (CV_MINOR_VERSION < 3)
 			tracker = Tracker::create("KCF");
 			#else
@@ -73,11 +75,12 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 				(double)classificationBoxNormalSize.y + (((double)classificationBoxNormalSize.height - trackingBoxHeight) / 2.0),
 				trackingBoxWidth,
 				trackingBoxHeight);
+			trackingBoxSet = true;
 			tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
 			staleCounter = opticalTrackStaleFramesInterval;
 		}
 	}
-	if(trackerState == TRACKING || trackerState == STALE) {
+	if((trackerState == TRACKING && !transitionedToTrackingThisFrame) || trackerState == STALE) {
 		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
 		if(!trackSuccess) {
 			fprintf(stderr, "FaceTracker WARNING! Track lost. Will keep searching...\n");
@@ -108,6 +111,10 @@ void FaceTracker::renderPreviewHUD(void) {
 
 TrackerState FaceTracker::getTrackerState(void) {
 	return trackerState;
+}
+
+tuple<Rect, bool> FaceTracker::getFaceRect(void) {
+
 }
 
 }; //namespace YerFace

@@ -19,7 +19,7 @@ public:
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
-	tuple<Rect, bool> getTrackingRect(void); //FIXME - implement this
+	tuple<Rect, bool> getFaceRect(void);
 private:
 	string classifierFileName;
 	float trackingBoxPercentage;
