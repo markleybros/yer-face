@@ -70,12 +70,16 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			#endif
 			double trackingBoxWidth = (double)classificationBoxNormalSize.width * trackingBoxPercentage;
 			double trackingBoxHeight = (double)classificationBoxNormalSize.height * trackingBoxPercentage;
-			Rect trackingBox = Rect(
-				(double)classificationBoxNormalSize.x + (((double)classificationBoxNormalSize.width - trackingBoxWidth) / 2.0),
-				(double)classificationBoxNormalSize.y + (((double)classificationBoxNormalSize.height - trackingBoxHeight) / 2.0),
+			trackingBoxOffset = Point(
+				(((double)classificationBoxNormalSize.width - trackingBoxWidth) / 2.0),
+				(((double)classificationBoxNormalSize.height - trackingBoxHeight) / 2.0));
+			trackingBox = Rect(
+				(double)classificationBoxNormalSize.x + trackingBoxOffset.x,
+				(double)classificationBoxNormalSize.y + trackingBoxOffset.y,
 				trackingBoxWidth,
 				trackingBoxHeight);
 			trackingBoxSet = true;
+
 			tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
 			staleCounter = opticalTrackStaleFramesInterval;
 		}
@@ -96,16 +100,32 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			}
 		}
 	}
+	faceRectSet = false;
+	if(trackingBoxSet) {
+		double faceRectWidth = trackingBox.width / trackingBoxPercentage;
+		double faceRectHeight = trackingBox.height / trackingBoxPercentage;
+		faceRect = Rect(
+			trackingBox.x - trackingBoxOffset.x,
+			trackingBox.y - trackingBoxOffset.y,
+			faceRectWidth,
+			faceRectHeight);
+		faceRectSet = true;
+	}
 	return trackerState;
 }
 
-void FaceTracker::renderPreviewHUD(void) {
+void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(classificationBoxSet) {
-		rectangle(frame, classificationBoxNormalSize, Scalar( 0, 255, 0 ), 1, 0);
+	if(verbose) {
+		if(classificationBoxSet) {
+			rectangle(frame, classificationBoxNormalSize, Scalar( 0, 255, 0 ), 1, 0);
+		}
+		if(trackingBoxSet) {
+			rectangle(frame, trackingBox, Scalar( 255, 0, 0 ), 1, 0);
+		}
 	}
-	if(trackingBoxSet) {
-		rectangle(frame, trackingBox, Scalar( 255, 0, 0 ), 1, 0);
+	if(faceRectSet) {
+		rectangle(frame, faceRect, Scalar( 0, 0, 255 ), 1, 0);
 	}
 }
 
@@ -113,8 +133,8 @@ TrackerState FaceTracker::getTrackerState(void) {
 	return trackerState;
 }
 
-tuple<Rect, bool> FaceTracker::getFaceRect(void) {
-
+tuple<Rect2d, bool> FaceTracker::getFaceRect(void) {
+	return make_tuple(faceRect, faceRectSet);
 }
 
 }; //namespace YerFace

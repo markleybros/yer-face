@@ -17,9 +17,9 @@ class FaceTracker {
 public:
 	FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxFaceSizePercentage = 0.1, int myOpticalTrackStaleFramesInterval = 15);
 	TrackerState processCurrentFrame(void);
-	void renderPreviewHUD(void);
+	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
-	tuple<Rect, bool> getFaceRect(void);
+	tuple<Rect2d, bool> getFaceRect(void);
 private:
 	string classifierFileName;
 	float trackingBoxPercentage;
@@ -31,9 +31,12 @@ private:
 	TrackerState trackerState;
 	bool classificationBoxSet;
 	bool trackingBoxSet;
+	bool faceRectSet;
 	Rect classificationBox;
 	Rect classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	Rect2d trackingBox;
+	Rect2d faceRect;
+	Point2d trackingBoxOffset;
 	int staleCounter;
 };
 
