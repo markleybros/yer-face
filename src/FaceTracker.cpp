@@ -12,6 +12,9 @@ FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameD
 	frameDerivatives = myFrameDerivatives;
 	trackerState = DETECTING;
 	trackingBoxScaleFactor = 0.75; //FIXME - magic numbers
+	classificationBoxSet = false;
+	trackingBoxSet = false;
+
 	if(!cascadeClassifier.load(classifierFileName)) {
 		throw invalid_argument("Unable to load specified classifier.");
 	}

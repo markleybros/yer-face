@@ -3,7 +3,9 @@ project (yer-face)
 set(EXECUTABLE_OUTPUT_PATH "bin")
 
 set(CMAKE_C_FLAGS "-Wall -O2 -std=c++11 ${CMAKE_C_FLAGS}")
+set(CMAKE_C_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS "-Wall -O2 -std=c++11 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
 include(CTest)
 

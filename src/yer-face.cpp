@@ -29,6 +29,7 @@ double imageScaleFactor = 0.5;
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 Metrics *metrics;
+unsigned long frameNum = 0;
 
 int main( int argc, const char** argv ) {
 	//Command line options.
@@ -67,6 +68,7 @@ int main( int argc, const char** argv ) {
 	while(capture.read(frame)) {
 		// Start timer
 		metrics->startFrame();
+		frameNum++;
 
 		if(frame.empty()) {
 			fprintf(stderr, "Breaking on no frame ready...\n");
@@ -86,6 +88,7 @@ int main( int argc, const char** argv ) {
 		snprintf(metricsStringA, 256, "Times: <Avg %.02fms, Worst %.02fms>", metrics->getAverageTimeSeconds() * 1000.0, metrics->getWorstTimeSeconds() * 1000.0);
 		char metricsStringB[256];
 		snprintf(metricsStringB, 256, "FPS: <%.02f>", metrics->getFPS());
+		//fprintf(stderr, "Frame %lu %s, %s\n", frameNum, metricsStringA, metricsStringB);
 		putText(previewFrame, metricsStringA, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 		putText(previewFrame, metricsStringB, Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
