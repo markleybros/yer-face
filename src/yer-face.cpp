@@ -24,8 +24,6 @@ String eyes_cascade_name;
 String capture_file;
 String window_name = "Performance Capture Tests";
 
-double imageScaleFactor = 0.5;
-
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 Metrics *metrics;
@@ -53,7 +51,7 @@ int main( int argc, const char** argv ) {
 	Mat frame;
 
 	//Instantiate our classes.
-	frameDerivatives = new FrameDerivatives(imageScaleFactor);
+	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
 
 	//Open the video stream.
