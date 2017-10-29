@@ -1,20 +1,32 @@
 
 #include "FaceTracker.hpp"
 #include <exception>
+#include <cmath>
 #include <stdio.h>
 
 using namespace std;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives) {
+FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxFaceSizePercentage, int myOpticalTrackStaleFramesInterval) {
 	classifierFileName = myClassifierFileName;
 	frameDerivatives = myFrameDerivatives;
 	trackerState = DETECTING;
-	trackingBoxScaleFactor = 0.75; //FIXME - magic numbers
 	classificationBoxSet = false;
 	trackingBoxSet = false;
 
+	trackingBoxPercentage = myTrackingBoxPercentage;
+	if(trackingBoxPercentage <= 0.0 || trackingBoxPercentage > 1.0) {
+		throw invalid_argument("trackingBoxPercentage is out of range.");
+	}
+	maxFaceSizePercentage = myMaxFaceSizePercentage;
+	if(maxFaceSizePercentage <= 0.0 || maxFaceSizePercentage > 1.0) {
+		throw invalid_argument("maxFaceSizePercentage is out of range.");
+	}
+	opticalTrackStaleFramesInterval = myOpticalTrackStaleFramesInterval;
+	if(opticalTrackStaleFramesInterval <= 0) {
+		throw invalid_argument("opticalTrackStaleFramesInterval is out of range.");
+	}
 	if(!cascadeClassifier.load(classifierFileName)) {
 		throw invalid_argument("Unable to load specified classifier.");
 	}
@@ -25,8 +37,10 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	if(trackerState == DETECTING || trackerState == LOST || trackerState == STALE) {
         classificationBoxSet = false;
 		std::vector<Rect> faces;
-		//FIXME - Magic number 30x30 ?
-        cascadeClassifier.detectMultiScale(frameDerivatives->getClassificationFrame(), faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(30, 30) );
+		Mat classificationFrame = frameDerivatives->getClassificationFrame();
+		double classificationFrameArea = (double)classificationFrame.size().area();
+		double maxFaceSize = sqrt(classificationFrameArea * maxFaceSizePercentage);
+        cascadeClassifier.detectMultiScale(classificationFrame, faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(maxFaceSize, maxFaceSize));
 
         int largestFace = -1;
         int largestFaceArea = -1;
@@ -52,16 +66,15 @@ TrackerState FaceTracker::processCurrentFrame(void) {
             #else
             tracker = TrackerKCF::create();
             #endif
-            double trackingBoxWidth = (double)classificationBoxNormalSize.width * trackingBoxScaleFactor;
-            double trackingBoxHeight = (double)classificationBoxNormalSize.height * trackingBoxScaleFactor;
+            double trackingBoxWidth = (double)classificationBoxNormalSize.width * trackingBoxPercentage;
+            double trackingBoxHeight = (double)classificationBoxNormalSize.height * trackingBoxPercentage;
             Rect trackingBox = Rect(
                 (double)classificationBoxNormalSize.x + (((double)classificationBoxNormalSize.width - trackingBoxWidth) / 2.0),
                 (double)classificationBoxNormalSize.y + (((double)classificationBoxNormalSize.height - trackingBoxHeight) / 2.0),
                 trackingBoxWidth,
                 trackingBoxHeight);
             tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
-			//FIXME - more magic numbers boo
-            staleCounter = 15;
+            staleCounter = opticalTrackStaleFramesInterval;
         }
     } else if(trackerState == TRACKING) {
         bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
