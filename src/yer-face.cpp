@@ -27,7 +27,8 @@ String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
-EyeTracker *eyeTracker;
+EyeTracker *eyeTrackerLeft;
+EyeTracker *eyeTrackerRight;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -55,7 +56,8 @@ int main( int argc, const char** argv ) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
-	eyeTracker = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
+	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
+	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -78,9 +80,11 @@ int main( int argc, const char** argv ) {
 
 		frameDerivatives->setCurrentFrame(frame);
 		faceTracker->processCurrentFrame();
-		eyeTracker->processCurrentFrame();
+		eyeTrackerLeft->processCurrentFrame();
+		eyeTrackerRight->processCurrentFrame();
 		faceTracker->renderPreviewHUD();
-		eyeTracker->renderPreviewHUD();
+		eyeTrackerLeft->renderPreviewHUD();
+		eyeTrackerRight->renderPreviewHUD();
 
 		metrics->endFrame();
 

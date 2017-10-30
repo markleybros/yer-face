@@ -25,19 +25,21 @@ public:
 	EyeTracker(WhichEye myWhichEye, string myClassifierFileName, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myMinEyeSizePercentage = 0.05, float myMaxEyeSizePercentage = 0.3, int myOpticalTrackStaleFramesInterval = 10);
 	WhichEye getWhichEye(void);
 	TrackerState processCurrentFrame(void);
-	void renderPreviewHUD(void);
-	// TrackerState getTrackerState(void);
-	// tuple<Rect2d, bool> getLeftEyeRect(void);
-	// tuple<Rect2d, bool> getRightEyeRect(void);
+	void renderPreviewHUD(bool verbose = true);
+	TrackerState getTrackerState(void);
+	tuple<Rect2d, bool> getEyeRect(void);
 	static const char *getWhichEyeAsString(WhichEye whichEye);
 private:
+	void performDetection(void);
+	void performTracking(void);
+
 	WhichEye whichEye;
 	string classifierFileName;
 	float minEyeSizePercentage;
 	float maxEyeSizePercentage;
 	int opticalTrackStaleFramesInterval;
 	CascadeClassifier cascadeClassifier;
-	// Ptr<Tracker> tracker;
+	Ptr<Tracker> tracker;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	TrackerState trackerState;
@@ -45,11 +47,9 @@ private:
 	bool trackingBoxSet;
 	Rect classificationBox;
 	Rect classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	// bool faceRectSet;
-	// Rect2d trackingBox;
-	// Rect2d faceRect;
-	// Point2d trackingBoxOffset;
-	// int staleCounter;
+	bool transitionedToTrackingThisFrame;
+	Rect2d trackingBox;
+	int staleCounter;
 };
 
 }; //namespace YerFace
