@@ -38,6 +38,7 @@ FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameD
 }
 
 TrackerState FaceTracker::processCurrentFrame(void) {
+	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	bool transitionedToTrackingThisFrame = false;
 	if(trackerState == DETECTING || trackerState == LOST || trackerState == STALE) {
 		classificationBoxSet = false;
@@ -49,15 +50,25 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 		int largestFace = -1;
 		int largestFaceArea = -1;
-		for( size_t i = 0; i < faces.size(); i++ ) {
+		Rect2d scaledTrackingBox;
+		if(trackerState == STALE && trackingBoxSet) {
+			scaledTrackingBox = Rect(Utilities::scaleRect(trackingBox, classificationScaleFactor));
+		}
+		for(size_t i = 0; i < faces.size(); i++) {
 			if(faces[i].area() > largestFaceArea) {
+				if(trackerState == STALE && trackingBoxSet) {
+					//This face is only a candidate if it overlaps (at least a bit) with the face we have been tracking.
+					Rect2d candidateFace = Rect2d(faces[i]);
+					if((scaledTrackingBox & candidateFace).area() <= 0) {
+						continue;
+					}
+				}
 				largestFace = i;
 				largestFaceArea = faces[i].area();
 			}
 		}
 		if(largestFace >= 0) {
 			classificationBoxSet = true;
-			double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 			classificationBox = faces[largestFace];
 			classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
 			//Switch to TRACKING
