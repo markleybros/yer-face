@@ -87,8 +87,21 @@ void EyeTracker::performDetection(void) {
 
 	int largestEye = -1;
 	int largestEyeArea = -1;
-	for( size_t i = 0; i < eyes.size(); i++ ) {
+	Rect2d scaledTrackingBox;
+	if(trackerState == STALE && trackingBoxSet) {
+		scaledTrackingBox = Rect(Utilities::scaleRect(trackingBox, classificationScaleFactor));
+	}
+	for(size_t i = 0; i < eyes.size(); i++) {
 		if(eyes[i].area() > largestEyeArea) {
+			if(trackerState == STALE && trackingBoxSet) {
+				//This eye is only a candidate if it overlaps (at least a bit) with the eye we have been tracking.
+				Rect2d candidateEye = Rect2d(eyes[i]);
+				candidateEye.x += classificationCrop.x;
+				candidateEye.y += classificationCrop.y;
+				if((scaledTrackingBox & candidateEye).area() <= 0) {
+					continue;
+				}
+			}
 			largestEye = i;
 			largestEyeArea = eyes[i].area();
 		}
