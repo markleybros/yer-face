@@ -11,11 +11,14 @@ namespace YerFace {
 
 FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMinFaceSizePercentage, int myOpticalTrackStaleFramesInterval) {
 	classifierFileName = myClassifierFileName;
-	frameDerivatives = myFrameDerivatives;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
 	trackingBoxSet = false;
 
+	frameDerivatives = myFrameDerivatives;
+	if(frameDerivatives == NULL) {
+		throw invalid_argument("frameDerivatives cannot be NULL");
+	}
 	trackingBoxPercentage = myTrackingBoxPercentage;
 	if(trackingBoxPercentage <= 0.0 || trackingBoxPercentage > 1.0) {
 		throw invalid_argument("trackingBoxPercentage is out of range.");
