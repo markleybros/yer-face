@@ -9,6 +9,7 @@
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video0 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 
 #include "FaceTracker.hpp"
+#include "EyesTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "Metrics.hpp"
 
@@ -26,6 +27,7 @@ String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
+EyesTracker *eyesTracker;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -53,6 +55,7 @@ int main( int argc, const char** argv ) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
+	eyesTracker = new EyesTracker(eyes_cascade_name, frameDerivatives, faceTracker);
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -75,7 +78,9 @@ int main( int argc, const char** argv ) {
 
 		frameDerivatives->setCurrentFrame(frame);
 		faceTracker->processCurrentFrame();
+		eyesTracker->processCurrentFrame();
 		faceTracker->renderPreviewHUD();
+		eyesTracker->renderPreviewHUD();
 
 		metrics->endFrame();
 
