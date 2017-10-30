@@ -15,7 +15,7 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxFaceSizePercentage = 0.1, int myOpticalTrackStaleFramesInterval = 15);
+	FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMinFaceSizePercentage = 0.1, int myOpticalTrackStaleFramesInterval = 15);
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
@@ -23,7 +23,7 @@ public:
 private:
 	string classifierFileName;
 	float trackingBoxPercentage;
-	float maxFaceSizePercentage;
+	float minFaceSizePercentage;
 	int opticalTrackStaleFramesInterval;
 	CascadeClassifier cascadeClassifier;
 	Ptr<Tracker> tracker;
@@ -36,7 +36,6 @@ private:
 	Rect classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	Rect2d trackingBox;
 	Rect2d faceRect;
-	Point2d trackingBoxOffset;
 	int staleCounter;
 };
 

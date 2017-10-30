@@ -1,5 +1,6 @@
 
 #include "FaceTracker.hpp"
+#include "Utilities.hpp"
 #include <exception>
 #include <cmath>
 #include <stdio.h>
@@ -8,7 +9,7 @@ using namespace std;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxFaceSizePercentage, int myOpticalTrackStaleFramesInterval) {
+FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMinFaceSizePercentage, int myOpticalTrackStaleFramesInterval) {
 	classifierFileName = myClassifierFileName;
 	frameDerivatives = myFrameDerivatives;
 	trackerState = DETECTING;
@@ -19,9 +20,9 @@ FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameD
 	if(trackingBoxPercentage <= 0.0 || trackingBoxPercentage > 1.0) {
 		throw invalid_argument("trackingBoxPercentage is out of range.");
 	}
-	maxFaceSizePercentage = myMaxFaceSizePercentage;
-	if(maxFaceSizePercentage <= 0.0 || maxFaceSizePercentage > 1.0) {
-		throw invalid_argument("maxFaceSizePercentage is out of range.");
+	minFaceSizePercentage = myMinFaceSizePercentage;
+	if(minFaceSizePercentage <= 0.0 || minFaceSizePercentage > 1.0) {
+		throw invalid_argument("minFaceSizePercentage is out of range.");
 	}
 	opticalTrackStaleFramesInterval = myOpticalTrackStaleFramesInterval;
 	if(opticalTrackStaleFramesInterval <= 0) {
@@ -40,8 +41,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 		std::vector<Rect> faces;
 		Mat classificationFrame = frameDerivatives->getClassificationFrame();
 		double classificationFrameArea = (double)classificationFrame.size().area();
-		double maxFaceSize = sqrt(classificationFrameArea * maxFaceSizePercentage);
-		cascadeClassifier.detectMultiScale(classificationFrame, faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(maxFaceSize, maxFaceSize));
+		double minFaceSize = sqrt(classificationFrameArea * minFaceSizePercentage);
+		cascadeClassifier.detectMultiScale(classificationFrame, faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(minFaceSize, minFaceSize));
 
 		int largestFace = -1;
 		int largestFaceArea = -1;
@@ -55,11 +56,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			classificationBoxSet = true;
 			double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 			classificationBox = faces[largestFace];
-			classificationBoxNormalSize = Rect(
-				(double)classificationBox.x / classificationScaleFactor,
-				(double)classificationBox.y / classificationScaleFactor,
-				(double)classificationBox.width / classificationScaleFactor,
-				(double)classificationBox.height / classificationScaleFactor);
+			classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
 			//Switch to TRACKING
 			trackerState = TRACKING;
 			transitionedToTrackingThisFrame = true;
@@ -68,16 +65,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			#else
 			tracker = TrackerKCF::create();
 			#endif
-			double trackingBoxWidth = (double)classificationBoxNormalSize.width * trackingBoxPercentage;
-			double trackingBoxHeight = (double)classificationBoxNormalSize.height * trackingBoxPercentage;
-			trackingBoxOffset = Point(
-				(((double)classificationBoxNormalSize.width - trackingBoxWidth) / 2.0),
-				(((double)classificationBoxNormalSize.height - trackingBoxHeight) / 2.0));
-			trackingBox = Rect(
-				(double)classificationBoxNormalSize.x + trackingBoxOffset.x,
-				(double)classificationBoxNormalSize.y + trackingBoxOffset.y,
-				trackingBoxWidth,
-				trackingBoxHeight);
+			trackingBox = Rect(Utilities::insetBox(classificationBoxNormalSize, trackingBoxPercentage));
 			trackingBoxSet = true;
 
 			tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
@@ -102,13 +90,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	}
 	faceRectSet = false;
 	if(trackingBoxSet) {
-		double faceRectWidth = trackingBox.width / trackingBoxPercentage;
-		double faceRectHeight = trackingBox.height / trackingBoxPercentage;
-		faceRect = Rect(
-			trackingBox.x - trackingBoxOffset.x,
-			trackingBox.y - trackingBoxOffset.y,
-			faceRectWidth,
-			faceRectHeight);
+		faceRect = Rect(Utilities::insetBox(trackingBox, 1.0 / trackingBoxPercentage));
 		faceRectSet = true;
 	}
 	return trackerState;
