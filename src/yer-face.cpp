@@ -11,6 +11,7 @@
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
 #include "FrameDerivatives.hpp"
+#include "SeparateMarkers.hpp"
 #include "Metrics.hpp"
 
 #include <iostream>
@@ -29,6 +30,7 @@ FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 EyeTracker *eyeTrackerLeft;
 EyeTracker *eyeTrackerRight;
+SeparateMarkers *separateMarkers;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -58,6 +60,9 @@ int main( int argc, const char** argv ) {
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
 	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
+	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
+
+	separateMarkers->setHSVThreshold(Scalar(86, 118, 253), Scalar(50, 50, 50));
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -82,6 +87,8 @@ int main( int argc, const char** argv ) {
 		faceTracker->processCurrentFrame();
 		eyeTrackerLeft->processCurrentFrame();
 		eyeTrackerRight->processCurrentFrame();
+		separateMarkers->processCurrentFrame();
+
 		faceTracker->renderPreviewHUD();
 		eyeTrackerLeft->renderPreviewHUD();
 		eyeTrackerRight->renderPreviewHUD();
