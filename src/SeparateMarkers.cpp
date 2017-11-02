@@ -21,17 +21,16 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
 
-	HSVThreshold = Scalar(255, 255, 255);
-	HSVThresholdTolerance = Scalar(0, 0, 0);
+	HSVRangeMin = Scalar(255, 255, 255);
+	HSVRangeMax = Scalar(255, 255, 255);
 }
 
-void SeparateMarkers::setHSVThreshold(Scalar myHSVThreshold, Scalar myHSVThresholdTolerance) {
-	HSVThreshold = Scalar(myHSVThreshold);
-	HSVThresholdTolerance = Scalar(myHSVThresholdTolerance);
+void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+	HSVRangeMin = Scalar(myHSVRangeMin);
+	HSVRangeMax = Scalar(myHSVRangeMax);
 }
 
 void SeparateMarkers::processCurrentFrame(void) {
-	// static bool pickedColorInfo = false;
 	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
 	Rect2d faceRect = get<0>(faceRectTuple);
 	bool faceRectSet = get<1>(faceRectTuple);
@@ -49,21 +48,19 @@ void SeparateMarkers::processCurrentFrame(void) {
 		return;
 	}
 	cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
-	// if(!pickedColorInfo) {
-	// 	pickedColorInfo = true;
-	// 	this->doPickColor();
-	// }
 	Mat searchFrameThreshold;
-	Scalar minColor = HSVThreshold - HSVThresholdTolerance;
-	Scalar maxColor = HSVThreshold + HSVThresholdTolerance;
-    inRange(searchFrameHSV, minColor, maxColor, searchFrameThreshold);
+    inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
 
 	Mat structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
-	imshow("somewin", searchFrameThreshold);
-	waitKey(1);
+	imshow("Trackers Separated", searchFrameThreshold);
+	char c = (char)waitKey(1);
+	if(c == ' ') {
+		this->doPickColor();
+		fprintf(stderr, "SeparateMarkers User asked for a color picker...\n");
+	}
 }
 
 void SeparateMarkers::doPickColor(void) {

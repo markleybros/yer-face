@@ -62,7 +62,8 @@ int main( int argc, const char** argv ) {
 	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
 
-	separateMarkers->setHSVThreshold(Scalar(74, 120, 203), Scalar(18, 91, 53));
+	// separateMarkers->setHSVThreshold(Scalar(74, 120, 203), Scalar(18, 91, 53));
+	separateMarkers->setHSVRange(Scalar(56, 29, 80), Scalar(100, 211, 255));
 
 	//Open the video stream.
 	capture.open(capture_file);
