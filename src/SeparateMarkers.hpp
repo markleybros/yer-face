@@ -12,7 +12,7 @@ namespace YerFace {
 
 class SeparateMarkers {
 public:
-	SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myFaceSizePercentage = 1.1);
+	SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myFaceSizePercentage = 1.25);
 	void setHSVThreshold(Scalar myHSVThreshold, Scalar myHSVThresholdTolerance);
 	void processCurrentFrame(void);
 	void doPickColor(void);
