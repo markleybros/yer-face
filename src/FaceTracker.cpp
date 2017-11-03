@@ -112,16 +112,16 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
+	if(faceRectSet) {
+		rectangle(frame, faceRect, Scalar( 0, 0, 255 ), 2);
+	}
 	if(verbose) {
 		if(classificationBoxSet) {
-			rectangle(frame, classificationBoxNormalSize, Scalar( 0, 255, 0 ), 1, 0);
+			rectangle(frame, classificationBoxNormalSize, Scalar( 0, 255, 0 ), 1);
 		}
 		if(trackingBoxSet) {
-			rectangle(frame, trackingBox, Scalar( 255, 0, 0 ), 1, 0);
+			rectangle(frame, trackingBox, Scalar( 255, 0, 0 ), 1);
 		}
-	}
-	if(faceRectSet) {
-		rectangle(frame, faceRect, Scalar( 0, 0, 255 ), 1, 0);
 	}
 }
 
