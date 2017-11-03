@@ -7,7 +7,7 @@ using namespace cv;
 
 namespace YerFace {
 
-SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myFaceSizePercentage) {
+SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -15,6 +15,14 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
+	}
+	minTargetMarkerAreaPercentage = myMinTargetMarkerAreaPercentage;
+	if(minTargetMarkerAreaPercentage <= 0.0 || minTargetMarkerAreaPercentage > 1.0) {
+		throw invalid_argument("minTargetMarkerAreaPercentage is out of range.");
+	}
+	maxTargetMarkerAreaPercentage = myMaxTargetMarkerAreaPercentage;
+	if(maxTargetMarkerAreaPercentage <= 0.0 || maxTargetMarkerAreaPercentage > 1.0) {
+		throw invalid_argument("maxTargetMarkerAreaPercentage is out of range.");
 	}
 	faceSizePercentage = myFaceSizePercentage;
 	if(faceSizePercentage <= 0.0 || faceSizePercentage > 2.0) {
@@ -31,6 +39,7 @@ void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 }
 
 void SeparateMarkers::processCurrentFrame(void) {
+	markerListValid = false;
 	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
 	Rect2d faceRect = get<0>(faceRectTuple);
 	bool faceRectSet = get<1>(faceRectTuple);
@@ -40,9 +49,10 @@ void SeparateMarkers::processCurrentFrame(void) {
 	Rect2d searchBox = Rect(Utilities::insetBox(faceRect, faceSizePercentage));
 	try {
 		Mat frame = frameDerivatives->getCurrentFrame();
-		Size s = frame.size();
-		Rect2d imageRect = Rect(0, 0, s.width, s.height);
-		searchFrameBGR = frame(searchBox & imageRect);
+		Size frameSize = frame.size();
+		Rect2d imageRect = Rect(0, 0, frameSize.width, frameSize.height);
+		markerBoundaryRect = Rect(searchBox & imageRect);
+		searchFrameBGR = frame(markerBoundaryRect);
 	} catch(exception &e) {
 		fprintf(stderr, "SeparateMarkers: WARNING: Failed search box cropping. Got exception: %s", e.what());
 		return;
@@ -55,11 +65,47 @@ void SeparateMarkers::processCurrentFrame(void) {
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
-	imshow("Trackers Separated", searchFrameThreshold);
-	char c = (char)waitKey(1);
-	if(c == ' ') {
-		this->doPickColor();
-		fprintf(stderr, "SeparateMarkers User asked for a color picker...\n");
+	vector<vector<Point>> contours;
+	vector<Vec4i> heirarchy;
+	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+
+	markerList.clear();
+	markerListValid = true;
+	float minTargetMarkerArea = markerBoundaryRect.area() * minTargetMarkerAreaPercentage;
+	float maxTargetMarkerArea = markerBoundaryRect.area() * maxTargetMarkerAreaPercentage;
+	size_t count = contours.size();
+	for(unsigned int i = 0; i < count; i++) {
+		RotatedRect markerCandidate = minAreaRect(contours[i]);
+		int area = markerCandidate.size.area();
+		if(area >= minTargetMarkerArea && area <= maxTargetMarkerArea) {
+			markerList.push_back(markerCandidate);
+		}
+	}
+
+	// imshow("Trackers Separated", searchFrameThreshold);
+	// char c = (char)waitKey(1);
+	// if(c == ' ') {
+	// 	this->doPickColor();
+	// 	fprintf(stderr, "SeparateMarkers User asked for a color picker...\n");
+	// }
+}
+
+void SeparateMarkers::renderPreviewHUD(bool verbose) {
+	Mat frame = frameDerivatives->getPreviewFrame();
+	if(verbose && markerListValid) {
+		Point2d cropOffset = markerBoundaryRect.tl();
+		size_t count = markerList.size();
+		for(unsigned int i = 0; i < count; i++) {
+			Point2f vertices[4];
+			markerList[i].points(vertices);
+			for(int j = 0; j < 4; j++) {
+				vertices[j].x += cropOffset.x;
+				vertices[j].y += cropOffset.y;
+			}
+			for(int j = 0; j < 4; j++) {
+				line(frame, vertices[j], vertices[(j+1)%4], Scalar(255,255,0), 3);
+			}
+		}
 	}
 }
 

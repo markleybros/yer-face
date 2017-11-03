@@ -93,6 +93,7 @@ int main( int argc, const char** argv ) {
 		faceTracker->renderPreviewHUD();
 		eyeTrackerLeft->renderPreviewHUD();
 		eyeTrackerRight->renderPreviewHUD();
+		separateMarkers->renderPreviewHUD();
 
 		metrics->endFrame();
 
