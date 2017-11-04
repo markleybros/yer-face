@@ -16,6 +16,7 @@ namespace YerFace {
 class FaceTracker {
 public:
 	FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMinFaceSizePercentage = 0.1, int myOpticalTrackStaleFramesInterval = 15);
+	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);

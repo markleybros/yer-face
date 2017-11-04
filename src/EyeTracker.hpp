@@ -22,6 +22,7 @@ enum WhichEye {
 class EyeTracker {
 public:
 	EyeTracker(WhichEye myWhichEye, string myClassifierFileName, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myMinEyeSizePercentage = 0.05, float myMaxEyeSizePercentage = 0.3, int myOpticalTrackStaleFramesInterval = 10);
+	~EyeTracker();
 	WhichEye getWhichEye(void);
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);

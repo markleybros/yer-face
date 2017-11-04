@@ -15,6 +15,10 @@ FrameDerivatives::FrameDerivatives(double myClassificationScaleFactor) {
 	fprintf(stderr, "FrameDerivatives constructed and ready to go!\n");
 }
 
+FrameDerivatives::~FrameDerivatives() {
+	fprintf(stderr, "FrameDerivatives object destructing...\n");
+}
+
 void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	currentFrame = newFrame;
 
@@ -23,7 +27,7 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	cvtColor(currentFrame, tempFrame, COLOR_BGR2GRAY);
 	resize(tempFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
 	equalizeHist(classificationFrame, classificationFrame);
-	
+
 	previewFrameCloned = false;
 }
 Mat FrameDerivatives::getCurrentFrame(void) {

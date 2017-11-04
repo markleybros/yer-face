@@ -10,6 +10,7 @@ namespace YerFace {
 class Metrics {
 public:
 	Metrics(unsigned int myFrameBufferSize);
+	~Metrics();
 	void startFrame(void);
 	void endFrame(void);
 	double getAverageTimeSeconds(void);

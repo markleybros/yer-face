@@ -8,6 +8,11 @@ namespace YerFace {
 
 Metrics::Metrics(unsigned int myFrameBufferSize) {
 	frameBufferSize = myFrameBufferSize;
+	fprintf(stderr, "Metrics object constructed and ready to go!\n");
+}
+
+Metrics::~Metrics() {
+	fprintf(stderr, "Metrics object destructing...\n");
 }
 
 void Metrics::startFrame(void) {

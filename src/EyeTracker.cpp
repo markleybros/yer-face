@@ -41,6 +41,11 @@ EyeTracker::EyeTracker(WhichEye myWhichEye, string myClassifierFileName, FrameDe
 	fprintf(stderr, "EyeTracker <%s> object constructed and ready to go!\n", EyeTracker::getWhichEyeAsString(whichEye));
 }
 
+EyeTracker::~EyeTracker() {
+	fprintf(stderr, "EyeTracker <%s> object destructing...\n", EyeTracker::getWhichEyeAsString(whichEye));
+}
+
+
 WhichEye EyeTracker::getWhichEye(void) {
 	return whichEye;
 }

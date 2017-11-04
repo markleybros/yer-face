@@ -61,6 +61,7 @@ int main( int argc, const char** argv ) {
 	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	mapMarkers = new MapMarkers(frameDerivatives, faceTracker, eyeTrackerLeft, eyeTrackerRight);
+	metrics = new Metrics(30);
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -68,8 +69,6 @@ int main( int argc, const char** argv ) {
 		fprintf(stderr, "Failed opening video stream\n");
 		return 1;
 	}
-
-	metrics = new Metrics(30);
 
 	while(capture.read(frame)) {
 		// Start timer
@@ -114,6 +113,7 @@ int main( int argc, const char** argv ) {
 		}
 	}
 
+	delete metrics;
 	delete mapMarkers;
 	delete eyeTrackerRight;
 	delete eyeTrackerLeft;

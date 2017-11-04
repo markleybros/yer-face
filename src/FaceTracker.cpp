@@ -37,6 +37,10 @@ FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameD
 	fprintf(stderr, "FaceTracker object constructed and ready to go!\n");
 }
 
+FaceTracker::~FaceTracker() {
+	fprintf(stderr, "FaceTracker object destructing...\n");
+}
+
 TrackerState FaceTracker::processCurrentFrame(void) {
 	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	bool transitionedToTrackingThisFrame = false;
