@@ -39,16 +39,18 @@ enum WhichMarker {
 
 class MarkerTracker {
 public:
-	MarkerTracker(WhichMarker myWhichMarker, vector<MarkerTracker *> *myMarkerTrackers, SeparateMarkers *mySeparateMarkers);
+	MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers);
+	~MarkerTracker();
 	WhichMarker getWhichMarker(void);
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
 	tuple<Point2d, bool> getMarkerPoint(void);
 	static const char *getWhichMarkerAsString(WhichMarker whichMarker);
+	static vector<MarkerTracker *> *getMarkerTrackers(void);
 private:
+	static vector<MarkerTracker *> markerTrackers;
 	WhichMarker whichMarker;
-	vector<MarkerTracker *> *markerTrackers;
 	SeparateMarkers *separateMarkers;
 
 	TrackerState trackerState;

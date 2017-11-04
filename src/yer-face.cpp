@@ -113,5 +113,11 @@ int main( int argc, const char** argv ) {
 			break;
 		}
 	}
+
+	delete mapMarkers;
+	delete eyeTrackerRight;
+	delete eyeTrackerLeft;
+	delete faceTracker;
+	delete frameDerivatives;
 	return 0;
 }

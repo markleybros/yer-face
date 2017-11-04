@@ -32,6 +32,10 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 	fprintf(stderr, "SeparateMarkers object constructed and ready to go!\n");
 }
 
+SeparateMarkers::~SeparateMarkers() {
+	fprintf(stderr, "SeparateMarkers object destructing...\n");
+}
+
 void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 	HSVRangeMin = Scalar(myHSVRangeMin);
 	HSVRangeMax = Scalar(myHSVRangeMax);

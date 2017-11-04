@@ -14,6 +14,7 @@ namespace YerFace {
 class MapMarkers {
 public:
 	MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker);
+	~MapMarkers();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 private:
@@ -22,7 +23,7 @@ private:
 	EyeTracker *leftEyeTracker;
 	EyeTracker *rightEyeTracker;
 	SeparateMarkers *separateMarkers;
-	vector<MarkerTracker *> markerTrackers;
+	vector<MarkerTracker *> *markerTrackers;
 };
 
 }; //namespace YerFace

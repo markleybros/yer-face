@@ -28,13 +28,25 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 
 	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
 
-	MarkerTracker *markerTracker;
-	markerTracker = new MarkerTracker(EyelidLeftTop, &markerTrackers, separateMarkers);
-	markerTrackers.push_back(markerTracker);
-	markerTracker = new MarkerTracker(EyelidRightTop, &markerTrackers, separateMarkers);
-	markerTrackers.push_back(markerTracker);
+	markerTrackers = MarkerTracker::getMarkerTrackers();
+
+	new MarkerTracker(EyelidLeftTop, separateMarkers);
+	new MarkerTracker(EyelidRightTop, separateMarkers);
 
 	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
+}
+
+MapMarkers::~MapMarkers() {
+	fprintf(stderr, "MapMarkers object destructing...\n");
+	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
+	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*markerTrackers);
+	size_t markerTrackersCount = markerTrackersSnapshot.size();
+	for(size_t i = 0; i < markerTrackersCount; i++) {
+		if(markerTrackersSnapshot[i] != NULL) {
+			delete markerTrackersSnapshot[i];
+		}
+	}
+	delete separateMarkers;
 }
 
 void MapMarkers::processCurrentFrame(void) {
