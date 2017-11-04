@@ -1,3 +1,4 @@
+
 #include "MapMarkers.hpp"
 #include "Utilities.hpp"
 #include "opencv2/highgui.hpp"
@@ -26,6 +27,14 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	}
 
 	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
+
+	MarkerTracker *markerTracker;
+	markerTracker = new MarkerTracker(EyelidLeftTop, &markerTrackers, separateMarkers);
+	markerTrackers.push_back(markerTracker);
+	markerTracker = new MarkerTracker(EyelidRightTop, &markerTrackers, separateMarkers);
+	markerTrackers.push_back(markerTracker);
+
+	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
 }
 
 void MapMarkers::processCurrentFrame(void) {

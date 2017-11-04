@@ -3,6 +3,7 @@
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
+#include "MarkerTracker.hpp"
 #include "SeparateMarkers.hpp"
 
 using namespace std;
@@ -21,6 +22,7 @@ private:
 	EyeTracker *leftEyeTracker;
 	EyeTracker *rightEyeTracker;
 	SeparateMarkers *separateMarkers;
+	vector<MarkerTracker *> markerTrackers;
 };
 
 }; //namespace YerFace

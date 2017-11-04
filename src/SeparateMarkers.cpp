@@ -29,6 +29,7 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
 	this->setHSVRange(myHSVRangeMin, myHSVRangeMax);
+	fprintf(stderr, "SeparateMarkers object constructed and ready to go!\n");
 }
 
 void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {

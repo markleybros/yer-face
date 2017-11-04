@@ -91,7 +91,8 @@ void EyeTracker::performDetection(void) {
 	if(trackerState == STALE && trackingBoxSet) {
 		scaledTrackingBox = Rect(Utilities::scaleRect(trackingBox, classificationScaleFactor));
 	}
-	for(size_t i = 0; i < eyes.size(); i++) {
+	size_t eyesCount = eyes.size();
+	for(size_t i = 0; i < eyesCount; i++) {
 		if(eyes[i].area() > largestEyeArea) {
 			if(trackerState == STALE && trackingBoxSet) {
 				//This eye is only a candidate if it overlaps (at least a bit) with the eye we have been tracking.

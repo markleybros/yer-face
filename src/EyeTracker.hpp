@@ -19,7 +19,6 @@ enum WhichEye {
 	RightEye // Represents the Right Eye
 };
 
-
 class EyeTracker {
 public:
 	EyeTracker(WhichEye myWhichEye, string myClassifierFileName, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myMinEyeSizePercentage = 0.05, float myMaxEyeSizePercentage = 0.3, int myOpticalTrackStaleFramesInterval = 10);
