@@ -7,7 +7,7 @@ using namespace cv;
 
 namespace YerFace {
 
-SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
+SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -28,9 +28,7 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 	if(faceSizePercentage <= 0.0 || faceSizePercentage > 2.0) {
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
-
-	HSVRangeMin = Scalar(255, 255, 255);
-	HSVRangeMax = Scalar(255, 255, 255);
+	this->setHSVRange(myHSVRangeMin, myHSVRangeMax);
 }
 
 void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {

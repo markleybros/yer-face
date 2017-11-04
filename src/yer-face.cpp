@@ -11,7 +11,7 @@
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
 #include "FrameDerivatives.hpp"
-#include "SeparateMarkers.hpp"
+#include "MapMarkers.hpp"
 #include "Metrics.hpp"
 
 #include <iostream>
@@ -30,7 +30,7 @@ FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 EyeTracker *eyeTrackerLeft;
 EyeTracker *eyeTrackerRight;
-SeparateMarkers *separateMarkers;
+MapMarkers *mapMarkers;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -60,10 +60,7 @@ int main( int argc, const char** argv ) {
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
 	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
-	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
-
-	// separateMarkers->setHSVThreshold(Scalar(74, 120, 203), Scalar(18, 91, 53));
-	separateMarkers->setHSVRange(Scalar(56, 29, 80), Scalar(100, 211, 255));
+	mapMarkers = new MapMarkers(frameDerivatives, faceTracker, eyeTrackerLeft, eyeTrackerRight);
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -88,12 +85,12 @@ int main( int argc, const char** argv ) {
 		faceTracker->processCurrentFrame();
 		eyeTrackerLeft->processCurrentFrame();
 		eyeTrackerRight->processCurrentFrame();
-		separateMarkers->processCurrentFrame();
+		mapMarkers->processCurrentFrame();
 
 		faceTracker->renderPreviewHUD();
 		eyeTrackerLeft->renderPreviewHUD();
 		eyeTrackerRight->renderPreviewHUD();
-		separateMarkers->renderPreviewHUD();
+		mapMarkers->renderPreviewHUD();
 
 		metrics->endFrame();
 
