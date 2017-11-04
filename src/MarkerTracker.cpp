@@ -6,12 +6,8 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers) {
+MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
 	whichMarker = myWhichMarker;
-	separateMarkers = mySeparateMarkers;
-	if(separateMarkers == NULL) {
-		throw invalid_argument("separateMarkers cannot be NULL");
-	}
 
 	size_t markerTrackersCount = markerTrackers.size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
@@ -22,8 +18,32 @@ MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySepar
 	}
 	markerTrackers.push_back(this);
 
+	separateMarkers = mySeparateMarkers;
+	if(separateMarkers == NULL) {
+		throw invalid_argument("separateMarkers cannot be NULL");
+	}
+	eyeTracker = myEyeTracker;
+	if(eyeTracker == NULL) {
+		if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom || whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
+			throw invalid_argument("eyeTracker cannot be NULL if whichMarker is one of the Eyelids");
+		}
+	} else {
+		if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom) {
+			if(eyeTracker->getWhichEye() != LeftEye) {
+				throw invalid_argument("eyeTracker must be a LeftEye if whichMarker is one of the Left Eyelids");
+			}
+		} else if(whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
+			if(eyeTracker->getWhichEye() != RightEye) {
+				throw invalid_argument("eyeTracker must be a RightEye if whichMarker is one of the Right Eyelids");
+			}
+		} else {
+			throw invalid_argument("eyeTracker should be NULL if whichMarker is not one of the Eyelids");
+		}
+	}
+
 	trackerState = DETECTING;
 	markerPointSet = false;
+
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
 }
 
@@ -42,12 +62,12 @@ WhichMarker MarkerTracker::getWhichMarker(void) {
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
-	fprintf(stderr, "MarkerTracker <%s> FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+	fprintf(stderr, "MarkerTracker <%s> processCurrentFrame() FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
 	return trackerState;
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
-	fprintf(stderr, "MarkerTracker <%s> FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+	fprintf(stderr, "MarkerTracker <%s> renderPreviewHUD() FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
 	return;
 }
 

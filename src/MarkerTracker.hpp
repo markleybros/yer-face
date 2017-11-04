@@ -39,7 +39,7 @@ enum WhichMarker {
 
 class MarkerTracker {
 public:
-	MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers);
+	MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
 	~MarkerTracker();
 	WhichMarker getWhichMarker(void);
 	TrackerState processCurrentFrame(void);
@@ -52,6 +52,7 @@ private:
 	static vector<MarkerTracker *> markerTrackers;
 	WhichMarker whichMarker;
 	SeparateMarkers *separateMarkers;
+	EyeTracker *eyeTracker;
 
 	TrackerState trackerState;
 	Point2d markerPoint;

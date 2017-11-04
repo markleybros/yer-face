@@ -28,10 +28,8 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 
 	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
 
-	markerTrackers = MarkerTracker::getMarkerTrackers();
-
-	new MarkerTracker(EyelidLeftTop, separateMarkers);
-	new MarkerTracker(EyelidRightTop, separateMarkers);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, separateMarkers, leftEyeTracker);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, separateMarkers, rightEyeTracker);
 
 	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
 }
@@ -39,7 +37,7 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 MapMarkers::~MapMarkers() {
 	fprintf(stderr, "MapMarkers object destructing...\n");
 	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
-	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*markerTrackers);
+	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*MarkerTracker::getMarkerTrackers());
 	size_t markerTrackersCount = markerTrackersSnapshot.size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
 		if(markerTrackersSnapshot[i] != NULL) {
@@ -51,11 +49,19 @@ MapMarkers::~MapMarkers() {
 
 void MapMarkers::processCurrentFrame(void) {
 	separateMarkers->processCurrentFrame();
+
+	markerEyelidLeftTop->processCurrentFrame();
+	markerEyelidRightTop->processCurrentFrame();
 }
 
 void MapMarkers::renderPreviewHUD(bool verbose) {
 	if(verbose) {
 		separateMarkers->renderPreviewHUD(true);
+	}
+	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
+	size_t markerTrackersCount = (*markerTrackers).size();
+	for(size_t i = 0; i < markerTrackersCount; i++) {
+		(*markerTrackers)[i]->renderPreviewHUD();
 	}
 }
 

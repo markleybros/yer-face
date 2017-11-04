@@ -23,7 +23,9 @@ private:
 	EyeTracker *leftEyeTracker;
 	EyeTracker *rightEyeTracker;
 	SeparateMarkers *separateMarkers;
-	vector<MarkerTracker *> *markerTrackers;
+
+	MarkerTracker *markerEyelidLeftTop;
+	MarkerTracker *markerEyelidRightTop;
 };
 
 }; //namespace YerFace
