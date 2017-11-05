@@ -101,7 +101,6 @@ void MarkerTracker::performDetection(void) {
 		}
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
-		//LOOP THROUGH THE separatedMarkers LOOKING FOR MARKERS THAT ARE WITHIN eyeRect
 		MarkerCandidate markerCandidate;
 		Mat frame = frameDerivatives->getPreviewFrame();
 		list<MarkerCandidate> markerCandidateList;
@@ -146,14 +145,39 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 	}
+	if(markerDetectedSet) {
+		if(trackerState != TRACKING) { //FIXME -- or trackerDriftingExcessively() ?
+			performInitializationOfTracker();
+		}
+	}
 }
 
 void MarkerTracker::performInitializationOfTracker(void) {
+	if(markerDetectedSet) {
+		trackerState = TRACKING;
+		transitionedToTrackingThisFrame = true;
+		#if (CV_MINOR_VERSION < 3)
+		tracker = Tracker::create("KCF");
+		#else
+		tracker = TrackerKCF::create();
+		#endif
+		trackingBox = Rect(markerDetected.boundingRect2f());
+		trackingBoxSet = true;
 
+		tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
+	}
 }
 
 void MarkerTracker::performTracking(void) {
-
+	bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
+	if(!trackSuccess) {
+		fprintf(stderr, "MarkerTracker <%s>: WARNING! Track lost. Will keep searching...\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+		trackingBoxSet = false;
+		trackerState = LOST;
+	} else {
+		fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+		trackingBoxSet = true;
+	}
 }
 
 bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b) {
@@ -161,16 +185,20 @@ bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, cons
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
+	Scalar color = Scalar(0, 0, 255);
+	if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
+		color = Scalar(0, 255, 255);
+	}
+	if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+		color = Scalar(0, 127, 255);
+	}
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
+		if(trackingBoxSet) {
+			Scalar tcolor(color[2], color[1], color[0]);
+			rectangle(frame, trackingBox, tcolor, 2);
+		}
 		if(markerDetectedSet) {
-			Scalar color = Scalar(0, 0, 255);
-			if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
-				color = Scalar(0, 255, 255);
-			}
-			if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
-				color = Scalar(0, 127, 255);
-			}
 			Utilities::drawRotatedRectOutline(frame, markerDetected, color, 1);
 		}
 	}

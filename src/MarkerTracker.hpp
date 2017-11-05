@@ -5,7 +5,7 @@
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
-// #include "FrameDerivatives.hpp"
+#include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "SeparateMarkers.hpp"
 #include "EyeTracker.hpp"
@@ -65,11 +65,14 @@ private:
 	FrameDerivatives *frameDerivatives;
 	SeparateMarkers *separateMarkers;
 	EyeTracker *eyeTracker;
+	Ptr<Tracker> tracker;
 
 	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
 	RotatedRect markerDetected;
 	bool markerDetectedSet;
+	Rect2d trackingBox;
+	bool trackingBoxSet;
 	Point2d markerPoint;
 	bool markerPointSet;
 };
