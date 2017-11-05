@@ -1,5 +1,7 @@
 #pragma once
 
+#include <tuple>
+
 #include "opencv2/objdetect.hpp"
 #include "opencv2/imgproc.hpp"
 #include "FrameDerivatives.hpp"
@@ -17,6 +19,7 @@ public:
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
+	tuple<vector<RotatedRect> *, bool> getMarkerList(void);
 	void doPickColor(void);
 private:
 	FrameDerivatives *frameDerivatives;

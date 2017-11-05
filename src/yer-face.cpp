@@ -89,7 +89,7 @@ int main( int argc, const char** argv ) {
 		faceTracker->renderPreviewHUD();
 		eyeTrackerLeft->renderPreviewHUD();
 		eyeTrackerRight->renderPreviewHUD();
-		mapMarkers->renderPreviewHUD();
+		mapMarkers->renderPreviewHUD(false);
 
 		metrics->endFrame();
 

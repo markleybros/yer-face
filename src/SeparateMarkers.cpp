@@ -1,3 +1,4 @@
+
 #include "SeparateMarkers.hpp"
 #include "Utilities.hpp"
 #include "opencv2/highgui.hpp"
@@ -81,6 +82,7 @@ void SeparateMarkers::processCurrentFrame(void) {
 		RotatedRect markerCandidate = minAreaRect(contours[i]);
 		int area = markerCandidate.size.area();
 		if(area >= minTargetMarkerArea && area <= maxTargetMarkerArea) {
+			markerCandidate.center = markerCandidate.center + Point2f(markerBoundaryRect.tl());
 			markerList.push_back(markerCandidate);
 		}
 	}
@@ -96,20 +98,15 @@ void SeparateMarkers::processCurrentFrame(void) {
 void SeparateMarkers::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose && markerListValid) {
-		Point2d cropOffset = markerBoundaryRect.tl();
 		size_t count = markerList.size();
 		for(unsigned int i = 0; i < count; i++) {
-			Point2f vertices[4];
-			markerList[i].points(vertices);
-			for(int j = 0; j < 4; j++) {
-				vertices[j].x += cropOffset.x;
-				vertices[j].y += cropOffset.y;
-			}
-			for(int j = 0; j < 4; j++) {
-				line(frame, vertices[j], vertices[(j+1)%4], Scalar(255,255,0), 3);
-			}
+			Utilities::drawRotatedRectOutline(frame, markerList[i], Scalar(255,255,0), 3);
 		}
 	}
+}
+
+tuple<vector<RotatedRect> *, bool> SeparateMarkers::getMarkerList(void) {
+	return make_tuple(&markerList, markerListValid);
 }
 
 void SeparateMarkers::doPickColor(void) {

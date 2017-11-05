@@ -37,9 +37,15 @@ enum WhichMarker {
 	Jaw
 };
 
+class MarkerCandidate {
+public:
+	RotatedRect marker;
+	double distance;
+};
+
 class MarkerTracker {
 public:
-	MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
+	MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
 	~MarkerTracker();
 	WhichMarker getWhichMarker(void);
 	TrackerState processCurrentFrame(void);
@@ -48,12 +54,19 @@ public:
 	tuple<Point2d, bool> getMarkerPoint(void);
 	static const char *getWhichMarkerAsString(WhichMarker whichMarker);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
+	static bool sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b);
 private:
+	void performDetection(void);
+	void performInitializationOfTracker(void);
+	void performTracking(void);
+
 	static vector<MarkerTracker *> markerTrackers;
 	WhichMarker whichMarker;
+	FrameDerivatives *frameDerivatives;
 	SeparateMarkers *separateMarkers;
 	EyeTracker *eyeTracker;
 
+	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
 	Point2d markerPoint;
 	bool markerPointSet;

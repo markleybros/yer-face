@@ -28,8 +28,8 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 
 	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, separateMarkers, leftEyeTracker);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, separateMarkers, rightEyeTracker);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, separateMarkers, leftEyeTracker);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, frameDerivatives, separateMarkers, rightEyeTracker);
 
 	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
 }

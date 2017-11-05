@@ -1,12 +1,15 @@
 
 #include "MarkerTracker.hpp"
+#include "Utilities.hpp"
+
+#include <list>
 
 using namespace std;
 using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
+MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
 	whichMarker = myWhichMarker;
 
 	size_t markerTrackersCount = markerTrackers.size();
@@ -18,6 +21,10 @@ MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, SeparateMarkers *mySepar
 	}
 	markerTrackers.push_back(this);
 
+	frameDerivatives = myFrameDerivatives;
+	if(frameDerivatives == NULL) {
+		throw invalid_argument("frameDerivatives cannot be NULL");
+	}
 	separateMarkers = mySeparateMarkers;
 	if(separateMarkers == NULL) {
 		throw invalid_argument("separateMarkers cannot be NULL");
@@ -62,8 +69,73 @@ WhichMarker MarkerTracker::getWhichMarker(void) {
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
-	fprintf(stderr, "MarkerTracker <%s> processCurrentFrame() FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+	transitionedToTrackingThisFrame = false;
+	//Perform detection every single frame, regardless of state.
+	this->performDetection();
+
+	if((trackerState == TRACKING && !transitionedToTrackingThisFrame)) {
+		this->performTracking();
+		if(trackerState == LOST) {
+			this->performInitializationOfTracker();
+		}
+	}
 	return trackerState;
+}
+
+void MarkerTracker::performDetection(void) {
+	tuple<vector<RotatedRect> *, bool> separatedMarkersTuple = separateMarkers->getMarkerList();
+	vector<RotatedRect> *markerList = get<0>(separatedMarkersTuple);
+	bool markerListValid = get<1>(separatedMarkersTuple);
+	if(!markerListValid) {
+		return;
+	}
+
+	if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom || whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
+		tuple<Rect2d, bool> eyeRectTuple = eyeTracker->getEyeRect();
+		Rect2d eyeRect = get<0>(eyeRectTuple);
+		bool eyeRectSet = get<1>(eyeRectTuple);
+		if(!eyeRectSet) {
+			return;
+		}
+		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
+
+		//LOOP THROUGH THE separatedMarkers LOOKING FOR MARKERS THAT ARE WITHIN eyeRect
+		Mat frame = frameDerivatives->getPreviewFrame();
+		list<MarkerCandidate> markerCandidateList;
+		size_t markerListCount = (*markerList).size();
+		for(size_t i = 0; i < markerListCount; i++) {
+			RotatedRect marker = (*markerList)[i];
+			Rect2d markerRect = Rect(marker.boundingRect2f());
+			if((markerRect & eyeRect).area() > 0) {
+				MarkerCandidate markerCandidate;
+				markerCandidate.marker = marker;
+				markerCandidate.distance = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
+				markerCandidateList.push_back(markerCandidate);
+				Utilities::drawRotatedRectOutline(frame, markerCandidate.marker);
+			}
+		}
+
+		if(markerCandidateList.size() < 1) {
+			return;
+		}
+
+		markerCandidateList.sort(sortMarkerCandidatesByDistance);
+
+		line(frame, eyeRectCenter, markerCandidateList.front().marker.center, Scalar(0, 0, 255), 1);
+		fprintf(stderr, "MarkerTracker <%s> distance to candidate %d: %.02f\n", MarkerTracker::getWhichMarkerAsString(whichMarker), 0, markerCandidateList.front().distance);
+	}
+}
+
+void MarkerTracker::performInitializationOfTracker(void) {
+
+}
+
+void MarkerTracker::performTracking(void) {
+
+}
+
+bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b) {
+	return (a.distance < b.distance);
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
