@@ -1,4 +1,5 @@
 
+#include "MarkerType.hpp"
 #include "MarkerTracker.hpp"
 #include "Utilities.hpp"
 
@@ -9,14 +10,17 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
-	whichMarker = myWhichMarker;
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
+	markerType = MarkerType(myMarkerType);
 
+	if(markerType.type == NoMarkerAssigned) {
+		throw invalid_argument("MarkerTracker class cannot be assigned NoMarkerAssigned");
+	}
 	size_t markerTrackersCount = markerTrackers.size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
-		if(markerTrackers[i]->getWhichMarker() == whichMarker) {
-			fprintf(stderr, "Trying to construct MarkerTracker <%s> object, but one already exists!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
-			throw invalid_argument("WhichMarker collision trying to construct MarkerTracker");
+		if(markerTrackers[i]->getMarkerType().type == markerType.type) {
+			fprintf(stderr, "Trying to construct MarkerTracker <%s> object, but one already exists!\n", markerType.toString());
+			throw invalid_argument("MarkerType collision trying to construct MarkerTracker");
 		}
 	}
 	markerTrackers.push_back(this);
@@ -31,20 +35,20 @@ MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFram
 	}
 	eyeTracker = myEyeTracker;
 	if(eyeTracker == NULL) {
-		if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom || whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
-			throw invalid_argument("eyeTracker cannot be NULL if whichMarker is one of the Eyelids");
+		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
+			throw invalid_argument("eyeTracker cannot be NULL if markerType is one of the Eyelids");
 		}
 	} else {
-		if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom) {
+		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
 			if(eyeTracker->getWhichEye() != LeftEye) {
-				throw invalid_argument("eyeTracker must be a LeftEye if whichMarker is one of the Left Eyelids");
+				throw invalid_argument("eyeTracker must be a LeftEye if markerType is one of the Left Eyelids");
 			}
-		} else if(whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
+		} else if(markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 			if(eyeTracker->getWhichEye() != RightEye) {
-				throw invalid_argument("eyeTracker must be a RightEye if whichMarker is one of the Right Eyelids");
+				throw invalid_argument("eyeTracker must be a RightEye if markerType is one of the Right Eyelids");
 			}
 		} else {
-			throw invalid_argument("eyeTracker should be NULL if whichMarker is not one of the Eyelids");
+			throw invalid_argument("eyeTracker should be NULL if markerType is not one of the Eyelids");
 		}
 	}
 
@@ -52,11 +56,11 @@ MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFram
 	markerDetectedSet = false;
 	markerPointSet = false;
 
-	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
 }
 
 MarkerTracker::~MarkerTracker() {
-	fprintf(stderr, "MarkerTracker <%s> object destructing...\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+	fprintf(stderr, "MarkerTracker <%s> object destructing...\n", markerType.toString());
 	for(vector<MarkerTracker *>::iterator iterator = markerTrackers.begin(); iterator != markerTrackers.end(); ++iterator) {
 		if(*iterator == this) {
 			markerTrackers.erase(iterator);
@@ -65,8 +69,8 @@ MarkerTracker::~MarkerTracker() {
 	}
 }
 
-WhichMarker MarkerTracker::getWhichMarker(void) {
-	return whichMarker;
+MarkerType MarkerTracker::getMarkerType(void) {
+	return markerType;
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
@@ -92,7 +96,7 @@ void MarkerTracker::performDetection(void) {
 		return;
 	}
 
-	if(whichMarker == EyelidLeftTop || whichMarker == EyelidLeftBottom || whichMarker == EyelidRightTop || whichMarker == EyelidRightBottom) {
+	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 		tuple<Rect2d, bool> eyeRectTuple = eyeTracker->getEyeRect();
 		Rect2d eyeRect = get<0>(eyeRectTuple);
 		bool eyeRectSet = get<1>(eyeRectTuple);
@@ -117,7 +121,7 @@ void MarkerTracker::performDetection(void) {
 		markerCandidateList.sort(sortMarkerCandidatesByDistance);
 
 		if(markerCandidateList.size() == 1) {
-			if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
+			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
 				return;
 			}
 			markerDetected = markerCandidateList.front().marker;
@@ -128,13 +132,13 @@ void MarkerTracker::performDetection(void) {
 			++markerCandidateIterator;
 			MarkerCandidate markerCandidateB = *markerCandidateIterator;
 			if(markerCandidateB.marker.center.y < markerCandidateA.marker.center.y) {
-				if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 					markerDetected = markerCandidateB.marker;
 				} else {
 					markerDetected = markerCandidateA.marker;
 				}
 			} else {
-				if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 					markerDetected = markerCandidateA.marker;
 				} else {
 					markerDetected = markerCandidateB.marker;
@@ -171,11 +175,11 @@ void MarkerTracker::performInitializationOfTracker(void) {
 void MarkerTracker::performTracking(void) {
 	bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
 	if(!trackSuccess) {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING! Track lost. Will keep searching...\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+		fprintf(stderr, "MarkerTracker <%s>: WARNING! Track lost. Will keep searching...\n", markerType.toString());
 		trackingBoxSet = false;
 		trackerState = LOST;
 	} else {
-		fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
+		fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", markerType.toString());
 		trackingBoxSet = true;
 	}
 }
@@ -186,10 +190,10 @@ bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, cons
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
 	Scalar color = Scalar(0, 0, 255);
-	if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
+	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
 		color = Scalar(0, 255, 255);
 	}
-	if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+	if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 127, 255);
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
@@ -210,51 +214,6 @@ TrackerState MarkerTracker::getTrackerState(void) {
 
 tuple<Point2d, bool> MarkerTracker::getMarkerPoint(void) {
 	return make_tuple(markerPoint, markerPointSet);
-}
-
-const char *MarkerTracker::getWhichMarkerAsString(WhichMarker whichMarker) {
-	switch(whichMarker) {
-		default:
-			return "Unknown!";
-		case EyelidLeftTop:
-			return "EyelidLeftTop";
-		case EyelidLeftBottom:
-			return "EyelidLeftBottom";
-		case EyelidRightTop:
-			return "EyelidRightTop";
-		case EyelidRightBottom:
-			return "EyelidRightBottom";
-		case EyebrowLeftInner:
-			return "EyebrowLeftInner";
-		case EyebrowLeftMiddle:
-			return "EyebrowLeftMiddle";
-		case EyebrowLeftOuter:
-			return "EyebrowLeftOuter";
-		case EyebrowRightInner:
-			return "EyebrowRightInner";
-		case EyebrowRightMiddle:
-			return "EyebrowRightMiddle";
-		case EyebrowRightOuter:
-			return "EyebrowRightOuter";
-		case CheekLeft:
-			return "CheekLeft";
-		case CheekRight:
-			return "CheekRight";
-		case LipsLeftCorner:
-			return "LipsLeftCorner";
-		case LipsLeftTop:
-			return "LipsLeftTop";
-		case LipsLeftBottom:
-			return "LipsLeftBottom";
-		case LipsRightCorner:
-			return "LipsRightCorner";
-		case LipsRightTop:
-			return "LipsRightTop";
-		case LipsRightBottom:
-			return "LipsRightBottom";
-		case Jaw:
-			return "Jaw";
-	}
 }
 
 vector<MarkerTracker *> MarkerTracker::markerTrackers;

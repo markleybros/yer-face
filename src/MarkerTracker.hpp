@@ -5,6 +5,7 @@
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
+#include "MarkerType.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "SeparateMarkers.hpp"
@@ -15,28 +16,6 @@ using namespace cv;
 
 namespace YerFace {
 
-enum WhichMarker {
-	EyelidLeftTop,
-	EyelidLeftBottom,
-	EyelidRightTop,
-	EyelidRightBottom,
-	EyebrowLeftInner,
-	EyebrowLeftMiddle,
-	EyebrowLeftOuter,
-	EyebrowRightInner,
-	EyebrowRightMiddle,
-	EyebrowRightOuter,
-	CheekLeft,
-	CheekRight,
-	LipsLeftCorner,
-	LipsLeftTop,
-	LipsLeftBottom,
-	LipsRightCorner,
-	LipsRightTop,
-	LipsRightBottom,
-	Jaw
-};
-
 class MarkerCandidate {
 public:
 	RotatedRect marker;
@@ -45,14 +24,13 @@ public:
 
 class MarkerTracker {
 public:
-	MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
+	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
 	~MarkerTracker();
-	WhichMarker getWhichMarker(void);
+	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
 	tuple<Point2d, bool> getMarkerPoint(void);
-	static const char *getWhichMarkerAsString(WhichMarker whichMarker);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
 	static bool sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b);
 private:
@@ -61,7 +39,7 @@ private:
 	void performTracking(void);
 
 	static vector<MarkerTracker *> markerTrackers;
-	WhichMarker whichMarker;
+	MarkerType markerType;
 	FrameDerivatives *frameDerivatives;
 	SeparateMarkers *separateMarkers;
 	EyeTracker *eyeTracker;
