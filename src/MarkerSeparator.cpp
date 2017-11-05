@@ -1,5 +1,5 @@
 
-#include "SeparateMarkers.hpp"
+#include "MarkerSeparator.hpp"
 #include "Utilities.hpp"
 #include "opencv2/highgui.hpp"
 
@@ -8,7 +8,7 @@ using namespace cv;
 
 namespace YerFace {
 
-SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
+MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -30,19 +30,19 @@ SeparateMarkers::SeparateMarkers(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
 	this->setHSVRange(myHSVRangeMin, myHSVRangeMax);
-	fprintf(stderr, "SeparateMarkers object constructed and ready to go!\n");
+	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
 }
 
-SeparateMarkers::~SeparateMarkers() {
-	fprintf(stderr, "SeparateMarkers object destructing...\n");
+MarkerSeparator::~MarkerSeparator() {
+	fprintf(stderr, "MarkerSeparator object destructing...\n");
 }
 
-void SeparateMarkers::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 	HSVRangeMin = Scalar(myHSVRangeMin);
 	HSVRangeMax = Scalar(myHSVRangeMax);
 }
 
-void SeparateMarkers::processCurrentFrame(void) {
+void MarkerSeparator::processCurrentFrame(void) {
 	markerListValid = false;
 	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
 	Rect2d faceRect = get<0>(faceRectTuple);
@@ -58,7 +58,7 @@ void SeparateMarkers::processCurrentFrame(void) {
 		markerBoundaryRect = Rect(searchBox & imageRect);
 		searchFrameBGR = frame(markerBoundaryRect);
 	} catch(exception &e) {
-		fprintf(stderr, "SeparateMarkers: WARNING: Failed search box cropping. Got exception: %s", e.what());
+		fprintf(stderr, "MarkerSeparator: WARNING: Failed search box cropping. Got exception: %s", e.what());
 		return;
 	}
 	cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
@@ -91,11 +91,11 @@ void SeparateMarkers::processCurrentFrame(void) {
 	// char c = (char)waitKey(1);
 	// if(c == ' ') {
 	// 	this->doPickColor();
-	// 	fprintf(stderr, "SeparateMarkers User asked for a color picker...\n");
+	// 	fprintf(stderr, "MarkerSeparator User asked for a color picker...\n");
 	// }
 }
 
-void SeparateMarkers::renderPreviewHUD(bool verbose) {
+void MarkerSeparator::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose && markerListValid) {
 		size_t count = markerList.size();
@@ -105,13 +105,13 @@ void SeparateMarkers::renderPreviewHUD(bool verbose) {
 	}
 }
 
-tuple<vector<RotatedRect> *, bool> SeparateMarkers::getMarkerList(void) {
+tuple<vector<RotatedRect> *, bool> MarkerSeparator::getMarkerList(void) {
 	return make_tuple(&markerList, markerListValid);
 }
 
-void SeparateMarkers::doPickColor(void) {
+void MarkerSeparator::doPickColor(void) {
 	Rect2d rect = selectROI(searchFrameBGR);
-	fprintf(stderr, "SeparateMarkers::doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>\n", rect.x, rect.y, rect.width, rect.height);
+	fprintf(stderr, "MarkerSeparator::doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>\n", rect.x, rect.y, rect.width, rect.height);
 	double hue = 0.0, minHue = -1, maxHue = -1;
 	double saturation = 0.0, minSaturation = -1, maxSaturation = -1;
 	double value = 0.0, minValue = -1, maxValue = -1;
@@ -120,7 +120,7 @@ void SeparateMarkers::doPickColor(void) {
 		for(int y = rect.y; y < rect.y + rect.height; y++) {
 			samples++;
 			Vec3b intensity = searchFrameHSV.at<Vec3b>(y, x);
-			fprintf(stderr, "SeparateMarkers::doPickColor: <%d, %d> HSV: <%d, %d, %d>\n", x, y, intensity[0], intensity[1], intensity[2]);
+			fprintf(stderr, "MarkerSeparator::doPickColor: <%d, %d> HSV: <%d, %d, %d>\n", x, y, intensity[0], intensity[1], intensity[2]);
 			hue += (double)intensity[0];
 			if(minHue < 0.0 || intensity[0] < minHue) {
 				minHue = intensity[0];
@@ -147,9 +147,9 @@ void SeparateMarkers::doPickColor(void) {
 	hue = hue / (double)samples;
 	saturation = saturation / (double)samples;
 	value = value / (double)samples;
-	fprintf(stderr, "SeparateMarkers::doPickColor: Average HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", hue, saturation, value);
-	fprintf(stderr, "SeparateMarkers::doPickColor: Minimum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", minHue, minSaturation, minValue);
-	fprintf(stderr, "SeparateMarkers::doPickColor: Maximum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", maxHue, maxSaturation, maxValue);
+	fprintf(stderr, "MarkerSeparator::doPickColor: Average HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", hue, saturation, value);
+	fprintf(stderr, "MarkerSeparator::doPickColor: Minimum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", minHue, minSaturation, minValue);
+	fprintf(stderr, "MarkerSeparator::doPickColor: Maximum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", maxHue, maxSaturation, maxValue);
 }
 
 }; //namespace YerFace

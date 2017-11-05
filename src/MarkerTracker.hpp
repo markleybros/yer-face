@@ -8,7 +8,7 @@
 #include "MarkerType.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
-#include "SeparateMarkers.hpp"
+#include "MarkerSeparator.hpp"
 #include "EyeTracker.hpp"
 
 using namespace std;
@@ -24,7 +24,7 @@ public:
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker = NULL);
+	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -41,7 +41,7 @@ private:
 	static vector<MarkerTracker *> markerTrackers;
 	MarkerType markerType;
 	FrameDerivatives *frameDerivatives;
-	SeparateMarkers *separateMarkers;
+	MarkerSeparator *markerSeparator;
 	EyeTracker *eyeTracker;
 	Ptr<Tracker> tracker;
 

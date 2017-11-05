@@ -41,5 +41,5 @@ find_package( OpenCV REQUIRED )
 
 include_directories("src")
 
-add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/EyeTracker.cpp src/MarkerTracker.cpp src/FrameDerivatives.cpp src/MapMarkers.cpp src/SeparateMarkers.cpp src/Metrics.cpp src/Utilities.cpp src/MarkerType.cpp)
+add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/EyeTracker.cpp src/MarkerTracker.cpp src/FrameDerivatives.cpp src/MapMarkers.cpp src/MarkerSeparator.cpp src/Metrics.cpp src/Utilities.cpp src/MarkerType.cpp)
 target_link_libraries(yer-face ${OpenCV_LIBS})

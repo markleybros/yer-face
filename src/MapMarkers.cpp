@@ -26,12 +26,12 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 		throw invalid_argument("rightEyeTracker cannot be NULL");
 	}
 
-	separateMarkers = new SeparateMarkers(frameDerivatives, faceTracker);
+	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, separateMarkers, leftEyeTracker);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, frameDerivatives, separateMarkers, rightEyeTracker);
-	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, frameDerivatives, separateMarkers, leftEyeTracker);
-	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, frameDerivatives, separateMarkers, rightEyeTracker);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, markerSeparator, leftEyeTracker);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, frameDerivatives, markerSeparator, rightEyeTracker);
+	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, frameDerivatives, markerSeparator, leftEyeTracker);
+	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, frameDerivatives, markerSeparator, rightEyeTracker);
 
 	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
 }
@@ -46,11 +46,11 @@ MapMarkers::~MapMarkers() {
 			delete markerTrackersSnapshot[i];
 		}
 	}
-	delete separateMarkers;
+	delete markerSeparator;
 }
 
 void MapMarkers::processCurrentFrame(void) {
-	separateMarkers->processCurrentFrame();
+	markerSeparator->processCurrentFrame();
 
 	markerEyelidLeftTop->processCurrentFrame();
 	markerEyelidRightTop->processCurrentFrame();
@@ -60,7 +60,7 @@ void MapMarkers::processCurrentFrame(void) {
 
 void MapMarkers::renderPreviewHUD(bool verbose) {
 	if(verbose) {
-		separateMarkers->renderPreviewHUD(true);
+		markerSeparator->renderPreviewHUD(true);
 	}
 	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
 	size_t markerTrackersCount = (*markerTrackers).size();

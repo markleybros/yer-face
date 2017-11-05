@@ -4,7 +4,7 @@
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
 #include "MarkerTracker.hpp"
-#include "SeparateMarkers.hpp"
+#include "MarkerSeparator.hpp"
 
 using namespace std;
 using namespace cv;
@@ -22,7 +22,7 @@ private:
 	FaceTracker *faceTracker;
 	EyeTracker *leftEyeTracker;
 	EyeTracker *rightEyeTracker;
-	SeparateMarkers *separateMarkers;
+	MarkerSeparator *markerSeparator;
 
 	MarkerTracker *markerEyelidLeftTop;
 	MarkerTracker *markerEyelidRightTop;

@@ -10,7 +10,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, SeparateMarkers *mySeparateMarkers, EyeTracker *myEyeTracker) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -29,9 +29,9 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	separateMarkers = mySeparateMarkers;
-	if(separateMarkers == NULL) {
-		throw invalid_argument("separateMarkers cannot be NULL");
+	markerSeparator = myMarkerSeparator;
+	if(markerSeparator == NULL) {
+		throw invalid_argument("markerSeparator cannot be NULL");
 	}
 	eyeTracker = myEyeTracker;
 	if(eyeTracker == NULL) {
@@ -89,7 +89,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 void MarkerTracker::performDetection(void) {
 	markerDetectedSet = false;
-	tuple<vector<RotatedRect> *, bool> separatedMarkersTuple = separateMarkers->getMarkerList();
+	tuple<vector<RotatedRect> *, bool> separatedMarkersTuple = markerSeparator->getMarkerList();
 	vector<RotatedRect> *markerList = get<0>(separatedMarkersTuple);
 	bool markerListValid = get<1>(separatedMarkersTuple);
 	if(!markerListValid) {
