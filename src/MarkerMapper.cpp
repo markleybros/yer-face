@@ -1,5 +1,5 @@
 
-#include "MapMarkers.hpp"
+#include "MarkerMapper.hpp"
 #include "Utilities.hpp"
 #include "opencv2/highgui.hpp"
 
@@ -8,7 +8,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker) {
+MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -33,11 +33,11 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, frameDerivatives, markerSeparator, leftEyeTracker);
 	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, frameDerivatives, markerSeparator, rightEyeTracker);
 
-	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
+	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
 
-MapMarkers::~MapMarkers() {
-	fprintf(stderr, "MapMarkers object destructing...\n");
+MarkerMapper::~MarkerMapper() {
+	fprintf(stderr, "MarkerMapper object destructing...\n");
 	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
 	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*MarkerTracker::getMarkerTrackers());
 	size_t markerTrackersCount = markerTrackersSnapshot.size();
@@ -49,7 +49,7 @@ MapMarkers::~MapMarkers() {
 	delete markerSeparator;
 }
 
-void MapMarkers::processCurrentFrame(void) {
+void MarkerMapper::processCurrentFrame(void) {
 	markerSeparator->processCurrentFrame();
 
 	markerEyelidLeftTop->processCurrentFrame();
@@ -58,7 +58,7 @@ void MapMarkers::processCurrentFrame(void) {
 	markerEyelidRightBottom->processCurrentFrame();
 }
 
-void MapMarkers::renderPreviewHUD(bool verbose) {
+void MarkerMapper::renderPreviewHUD(bool verbose) {
 	if(verbose) {
 		markerSeparator->renderPreviewHUD(true);
 	}

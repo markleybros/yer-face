@@ -11,10 +11,10 @@ using namespace cv;
 
 namespace YerFace {
 
-class MapMarkers {
+class MarkerMapper {
 public:
-	MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker);
-	~MapMarkers();
+	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker);
+	~MarkerMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 private:

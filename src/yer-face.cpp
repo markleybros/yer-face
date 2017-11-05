@@ -11,7 +11,7 @@
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
 #include "FrameDerivatives.hpp"
-#include "MapMarkers.hpp"
+#include "MarkerMapper.hpp"
 #include "Metrics.hpp"
 
 #include <iostream>
@@ -30,7 +30,7 @@ FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 EyeTracker *eyeTrackerLeft;
 EyeTracker *eyeTrackerRight;
-MapMarkers *mapMarkers;
+MarkerMapper *markerMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -60,7 +60,7 @@ int main( int argc, const char** argv ) {
 	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
 	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
 	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
-	mapMarkers = new MapMarkers(frameDerivatives, faceTracker, eyeTrackerLeft, eyeTrackerRight);
+	markerMapper = new MarkerMapper(frameDerivatives, faceTracker, eyeTrackerLeft, eyeTrackerRight);
 	metrics = new Metrics(30);
 
 	//Open the video stream.
@@ -84,12 +84,12 @@ int main( int argc, const char** argv ) {
 		faceTracker->processCurrentFrame();
 		eyeTrackerLeft->processCurrentFrame();
 		eyeTrackerRight->processCurrentFrame();
-		mapMarkers->processCurrentFrame();
+		markerMapper->processCurrentFrame();
 
 		faceTracker->renderPreviewHUD();
 		eyeTrackerLeft->renderPreviewHUD();
 		eyeTrackerRight->renderPreviewHUD();
-		mapMarkers->renderPreviewHUD(false);
+		markerMapper->renderPreviewHUD(false);
 
 		metrics->endFrame();
 
@@ -114,7 +114,7 @@ int main( int argc, const char** argv ) {
 	}
 
 	delete metrics;
-	delete mapMarkers;
+	delete markerMapper;
 	delete eyeTrackerRight;
 	delete eyeTrackerLeft;
 	delete faceTracker;
