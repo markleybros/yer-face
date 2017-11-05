@@ -6,11 +6,18 @@
 #include "opencv2/imgproc.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
+#include "MarkerType.hpp"
 
 using namespace std;
 using namespace cv;
 
 namespace YerFace {
+
+class MarkerSeparated {
+public:
+	RotatedRect marker;
+	MarkerType assignedType;
+};
 
 class MarkerSeparator {
 public:
@@ -19,7 +26,7 @@ public:
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
-	tuple<vector<RotatedRect> *, bool> getMarkerList(void);
+	vector<MarkerSeparated> *getMarkerList(void);
 	void doPickColor(void);
 private:
 	FrameDerivatives *frameDerivatives;
@@ -32,8 +39,7 @@ private:
 	Mat searchFrameBGR;
 	Mat searchFrameHSV;
 	Rect2d markerBoundaryRect;
-	vector<RotatedRect> markerList;
-	bool markerListValid;
+	vector<MarkerSeparated> markerList;
 };
 
 }; //namespace YerFace

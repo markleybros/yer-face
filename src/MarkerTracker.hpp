@@ -19,6 +19,7 @@ namespace YerFace {
 class MarkerCandidate {
 public:
 	RotatedRect marker;
+	unsigned int markerListIndex;
 	double distance;
 };
 

@@ -89,10 +89,8 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 void MarkerTracker::performDetection(void) {
 	markerDetectedSet = false;
-	tuple<vector<RotatedRect> *, bool> separatedMarkersTuple = markerSeparator->getMarkerList();
-	vector<RotatedRect> *markerList = get<0>(separatedMarkersTuple);
-	bool markerListValid = get<1>(separatedMarkersTuple);
-	if(!markerListValid) {
+	vector<MarkerSeparated> *markerList = markerSeparator->getMarkerList();
+	if((*markerList).size() < 1) {
 		return;
 	}
 
@@ -110,10 +108,12 @@ void MarkerTracker::performDetection(void) {
 		list<MarkerCandidate> markerCandidateList;
 		size_t markerListCount = (*markerList).size();
 		for(size_t i = 0; i < markerListCount; i++) {
-			RotatedRect marker = (*markerList)[i];
+			MarkerSeparated markerSeparated = (*markerList)[i];
+			RotatedRect marker = markerSeparated.marker;
 			Rect2d markerRect = Rect(marker.boundingRect2f());
 			if((markerRect & eyeRect).area() > 0) {
 				markerCandidate.marker = marker;
+				markerCandidate.markerListIndex = i;
 				markerCandidate.distance = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
 				markerCandidateList.push_back(markerCandidate);
 			}

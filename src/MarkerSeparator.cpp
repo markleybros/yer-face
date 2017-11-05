@@ -43,7 +43,7 @@ void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 }
 
 void MarkerSeparator::processCurrentFrame(void) {
-	markerListValid = false;
+	markerList.clear();
 	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
 	Rect2d faceRect = get<0>(faceRectTuple);
 	bool faceRectSet = get<1>(faceRectTuple);
@@ -73,8 +73,6 @@ void MarkerSeparator::processCurrentFrame(void) {
 	vector<Vec4i> heirarchy;
 	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 
-	markerList.clear();
-	markerListValid = true;
 	float minTargetMarkerArea = markerBoundaryRect.area() * minTargetMarkerAreaPercentage;
 	float maxTargetMarkerArea = markerBoundaryRect.area() * maxTargetMarkerAreaPercentage;
 	size_t count = contours.size();
@@ -83,7 +81,9 @@ void MarkerSeparator::processCurrentFrame(void) {
 		int area = markerCandidate.size.area();
 		if(area >= minTargetMarkerArea && area <= maxTargetMarkerArea) {
 			markerCandidate.center = markerCandidate.center + Point2f(markerBoundaryRect.tl());
-			markerList.push_back(markerCandidate);
+			MarkerSeparated markerSeparated;
+			markerSeparated.marker = markerCandidate;
+			markerList.push_back(markerSeparated);
 		}
 	}
 
@@ -97,16 +97,16 @@ void MarkerSeparator::processCurrentFrame(void) {
 
 void MarkerSeparator::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(verbose && markerListValid) {
+	if(verbose) {
 		size_t count = markerList.size();
 		for(unsigned int i = 0; i < count; i++) {
-			Utilities::drawRotatedRectOutline(frame, markerList[i], Scalar(255,255,0), 3);
+			Utilities::drawRotatedRectOutline(frame, markerList[i].marker, Scalar(255,255,0), 3);
 		}
 	}
 }
 
-tuple<vector<RotatedRect> *, bool> MarkerSeparator::getMarkerList(void) {
-	return make_tuple(&markerList, markerListValid);
+vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {
+	return &markerList;
 }
 
 void MarkerSeparator::doPickColor(void) {
