@@ -26,6 +26,8 @@ private:
 
 	MarkerTracker *markerEyelidLeftTop;
 	MarkerTracker *markerEyelidRightTop;
+	MarkerTracker *markerEyelidLeftBottom;
+	MarkerTracker *markerEyelidRightBottom;
 };
 
 }; //namespace YerFace

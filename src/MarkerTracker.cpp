@@ -49,6 +49,7 @@ MarkerTracker::MarkerTracker(WhichMarker myWhichMarker, FrameDerivatives *myFram
 	}
 
 	trackerState = DETECTING;
+	markerDetectedSet = false;
 	markerPointSet = false;
 
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
@@ -83,6 +84,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 }
 
 void MarkerTracker::performDetection(void) {
+	markerDetectedSet = false;
 	tuple<vector<RotatedRect> *, bool> separatedMarkersTuple = separateMarkers->getMarkerList();
 	vector<RotatedRect> *markerList = get<0>(separatedMarkersTuple);
 	bool markerListValid = get<1>(separatedMarkersTuple);
@@ -100,6 +102,7 @@ void MarkerTracker::performDetection(void) {
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
 		//LOOP THROUGH THE separatedMarkers LOOKING FOR MARKERS THAT ARE WITHIN eyeRect
+		MarkerCandidate markerCandidate;
 		Mat frame = frameDerivatives->getPreviewFrame();
 		list<MarkerCandidate> markerCandidateList;
 		size_t markerListCount = (*markerList).size();
@@ -107,22 +110,41 @@ void MarkerTracker::performDetection(void) {
 			RotatedRect marker = (*markerList)[i];
 			Rect2d markerRect = Rect(marker.boundingRect2f());
 			if((markerRect & eyeRect).area() > 0) {
-				MarkerCandidate markerCandidate;
 				markerCandidate.marker = marker;
 				markerCandidate.distance = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
 				markerCandidateList.push_back(markerCandidate);
-				Utilities::drawRotatedRectOutline(frame, markerCandidate.marker);
 			}
 		}
-
-		if(markerCandidateList.size() < 1) {
-			return;
-		}
-
 		markerCandidateList.sort(sortMarkerCandidatesByDistance);
 
-		line(frame, eyeRectCenter, markerCandidateList.front().marker.center, Scalar(0, 0, 255), 1);
-		fprintf(stderr, "MarkerTracker <%s> distance to candidate %d: %.02f\n", MarkerTracker::getWhichMarkerAsString(whichMarker), 0, markerCandidateList.front().distance);
+		if(markerCandidateList.size() == 1) {
+			if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
+				return;
+			}
+			markerDetected = markerCandidateList.front().marker;
+			markerDetectedSet = true;
+		} else if(markerCandidateList.size() > 1) {
+			list<MarkerCandidate>::iterator markerCandidateIterator = markerCandidateList.begin();
+			MarkerCandidate markerCandidateA = *markerCandidateIterator;
+			++markerCandidateIterator;
+			MarkerCandidate markerCandidateB = *markerCandidateIterator;
+			if(markerCandidateB.marker.center.y < markerCandidateA.marker.center.y) {
+				if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+					markerDetected = markerCandidateB.marker;
+				} else {
+					markerDetected = markerCandidateA.marker;
+				}
+			} else {
+				if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+					markerDetected = markerCandidateA.marker;
+				} else {
+					markerDetected = markerCandidateB.marker;
+				}
+			}
+			markerDetectedSet = true;
+		} else {
+			return;
+		}
 	}
 }
 
@@ -139,8 +161,19 @@ bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, cons
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
-	fprintf(stderr, "MarkerTracker <%s> renderPreviewHUD() FIXME Stub!\n", MarkerTracker::getWhichMarkerAsString(whichMarker));
-	return;
+	Mat frame = frameDerivatives->getPreviewFrame();
+	if(verbose) {
+		if(markerDetectedSet) {
+			Scalar color = Scalar(0, 0, 255);
+			if(whichMarker == EyelidLeftBottom || whichMarker == EyelidRightBottom) {
+				color = Scalar(0, 255, 255);
+			}
+			if(whichMarker == EyelidLeftTop || whichMarker == EyelidRightTop) {
+				color = Scalar(0, 127, 255);
+			}
+			Utilities::drawRotatedRectOutline(frame, markerDetected, color, 1);
+		}
+	}
 }
 
 TrackerState MarkerTracker::getTrackerState(void) {

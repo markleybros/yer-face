@@ -68,6 +68,8 @@ private:
 
 	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
+	RotatedRect markerDetected;
+	bool markerDetectedSet;
 	Point2d markerPoint;
 	bool markerPointSet;
 };

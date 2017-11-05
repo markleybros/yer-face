@@ -30,6 +30,8 @@ MapMarkers::MapMarkers(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, separateMarkers, leftEyeTracker);
 	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, frameDerivatives, separateMarkers, rightEyeTracker);
+	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, frameDerivatives, separateMarkers, leftEyeTracker);
+	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, frameDerivatives, separateMarkers, rightEyeTracker);
 
 	fprintf(stderr, "MapMarkers object constructed and ready to go!\n");
 }
@@ -52,6 +54,8 @@ void MapMarkers::processCurrentFrame(void) {
 
 	markerEyelidLeftTop->processCurrentFrame();
 	markerEyelidRightTop->processCurrentFrame();
+	markerEyelidLeftBottom->processCurrentFrame();
+	markerEyelidRightBottom->processCurrentFrame();
 }
 
 void MapMarkers::renderPreviewHUD(bool verbose) {
