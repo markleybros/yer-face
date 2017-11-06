@@ -38,7 +38,7 @@ public:
 private:
 	void performDetection(void);
 	void performInitializationOfTracker(void);
-	void performTracking(void);
+	bool performTracking(void);
 	bool trackerDriftingExcessively(void);
 	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
 

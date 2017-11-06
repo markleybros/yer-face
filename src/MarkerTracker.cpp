@@ -89,10 +89,41 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	this->performDetection();
 
 	if((trackerState == TRACKING && !transitionedToTrackingThisFrame)) {
-		this->performTracking();
-		if(trackerState == LOST) {
+		if(!this->performTracking()) {
 			this->performInitializationOfTracker();
 		}
+	}
+
+	markerPointSet = false;
+	if(markerDetectedSet && trackingBoxSet) {
+		// Point2d detectedPoint = Point(markerDetected.marker.center);
+		// Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
+		// double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
+		// double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+		// double detectedPointWeight = actualDistance / maxDistance;
+		// if(detectedPointWeight < 0.0) {
+		// 	detectedPointWeight = 0.0;
+		// } else if(detectedPointWeight > 1.0) {
+		// 	detectedPointWeight = 1.0;
+		// }
+		// double trackingPointWeight = 1.0 - detectedPointWeight;
+		// detectedPoint.x = detectedPoint.x * detectedPointWeight;
+		// detectedPoint.y = detectedPoint.y * detectedPointWeight;
+		// trackingPoint.x = trackingPoint.x * trackingPointWeight;
+		// trackingPoint.y = trackingPoint.y * trackingPointWeight;
+		// markerPoint = detectedPoint + trackingPoint;
+		// markerPointSet = true;
+		markerPoint = markerDetected.marker.center;
+		markerPointSet = true;
+	} else if(markerDetectedSet) {
+		markerPoint = markerDetected.marker.center;
+		markerPointSet = true;
+	} else if(trackingBoxSet) {
+		markerPoint = Utilities::centerRect(trackingBox);
+		markerPointSet = true;
+	} else {
+		trackerState = LOST;
+		fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
 	}
 
 	return trackerState;
@@ -178,31 +209,30 @@ void MarkerTracker::performDetection(void) {
 }
 
 void MarkerTracker::performInitializationOfTracker(void) {
-	if(markerDetectedSet) {
-		trackerState = TRACKING;
-		transitionedToTrackingThisFrame = true;
-		#if (CV_MINOR_VERSION < 3)
-		tracker = Tracker::create("KCF");
-		#else
-		tracker = TrackerKCF::create();
-		#endif
-		trackingBox = Rect(Utilities::insetBox(markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
-		trackingBoxSet = true;
-
-		tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
+	if(!markerDetectedSet) {
+		throw invalid_argument("MarkerTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
+	trackerState = TRACKING;
+	transitionedToTrackingThisFrame = true;
+	#if (CV_MINOR_VERSION < 3)
+	tracker = Tracker::create("KCF");
+	#else
+	tracker = TrackerKCF::create();
+	#endif
+	trackingBox = Rect(Utilities::insetBox(markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
+	trackingBoxSet = true;
+
+	tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
 }
 
-void MarkerTracker::performTracking(void) {
+bool MarkerTracker::performTracking(void) {
 	bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
 	if(!trackSuccess) {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING! Track lost. Will keep searching...\n", markerType.toString());
 		trackingBoxSet = false;
-		trackerState = LOST;
-	} else {
-		//fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", markerType.toString());
-		trackingBoxSet = true;
+		return false;
 	}
+	trackingBoxSet = true;
+	return true;
 }
 
 bool MarkerTracker::trackerDriftingExcessively(void) {
@@ -252,12 +282,23 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
 		if(trackingBoxSet) {
-			Scalar tcolor(color[2], color[1], color[0]);
-			rectangle(frame, trackingBox, tcolor, 2);
+			rectangle(frame, trackingBox, color, 1);
+		} else {
+			fprintf(stderr, "MarkerTracker <%s>: WARNING: tracking box unset at preview???\n", markerType.toString());
 		}
 		if(markerDetectedSet) {
 			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
+		} else {
+			fprintf(stderr, "MarkerTracker <%s>: WARNING: detected marker unset at preview???\n", markerType.toString());
 		}
+	}
+	if(markerPointSet) {
+		Utilities::drawX(frame, markerPoint, color);
+	} else {
+		fprintf(stderr, "MarkerTracker <%s>: WARNING: marker point unset at preview???\n", markerType.toString());
+	}
+	if(!markerPointSet && !trackingBoxSet && !markerDetectedSet) {
+		fprintf(stderr, "MarkerTracker <%s>: WARNING: Everything is unset at preview???\n", markerType.toString());
 	}
 }
 
