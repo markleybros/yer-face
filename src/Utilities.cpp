@@ -41,4 +41,19 @@ void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar colo
 	}
 }
 
+void Utilities::drawX(Mat frame, Point2d markerPoint, Scalar color, int lineLength, int thickness) {
+	Point2d a, b;
+	a.x = markerPoint.x;
+	a.y = markerPoint.y - lineLength;
+	b.x = markerPoint.x;
+	b.y = markerPoint.y + lineLength;
+	line(frame, a, b, color, thickness);
+	a.x = markerPoint.x - lineLength;
+	a.y = markerPoint.y;
+	b.x = markerPoint.x + lineLength;
+	b.y = markerPoint.y;
+	line(frame, a, b, color, thickness);
+}
+
+
 }; //namespace YerFace
