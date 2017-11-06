@@ -10,7 +10,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -52,6 +52,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 		}
 	}
 
+	trackingBoxPercentage = myTrackingBoxPercentage;
+	if(trackingBoxPercentage <= 0.0) {
+		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
+	}
 	maxTrackerDriftPercentage = myMaxTrackerDriftPercentage;
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
@@ -182,7 +186,7 @@ void MarkerTracker::performInitializationOfTracker(void) {
 		#else
 		tracker = TrackerKCF::create();
 		#endif
-		trackingBox = Rect(markerDetected.marker.boundingRect2f());
+		trackingBox = Rect(Utilities::insetBox(markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
 		trackingBoxSet = true;
 
 		tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);

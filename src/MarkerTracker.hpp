@@ -26,7 +26,7 @@ public:
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -48,6 +48,7 @@ private:
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	EyeTracker *eyeTracker;
+	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 
 	Ptr<Tracker> tracker;
