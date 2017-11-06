@@ -10,7 +10,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -52,6 +52,11 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 		}
 	}
 
+	maxTrackerDriftPercentage = myMaxTrackerDriftPercentage;
+	if(maxTrackerDriftPercentage <= 0.0) {
+		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
+	}
+
 	trackerState = DETECTING;
 	markerDetectedSet = false;
 	markerPointSet = false;
@@ -85,6 +90,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 			this->performInitializationOfTracker();
 		}
 	}
+
 	return trackerState;
 }
 
@@ -115,11 +121,12 @@ void MarkerTracker::performDetection(void) {
 			if((markerRect & eyeRect).area() > 0) {
 				markerCandidate.marker = marker;
 				markerCandidate.markerListIndex = i;
-				markerCandidate.distance = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
+				markerCandidate.distanceFromPointOfInterest = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
+				markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 				markerCandidateList.push_back(markerCandidate);
 			}
 		}
-		markerCandidateList.sort(sortMarkerCandidatesByDistance);
+		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 
 		if(markerCandidateList.size() == 1) {
 			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
@@ -160,7 +167,7 @@ void MarkerTracker::performDetection(void) {
 	}
 
 	if(markerDetectedSet) {
-		if(trackerState != TRACKING) { //FIXME -- or trackerDriftingExcessively() ?
+		if(trackerState != TRACKING || trackerDriftingExcessively()) {
 			performInitializationOfTracker();
 		}
 	}
@@ -175,7 +182,7 @@ void MarkerTracker::performInitializationOfTracker(void) {
 		#else
 		tracker = TrackerKCF::create();
 		#endif
-		trackingBox = Rect(markerDetected.boundingRect2f());
+		trackingBox = Rect(markerDetected.marker.boundingRect2f());
 		trackingBoxSet = true;
 
 		tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
@@ -189,9 +196,22 @@ void MarkerTracker::performTracking(void) {
 		trackingBoxSet = false;
 		trackerState = LOST;
 	} else {
-		fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", markerType.toString());
+		//fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", markerType.toString());
 		trackingBoxSet = true;
 	}
+}
+
+bool MarkerTracker::trackerDriftingExcessively(void) {
+	if(!markerDetectedSet || !trackingBoxSet) {
+		throw invalid_argument("MarkerTracker::trackerDriftingExcessively() called while one or both of markerDetectedSet or trackingBoxSet are false");
+	}
+	double actualDistance = Utilities::distance(markerDetected.marker.center, Utilities::centerRect(trackingBox));
+	double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+	if(actualDistance > maxDistance) {
+		fprintf(stderr, "MarkerTracker <%s>: WARNING: Optical tracker drifting excessively! Resetting it.\n", markerType.toString());
+		return true;
+	}
+	return false;
 }
 
 bool MarkerTracker::attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate) {
@@ -208,13 +228,13 @@ bool MarkerTracker::attemptToClaimMarkerCandidate(MarkerCandidate markerCandidat
 		return false;
 	}
 	markerSeparatedCandidate->assignedType.type = markerType.type;
-	markerDetected = RotatedRect(markerSeparatedCandidate->marker);
+	markerDetected = markerCandidate;
 	markerDetectedSet = true;
 	return true;
 }
 
-bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b) {
-	return (a.distance < b.distance);
+bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
+	return (a.distanceFromPointOfInterest < b.distanceFromPointOfInterest);
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
@@ -232,7 +252,7 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 			rectangle(frame, trackingBox, tcolor, 2);
 		}
 		if(markerDetectedSet) {
-			Utilities::drawRotatedRectOutline(frame, markerDetected, color, 1);
+			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
 		}
 	}
 }

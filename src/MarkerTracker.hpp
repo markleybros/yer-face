@@ -20,12 +20,13 @@ class MarkerCandidate {
 public:
 	RotatedRect marker;
 	unsigned int markerListIndex;
-	double distance;
+	double distanceFromPointOfInterest;
+	double sqrtArea;
 };
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL);
+	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -33,24 +34,27 @@ public:
 	TrackerState getTrackerState(void);
 	tuple<Point2d, bool> getMarkerPoint(void);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
-	static bool sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b);
+	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
 private:
 	void performDetection(void);
 	void performInitializationOfTracker(void);
 	void performTracking(void);
+	bool trackerDriftingExcessively(void);
 	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
 
 	static vector<MarkerTracker *> markerTrackers;
+
 	MarkerType markerType;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	EyeTracker *eyeTracker;
-	Ptr<Tracker> tracker;
+	float maxTrackerDriftPercentage;
 
+	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;
 	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
-	RotatedRect markerDetected;
+	MarkerCandidate markerDetected;
 	bool markerDetectedSet;
 	Rect2d trackingBox;
 	bool trackingBoxSet;
