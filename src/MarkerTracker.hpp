@@ -38,6 +38,7 @@ private:
 	void performDetection(void);
 	void performInitializationOfTracker(void);
 	void performTracking(void);
+	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
 
 	static vector<MarkerTracker *> markerTrackers;
 	MarkerType markerType;
@@ -46,6 +47,7 @@ private:
 	EyeTracker *eyeTracker;
 	Ptr<Tracker> tracker;
 
+	vector<MarkerSeparated> *markerList;
 	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
 	RotatedRect markerDetected;

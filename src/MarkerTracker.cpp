@@ -55,6 +55,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 	trackerState = DETECTING;
 	markerDetectedSet = false;
 	markerPointSet = false;
+	markerList = NULL;
 
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
 }
@@ -89,7 +90,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 void MarkerTracker::performDetection(void) {
 	markerDetectedSet = false;
-	vector<MarkerSeparated> *markerList = markerSeparator->getMarkerList();
+	markerList = markerSeparator->getMarkerList();
 	if((*markerList).size() < 1) {
 		return;
 	}
@@ -124,8 +125,9 @@ void MarkerTracker::performDetection(void) {
 			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
 				return;
 			}
-			markerDetected = markerCandidateList.front().marker;
-			markerDetectedSet = true;
+			if(!attemptToClaimMarkerCandidate(markerCandidateList.front())) {
+				return;
+			}
 		} else if(markerCandidateList.size() > 1) {
 			list<MarkerCandidate>::iterator markerCandidateIterator = markerCandidateList.begin();
 			MarkerCandidate markerCandidateA = *markerCandidateIterator;
@@ -133,22 +135,30 @@ void MarkerTracker::performDetection(void) {
 			MarkerCandidate markerCandidateB = *markerCandidateIterator;
 			if(markerCandidateB.marker.center.y < markerCandidateA.marker.center.y) {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					markerDetected = markerCandidateB.marker;
+					if(!attemptToClaimMarkerCandidate(markerCandidateB)) {
+						return;
+					}
 				} else {
-					markerDetected = markerCandidateA.marker;
+					if(!attemptToClaimMarkerCandidate(markerCandidateA)) {
+						return;
+					}
 				}
 			} else {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					markerDetected = markerCandidateA.marker;
+					if(!attemptToClaimMarkerCandidate(markerCandidateA)) {
+						return;
+					}
 				} else {
-					markerDetected = markerCandidateB.marker;
+					if(!attemptToClaimMarkerCandidate(markerCandidateB)) {
+						return;
+					}
 				}
 			}
-			markerDetectedSet = true;
 		} else {
 			return;
 		}
 	}
+
 	if(markerDetectedSet) {
 		if(trackerState != TRACKING) { //FIXME -- or trackerDriftingExcessively() ?
 			performInitializationOfTracker();
@@ -182,6 +192,25 @@ void MarkerTracker::performTracking(void) {
 		fprintf(stderr, "MarkerTracker <%s>: INFO: Track okay!\n", markerType.toString());
 		trackingBoxSet = true;
 	}
+}
+
+bool MarkerTracker::attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate) {
+	if(markerList == NULL) {
+		throw invalid_argument("MarkerTracker::attemptToClaimMarkerCandidate() called while markerList is NULL");
+	}
+	size_t markerListCount = (*markerList).size();
+	if(markerCandidate.markerListIndex >= markerListCount) {
+		throw invalid_argument("MarkerTracker::attemptToClaimMarkerCandidate() called with a markerCandidate whose index is outside the bounds of markerList");
+	}
+	MarkerSeparated *markerSeparatedCandidate = &(*markerList)[markerCandidate.markerListIndex];
+	if(markerSeparatedCandidate->assignedType.type != NoMarkerAssigned) {
+		fprintf(stderr, "MarkerTracker <%s>: WARNING: Attempted to claim marker %u but it was already assigned type <%s>.\n", markerType.toString(), markerCandidate.markerListIndex, markerSeparatedCandidate->assignedType.toString());
+		return false;
+	}
+	markerSeparatedCandidate->assignedType.type = markerType.type;
+	markerDetected = RotatedRect(markerSeparatedCandidate->marker);
+	markerDetectedSet = true;
+	return true;
 }
 
 bool MarkerTracker::sortMarkerCandidatesByDistance(const MarkerCandidate a, const MarkerCandidate b) {
