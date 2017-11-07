@@ -50,7 +50,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 		std::vector<Rect> faces;
 		Mat classificationFrame = frameDerivatives->getClassificationFrame();
 		double classificationFrameArea = (double)classificationFrame.size().area();
-		double minFaceSize = sqrt(classificationFrameArea * minFaceSizePercentage);
+		double minFaceSize = std::sqrt(classificationFrameArea * minFaceSizePercentage);
 		cascadeClassifier.detectMultiScale(classificationFrame, faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(minFaceSize, minFaceSize));
 
 		int largestFace = -1;

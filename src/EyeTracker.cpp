@@ -83,8 +83,8 @@ void EyeTracker::performDetection(void) {
 	try {
 		Mat classificationFrame(frameDerivatives->getClassificationFrame(), classificationCrop);
 		double classificationFrameArea = (double)classificationFrame.size().area();
-		double minEyeSize = sqrt(classificationFrameArea * minEyeSizePercentage);
-		double maxEyeSize = sqrt(classificationFrameArea * maxEyeSizePercentage);
+		double minEyeSize = std::sqrt(classificationFrameArea * minEyeSizePercentage);
+		double maxEyeSize = std::sqrt(classificationFrameArea * maxEyeSizePercentage);
 		cascadeClassifier.detectMultiScale(classificationFrame, eyes, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(minEyeSize, minEyeSize), Size(maxEyeSize, maxEyeSize));
 	} catch(exception &e) {
 		fprintf(stderr, "EyeTracker <%s>: WARNING: Failed classification detection. Got exception: %s", EyeTracker::getWhichEyeAsString(whichEye), e.what());
