@@ -328,7 +328,7 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 		}
 	}
 	if(markerPointSet) {
-		Utilities::drawX(frame, markerPoint, color);
+		Utilities::drawX(frame, markerPoint, color, 10, 2);
 	}
 }
 

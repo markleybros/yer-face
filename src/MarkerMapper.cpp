@@ -67,7 +67,7 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
 	size_t markerTrackersCount = (*markerTrackers).size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
-		(*markerTrackers)[i]->renderPreviewHUD();
+		(*markerTrackers)[i]->renderPreviewHUD(verbose);
 	}
 }
 
