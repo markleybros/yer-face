@@ -3,7 +3,6 @@
 #include "MarkerTracker.hpp"
 #include "Utilities.hpp"
 
-#include <list>
 #include <iostream>
 #include <cstdlib>
 
@@ -89,16 +88,52 @@ MarkerType MarkerTracker::getMarkerType(void) {
 TrackerState MarkerTracker::processCurrentFrame(void) {
 	performTracking();
 
-	performDetection();
+	markerDetectedSet = false;
+	markerList = markerSeparator->getMarkerList();
+	
+	performTrackToSeparatedCorrelation();
 
+	if(!markerDetectedSet) {
+		performDetection();
+	}
+
+	if(markerDetectedSet) {
+		if(!trackingBoxSet || trackerDriftingExcessively()) {
+			performInitializationOfTracker();
+		}
+	}
+	
 	assignMarkerPoint();
 
 	return trackerState;
 }
 
+void MarkerTracker::performTrackToSeparatedCorrelation(void) {
+	if(markerList == NULL) {
+		throw invalid_argument("MarkerTracker::performTrackToSeparatedCorrelation() called while markerList is NULL");
+	}
+	if((*markerList).size() < 1) {
+		return;
+	}
+	if(!trackingBoxSet) {
+		return;
+	}
+	Point2d trackingBoxCenter = Utilities::centerRect(trackingBox);
+	list<MarkerCandidate> markerCandidateList;
+	generateMarkerCandidateList(&markerCandidateList, trackingBoxCenter, &trackingBox);
+	if(markerCandidateList.size() <= 0) {
+		return;
+	}
+	if(!attemptToClaimMarkerCandidate(markerCandidateList.front())) {
+		return;
+	}
+
+}
+
 void MarkerTracker::performDetection(void) {
-	markerDetectedSet = false;
-	markerList = markerSeparator->getMarkerList();
+	if(markerList == NULL) {
+		throw invalid_argument("MarkerTracker::performDetection() called while markerList is NULL");
+	}
 	if((*markerList).size() < 1) {
 		return;
 	}
@@ -112,23 +147,8 @@ void MarkerTracker::performDetection(void) {
 		}
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
-		MarkerCandidate markerCandidate;
-		Mat frame = frameDerivatives->getPreviewFrame();
 		list<MarkerCandidate> markerCandidateList;
-		size_t markerListCount = (*markerList).size();
-		for(size_t i = 0; i < markerListCount; i++) {
-			MarkerSeparated markerSeparated = (*markerList)[i];
-			RotatedRect marker = markerSeparated.marker;
-			Rect2d markerRect = Rect(marker.boundingRect2f());
-			if((markerRect & eyeRect).area() > 0) {
-				markerCandidate.marker = marker;
-				markerCandidate.markerListIndex = i;
-				markerCandidate.distanceFromPointOfInterest = Utilities::distance(eyeRectCenter, markerCandidate.marker.center);
-				markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
-				markerCandidateList.push_back(markerCandidate);
-			}
-		}
-		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);
 
 		if(markerCandidateList.size() == 1) {
 			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
@@ -165,12 +185,6 @@ void MarkerTracker::performDetection(void) {
 			}
 		} else {
 			return;
-		}
-	}
-
-	if(markerDetectedSet) {
-		if(!trackingBoxSet || trackerDriftingExcessively()) {
-			performInitializationOfTracker();
 		}
 	}
 }
@@ -266,6 +280,30 @@ void MarkerTracker::assignMarkerPoint(void) {
 		trackerState = LOST;
 		fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
 	}	
+}
+
+void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect) {
+	if(markerList == NULL) {
+		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called while markerList is NULL");
+	}
+	if(markerCandidateList == NULL) {
+		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called with NULL markerCandidateList");
+	}
+	MarkerCandidate markerCandidate;
+	size_t markerListCount = (*markerList).size();
+	for(size_t i = 0; i < markerListCount; i++) {
+		MarkerSeparated markerSeparated = (*markerList)[i];
+		RotatedRect marker = markerSeparated.marker;
+		Rect2d markerRect = Rect(marker.boundingRect2f());
+		if(boundingRect == NULL || (markerRect & (*boundingRect)).area() > 0) {
+			markerCandidate.marker = marker;
+			markerCandidate.markerListIndex = i;
+			markerCandidate.distanceFromPointOfInterest = Utilities::distance(pointOfInterest, markerCandidate.marker.center);
+			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
+			markerCandidateList->push_back(markerCandidate);
+		}
+	}
+	markerCandidateList->sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 }
 
 bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {

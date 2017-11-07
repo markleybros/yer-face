@@ -3,6 +3,7 @@
 #include <string>
 #include <tuple>
 #include <cstdlib>
+#include <list>
 
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
@@ -38,12 +39,14 @@ public:
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
 private:
+	void performTrackToSeparatedCorrelation(void);
 	void performDetection(void);
 	void performInitializationOfTracker(void);
 	bool performTracking(void);
 	bool trackerDriftingExcessively(void);
 	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
 	void assignMarkerPoint(void);
+	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL);
 	
 	static vector<MarkerTracker *> markerTrackers;
 
