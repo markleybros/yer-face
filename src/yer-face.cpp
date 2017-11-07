@@ -37,10 +37,10 @@ unsigned long frameNum = 0;
 int main( int argc, const char** argv ) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
-		"{help h||}"
-		"{face_cascade|/usr/local/share/OpenCV/haarcascades/haarcascade_frontalface_default.xml|}"
-		"{eyes_cascade|/usr/local/share/OpenCV/haarcascades/haarcascade_eye.xml|}"
-		"{capture_file|/dev/video0|}");
+		"{help h||Usage message.}"
+		"{face_cascade|data/haarcascades/haarcascade_frontalface_default.xml|Model for detecting the face within the frame.}"
+		"{eyes_cascade|data/haarcascades/haarcascade_eye.xml|Model for detecting eyes within the face.}"
+		"{capture_file|/dev/video0|Video file or video capture device file to open.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {

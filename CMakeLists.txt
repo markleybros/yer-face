@@ -45,3 +45,13 @@ include_directories("src")
 
 add_executable(yer-face src/yer-face.cpp src/FaceTracker.cpp src/EyeTracker.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerMapper.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp)
 target_link_libraries(yer-face ${OpenCV_LIBS})
+
+#Adapted from http://qrikko.blogspot.com/2016/05/cmake-and-how-to-copy-resources-during.html
+set (source "${CMAKE_SOURCE_DIR}/data")
+set (destination "${CMAKE_CURRENT_BINARY_DIR}/data")
+add_custom_command(
+ TARGET ${PROJECT_NAME} POST_BUILD
+ COMMAND ${CMAKE_COMMAND} -E create_symlink ${source} ${destination}
+ DEPENDS ${destination}
+ COMMENT "symbolic link data folder from ${source} => ${destination}"
+)
