@@ -28,6 +28,8 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 		throw invalid_argument("rightEyeTracker cannot be NULL");
 	}
 
+	eyeLineSet = false;
+
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, markerSeparator, leftEyeTracker);
@@ -58,6 +60,8 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerEyelidRightTop->processCurrentFrame();
 	markerEyelidLeftBottom->processCurrentFrame();
 	markerEyelidRightBottom->processCurrentFrame();
+
+	calculateEyeLine();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
@@ -69,6 +73,47 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	for(size_t i = 0; i < markerTrackersCount; i++) {
 		(*markerTrackers)[i]->renderPreviewHUD(verbose);
 	}
+	if(eyeLineSet) {
+		Mat frame = frameDerivatives->getPreviewFrame();
+		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
+	}
+}
+
+tuple<Point2d, Point2d, bool> MarkerMapper::getEyeLine(void) {
+	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineSet);
+}
+
+void MarkerMapper::calculateEyeLine(void) {
+	eyeLineSet = false;
+	if(!calculateEyeCenter(markerEyelidLeftTop, markerEyelidLeftBottom, &eyeLineLeft)) {
+		return;
+	}
+	if(!calculateEyeCenter(markerEyelidRightTop, markerEyelidRightBottom, &eyeLineRight)) {
+		return;
+	}
+	eyeLineSet = true;
+}
+
+bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center) {
+	Point2d topPoint;
+	bool topPointSet;
+	std::tie(topPoint, topPointSet) = top->getMarkerPoint();
+	if(!topPointSet) {
+		return false;
+	}
+	Point2d bottomPoint;
+	bool bottomPointSet;
+	std::tie(bottomPoint, bottomPointSet) = bottom->getMarkerPoint();
+	if(!bottomPointSet) {
+		return false;
+	}
+	double bottomPointWeight = 0.75; //FIXME magic numbers?
+	bottomPoint.x = bottomPoint.x * bottomPointWeight;
+	bottomPoint.y = bottomPoint.y * bottomPointWeight;
+	topPoint.x = topPoint.x * (1.0 - bottomPointWeight);
+	topPoint.y = topPoint.y * (1.0 - bottomPointWeight);
+	*center = bottomPoint + topPoint;
+	return true;
 }
 
 }; //namespace YerFace
