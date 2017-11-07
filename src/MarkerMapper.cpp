@@ -32,10 +32,17 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, frameDerivatives, markerSeparator, leftEyeTracker);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, frameDerivatives, markerSeparator, rightEyeTracker);
-	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, frameDerivatives, markerSeparator, leftEyeTracker);
-	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, frameDerivatives, markerSeparator, rightEyeTracker);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, frameDerivatives, markerSeparator, leftEyeTracker);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, frameDerivatives, markerSeparator, rightEyeTracker);
+	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this, frameDerivatives, markerSeparator, leftEyeTracker);
+	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this, frameDerivatives, markerSeparator, rightEyeTracker);
+
+	markerEyebrowLeftInner = new MarkerTracker(EyebrowLeftInner, this, frameDerivatives, markerSeparator);
+	markerEyebrowRightInner = new MarkerTracker(EyebrowRightInner, this, frameDerivatives, markerSeparator);
+	markerEyebrowLeftMiddle = new MarkerTracker(EyebrowLeftMiddle, this, frameDerivatives, markerSeparator);
+	markerEyebrowRightMiddle = new MarkerTracker(EyebrowRightMiddle, this, frameDerivatives, markerSeparator);
+	markerEyebrowLeftOuter = new MarkerTracker(EyebrowLeftOuter, this, frameDerivatives, markerSeparator);
+	markerEyebrowRightOuter = new MarkerTracker(EyebrowRightOuter, this, frameDerivatives, markerSeparator);
 
 	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
@@ -62,6 +69,13 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerEyelidRightBottom->processCurrentFrame();
 
 	calculateEyeLine();
+
+	markerEyebrowLeftInner->processCurrentFrame();
+	markerEyebrowRightInner->processCurrentFrame();
+	markerEyebrowLeftMiddle->processCurrentFrame();
+	markerEyebrowRightMiddle->processCurrentFrame();
+	markerEyebrowLeftOuter->processCurrentFrame();
+	markerEyebrowRightOuter->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {

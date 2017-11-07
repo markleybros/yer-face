@@ -9,6 +9,7 @@
 #include "opencv2/tracking.hpp"
 
 #include "MarkerType.hpp"
+#include "MarkerMapper.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "MarkerSeparator.hpp"
@@ -27,9 +28,11 @@ public:
 	double sqrtArea;
 };
 
+class MarkerMapper;
+
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 1.0);
+	MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -37,6 +40,7 @@ public:
 	TrackerState getTrackerState(void);
 	tuple<Point2d, bool> getMarkerPoint(void);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
+	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
 private:
 	void performTrackToSeparatedCorrelation(void);
@@ -44,13 +48,15 @@ private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);
 	bool trackerDriftingExcessively(void);
-	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
+	bool claimMarkerCandidate(MarkerCandidate markerCandidate);
+	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList);
 	void assignMarkerPoint(void);
 	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL);
 	
 	static vector<MarkerTracker *> markerTrackers;
 
 	MarkerType markerType;
+	MarkerMapper *markerMapper;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	EyeTracker *eyeTracker;

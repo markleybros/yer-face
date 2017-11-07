@@ -13,6 +13,8 @@ using namespace cv;
 
 namespace YerFace {
 
+class MarkerTracker;
+
 class MarkerMapper {
 public:
 	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker);
@@ -34,6 +36,13 @@ private:
 	MarkerTracker *markerEyelidRightTop;
 	MarkerTracker *markerEyelidLeftBottom;
 	MarkerTracker *markerEyelidRightBottom;
+
+	MarkerTracker *markerEyebrowLeftInner;
+	MarkerTracker *markerEyebrowLeftMiddle;
+	MarkerTracker *markerEyebrowLeftOuter;
+	MarkerTracker *markerEyebrowRightInner;
+	MarkerTracker *markerEyebrowRightMiddle;
+	MarkerTracker *markerEyebrowRightOuter;
 
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;

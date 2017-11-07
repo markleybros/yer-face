@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -26,6 +26,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 	}
 	markerTrackers.push_back(this);
 
+	markerMapper = myMarkerMapper;
+	if(markerMapper == NULL) {
+		throw invalid_argument("markerMapper cannot be NULL");
+	}
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -124,7 +128,7 @@ void MarkerTracker::performTrackToSeparatedCorrelation(void) {
 	if(markerCandidateList.size() <= 0) {
 		return;
 	}
-	if(!attemptToClaimMarkerCandidate(markerCandidateList.front())) {
+	if(!claimMarkerCandidate(markerCandidateList.front())) {
 		return;
 	}
 
@@ -137,7 +141,8 @@ void MarkerTracker::performDetection(void) {
 	if((*markerList).size() < 1) {
 		return;
 	}
-
+	list<MarkerCandidate> markerCandidateList;
+	
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 		Rect2d eyeRect;
 		bool eyeRectSet;
@@ -147,14 +152,13 @@ void MarkerTracker::performDetection(void) {
 		}
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
-		list<MarkerCandidate> markerCandidateList;
 		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);
 
 		if(markerCandidateList.size() == 1) {
 			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
 				return;
 			}
-			if(!attemptToClaimMarkerCandidate(markerCandidateList.front())) {
+			if(!claimMarkerCandidate(markerCandidateList.front())) {
 				return;
 			}
 		} else if(markerCandidateList.size() > 1) {
@@ -164,27 +168,106 @@ void MarkerTracker::performDetection(void) {
 			MarkerCandidate markerCandidateB = *markerCandidateIterator;
 			if(markerCandidateB.marker.center.y < markerCandidateA.marker.center.y) {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					if(!attemptToClaimMarkerCandidate(markerCandidateB)) {
+					if(!claimMarkerCandidate(markerCandidateB)) {
 						return;
 					}
 				} else {
-					if(!attemptToClaimMarkerCandidate(markerCandidateA)) {
+					if(!claimMarkerCandidate(markerCandidateA)) {
 						return;
 					}
 				}
 			} else {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					if(!attemptToClaimMarkerCandidate(markerCandidateA)) {
+					if(!claimMarkerCandidate(markerCandidateA)) {
 						return;
 					}
 				} else {
-					if(!attemptToClaimMarkerCandidate(markerCandidateB)) {
+					if(!claimMarkerCandidate(markerCandidateB)) {
 						return;
 					}
 				}
 			}
 		} else {
 			return;
+		}
+	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
+		int xDirection = -1;
+		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter) {
+			xDirection = 1;
+		}
+
+		Point2d eyeLineLeft, eyeLineRight;
+		bool eyeLineSet;
+		std::tie(eyeLineLeft, eyeLineRight, eyeLineSet) = markerMapper->getEyeLine();
+		if(!eyeLineSet) {
+			return;
+		}
+		Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
+		eyeLineCenter.x = eyeLineCenter.x / 2.0;
+		eyeLineCenter.y = eyeLineCenter.y / 2.0;
+
+		Size frameSize = frameDerivatives->getCurrentFrame().size();
+		Rect2d boundingRect;
+		boundingRect.y = 0;
+		boundingRect.height = eyeLineCenter.y;
+		if(xDirection < 0) {
+			boundingRect.x = 0;
+			boundingRect.width = eyeLineCenter.x;
+		} else {
+			boundingRect.x = eyeLineCenter.x;
+			boundingRect.width = frameSize.width - eyeLineCenter.x;
+		}
+
+		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowRightInner) {
+			generateMarkerCandidateList(&markerCandidateList, eyeLineCenter, &boundingRect);
+			if(markerCandidateList.size() < 1) {
+				return;
+			}
+
+			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
+				return;
+			}
+		} else {
+			MarkerTracker *eyebrowTracker;
+			if(xDirection > 0) {
+				if(markerType.type == EyebrowLeftMiddle) {
+					eyebrowTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyebrowLeftInner));
+				} else {
+					eyebrowTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyebrowLeftMiddle));
+				}
+			} else {
+				if(markerType.type == EyebrowRightMiddle) {
+					eyebrowTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyebrowRightInner));
+				} else {
+					eyebrowTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyebrowRightMiddle));
+				}
+			}
+			if(eyebrowTracker == NULL) {
+				return;
+			}
+
+			Point2d eyeBrowPoint;
+			bool eyeBrowPointSet;
+			std::tie(eyeBrowPoint, eyeBrowPointSet) = eyebrowTracker->getMarkerPoint();
+			if(!eyeBrowPointSet) {
+				return;
+			}
+
+			if(xDirection < 0) {
+				boundingRect.width = eyeBrowPoint.x;
+			} else {
+				boundingRect.x = eyeBrowPoint.x;
+				boundingRect.width = frameSize.width - eyeBrowPoint.x;
+			}
+
+			generateMarkerCandidateList(&markerCandidateList, eyeBrowPoint, &boundingRect);
+			if(markerCandidateList.size() < 1) {
+				return;
+			}
+
+			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
+				return;
+			}
 		}
 	}
 }
@@ -231,23 +314,35 @@ bool MarkerTracker::trackerDriftingExcessively(void) {
 	return false;
 }
 
-bool MarkerTracker::attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate) {
+bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate) {
 	if(markerList == NULL) {
-		throw invalid_argument("MarkerTracker::attemptToClaimMarkerCandidate() called while markerList is NULL");
+		throw invalid_argument("MarkerTracker::claimMarkerCandidate() called while markerList is NULL");
 	}
 	size_t markerListCount = (*markerList).size();
 	if(markerCandidate.markerListIndex >= markerListCount) {
-		throw invalid_argument("MarkerTracker::attemptToClaimMarkerCandidate() called with a markerCandidate whose index is outside the bounds of markerList");
+		throw invalid_argument("MarkerTracker::claimMarkerCandidate() called with a markerCandidate whose index is outside the bounds of markerList");
 	}
 	MarkerSeparated *markerSeparatedCandidate = &(*markerList)[markerCandidate.markerListIndex];
 	if(markerSeparatedCandidate->assignedType.type != NoMarkerAssigned) {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING: Attempted to claim marker %u but it was already assigned type <%s>.\n", markerType.toString(), markerCandidate.markerListIndex, markerSeparatedCandidate->assignedType.toString());
+		// fprintf(stderr, "MarkerTracker <%s>: WARNING: Attempted to claim marker %u but it was already assigned type <%s>.\n", markerType.toString(), markerCandidate.markerListIndex, markerSeparatedCandidate->assignedType.toString());
 		return false;
 	}
 	markerSeparatedCandidate->assignedType.type = markerType.type;
 	markerDetected = markerCandidate;
 	markerDetectedSet = true;
 	return true;
+}
+
+bool MarkerTracker::claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList) {
+	if(markerCandidateList == NULL) {
+		throw invalid_argument("MarkerTracker::claimFirstAvailableMarkerCandidate() called with NULL markerCandidateList");
+	}
+	for(list<MarkerCandidate>::iterator iterator = markerCandidateList->begin(); iterator != markerCandidateList->end(); ++iterator) {
+		if(claimMarkerCandidate(*iterator)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void MarkerTracker::assignMarkerPoint(void) {
@@ -318,7 +413,14 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
 		if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-			color[1] -= 128;
+			color[1] = 127;
+		}
+	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
+		color = Scalar(255, 0, 0);
+		if(markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowRightMiddle) {
+			color[2] = 127;
+		} else if(markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightOuter) {
+			color[2] = 255;
 		}
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
@@ -347,6 +449,16 @@ vector<MarkerTracker *> MarkerTracker::markerTrackers;
 
 vector<MarkerTracker *> *MarkerTracker::getMarkerTrackers(void) {
 	return &markerTrackers;
+}
+
+MarkerTracker *MarkerTracker::getMarkerTrackerByType(MarkerType markerType) {
+	size_t markerTrackersCount = markerTrackers.size();
+	for(size_t i = 0; i < markerTrackersCount; i++) {
+		if(markerTrackers[i]->getMarkerType().type == markerType.type) {
+			return markerTrackers[i];
+		}
+	}
+	return NULL;
 }
 
 }; //namespace YerFace
