@@ -6,7 +6,7 @@
 #include "opencv2/tracking.hpp"
 
 // best available resolution / rate: ffplay -pixel_format mjpeg -video_size 1920x1080 /dev/video1
-// best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video0 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
+// best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"
@@ -34,7 +34,7 @@ MarkerMapper *markerMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
-int main( int argc, const char** argv ) {
+int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
@@ -45,6 +45,11 @@ int main( int argc, const char** argv ) {
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
 		parser.printMessage();
+		return 1;
+	}
+	if(parser.check()) {
+		parser.printMessage();
+		parser.printErrors();
 		return 1;
 	}
 
