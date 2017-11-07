@@ -3,6 +3,8 @@
 #include "Utilities.hpp"
 #include "opencv2/highgui.hpp"
 
+#include <cstdlib>
+
 using namespace std;
 using namespace cv;
 

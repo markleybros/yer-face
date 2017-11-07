@@ -1,7 +1,7 @@
 
 #include "FrameDerivatives.hpp"
 #include <exception>
-#include <stdio.h>
+#include <cstdio>
 
 using namespace std;
 

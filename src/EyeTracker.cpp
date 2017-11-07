@@ -1,6 +1,7 @@
 
 #include "EyeTracker.hpp"
 #include "Utilities.hpp"
+#include <cstdlib>
 
 using namespace std;
 using namespace cv;

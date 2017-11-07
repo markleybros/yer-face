@@ -2,6 +2,8 @@
 
 #include <string>
 #include <tuple>
+#include <cstdlib>
+
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 

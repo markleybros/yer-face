@@ -15,7 +15,7 @@
 #include "Metrics.hpp"
 
 #include <iostream>
-#include <stdio.h>
+#include <cstdio>
 
 using namespace std;
 using namespace cv;

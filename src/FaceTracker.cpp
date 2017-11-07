@@ -3,7 +3,8 @@
 #include "Utilities.hpp"
 #include <exception>
 #include <cmath>
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 
