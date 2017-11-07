@@ -47,9 +47,9 @@ void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 
 void MarkerSeparator::processCurrentFrame(void) {
 	markerList.clear();
-	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
-	Rect2d faceRect = get<0>(faceRectTuple);
-	bool faceRectSet = get<1>(faceRectTuple);
+	Rect2d faceRect;
+	bool faceRectSet;
+	std::tie(faceRect, faceRectSet) = faceTracker->getFaceRect();
 	if(!faceRectSet) {
 		return;
 	}

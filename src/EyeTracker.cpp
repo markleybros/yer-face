@@ -68,9 +68,9 @@ TrackerState EyeTracker::processCurrentFrame(void) {
 
 void EyeTracker::performDetection(void) {
 	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-	tuple<Rect2d, bool> faceRectTuple = faceTracker->getFaceRect();
-	Rect2d faceRect = get<0>(faceRectTuple);
-	bool faceRectSet = get<1>(faceRectTuple);
+	Rect2d faceRect;
+	bool faceRectSet;
+	std::tie(faceRect, faceRectSet) = faceTracker->getFaceRect();
 	if(!faceRectSet) {
 		return;
 	}

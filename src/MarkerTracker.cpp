@@ -139,9 +139,9 @@ void MarkerTracker::performDetection(void) {
 	}
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-		tuple<Rect2d, bool> eyeRectTuple = eyeTracker->getEyeRect();
-		Rect2d eyeRect = get<0>(eyeRectTuple);
-		bool eyeRectSet = get<1>(eyeRectTuple);
+		Rect2d eyeRect;
+		bool eyeRectSet;
+		std::tie(eyeRect, eyeRectSet) = eyeTracker->getEyeRect();
 		if(!eyeRectSet) {
 			return;
 		}
