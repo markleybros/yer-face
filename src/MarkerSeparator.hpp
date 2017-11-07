@@ -17,6 +17,7 @@ class MarkerSeparated {
 public:
 	RotatedRect marker;
 	MarkerType assignedType;
+	bool active;
 };
 
 class MarkerSeparator {

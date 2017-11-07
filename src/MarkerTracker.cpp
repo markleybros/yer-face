@@ -293,6 +293,9 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 	size_t markerListCount = (*markerList).size();
 	for(size_t i = 0; i < markerListCount; i++) {
 		MarkerSeparated markerSeparated = (*markerList)[i];
+		if(!markerSeparated.active) {
+			continue;
+		}
 		RotatedRect marker = markerSeparated.marker;
 		Rect2d markerRect = Rect(marker.boundingRect2f());
 		if(boundingRect == NULL || (markerRect & (*boundingRect)).area() > 0) {
@@ -312,11 +315,11 @@ bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const Mark
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
 	Scalar color = Scalar(0, 0, 255);
-	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
+	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
-	}
-	if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-		color = Scalar(0, 127, 255);
+		if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
+			color[1] -= 128;
+		}
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {

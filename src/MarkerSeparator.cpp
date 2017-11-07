@@ -79,15 +79,53 @@ void MarkerSeparator::processCurrentFrame(void) {
 	float minTargetMarkerArea = markerBoundaryRect.area() * minTargetMarkerAreaPercentage;
 	float maxTargetMarkerArea = markerBoundaryRect.area() * maxTargetMarkerAreaPercentage;
 	size_t count = contours.size();
-	for(unsigned int i = 0; i < count; i++) {
+	size_t i;
+	for(i = 0; i < count; i++) {
 		RotatedRect markerCandidate = minAreaRect(contours[i]);
 		int area = markerCandidate.size.area();
 		if(area >= minTargetMarkerArea && area <= maxTargetMarkerArea) {
 			markerCandidate.center = markerCandidate.center + Point2f(markerBoundaryRect.tl());
 			MarkerSeparated markerSeparated;
+			markerSeparated.active = true;
 			markerSeparated.marker = markerCandidate;
 			markerList.push_back(markerSeparated);
 		}
+	}
+
+	count = markerList.size();
+	for(i = 0; i < count; i++) {
+		if(!markerList[i].active) {
+			continue;
+		}
+		// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, considering base marker %lu\n", i);
+		Point2f vertices[8];
+		markerList[i].marker.points(vertices);
+		bool didRemoveDuplicate;
+		unsigned int iterations = 0;
+		do {
+			iterations++;
+			didRemoveDuplicate = false;
+			Rect2d primaryRect = Rect(markerList[i].marker.boundingRect2f());
+			for(size_t j = 0; j < count; j++) {
+				if(i == j || !markerList[j].active) {
+					continue;
+				}
+				// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, comparing secondary marker %lu with base marker %lu\n", j, i);
+				Rect2d secondaryRect = Rect(markerList[j].marker.boundingRect2f());
+				if((primaryRect & secondaryRect).area() > 0) {
+					// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, folding secondary marker %lu into base marker %lu\n", j, i);
+					markerList[i].marker.points(&vertices[0]);
+					markerList[j].marker.points(&vertices[4]);
+					vector<Point2f> verticesVector(std::begin(vertices), std::end(vertices));
+					markerList[i].marker = minAreaRect(verticesVector);
+					markerList[j].active = false;
+					didRemoveDuplicate = true;
+				}
+			}
+			if(didRemoveDuplicate && iterations > 1) {
+				fprintf(stderr, "MarkerSeparator WARNING: Deduplicating, altering base marker %lu in a loop; this was iteration %u and more iterations are still required. Looping over it again...\n", i, iterations);
+			}
+		} while(didRemoveDuplicate);
 	}
 
 	// imshow("Trackers Separated", searchFrameThreshold);
@@ -103,7 +141,9 @@ void MarkerSeparator::renderPreviewHUD(bool verbose) {
 	if(verbose) {
 		size_t count = markerList.size();
 		for(unsigned int i = 0; i < count; i++) {
-			Utilities::drawRotatedRectOutline(frame, markerList[i].marker, Scalar(255,255,0), 3);
+			if(markerList[i].active) {
+				Utilities::drawRotatedRectOutline(frame, markerList[i].marker, Scalar(255,255,0), 3);
+			}
 		}
 	}
 }
