@@ -32,7 +32,7 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 	if(faceSizePercentage <= 0.0 || faceSizePercentage > 2.0) {
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
-	this->setHSVRange(myHSVRangeMin, myHSVRangeMax);
+	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
 }
 
@@ -93,7 +93,7 @@ void MarkerSeparator::processCurrentFrame(void) {
 	// imshow("Trackers Separated", searchFrameThreshold);
 	// char c = (char)waitKey(1);
 	// if(c == ' ') {
-	// 	this->doPickColor();
+	// 	doPickColor();
 	// 	fprintf(stderr, "MarkerSeparator User asked for a color picker...\n");
 	// }
 }

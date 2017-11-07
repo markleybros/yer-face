@@ -98,7 +98,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			trackingBoxSet = false;
 			trackerState = LOST;
 			//Attempt to re-process this same frame in LOST mode.
-			return this->processCurrentFrame();
+			return processCurrentFrame();
 		} else {
 			trackingBoxSet = true;
 			staleCounter--;

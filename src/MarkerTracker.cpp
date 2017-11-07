@@ -66,6 +66,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FrameDerivatives *myFrameD
 	trackerState = DETECTING;
 	markerDetectedSet = false;
 	markerPointSet = false;
+	trackingBoxSet = false;
 	markerList = NULL;
 
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
@@ -86,45 +87,11 @@ MarkerType MarkerTracker::getMarkerType(void) {
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
-	transitionedToTrackingThisFrame = false;
-	//Perform detection every single frame, regardless of state.
-	this->performDetection();
+	performTracking();
 
-	if((trackerState == TRACKING && !transitionedToTrackingThisFrame)) {
-		if(!this->performTracking()) {
-			this->performInitializationOfTracker();
-		}
-	}
+	performDetection();
 
-	markerPointSet = false;
-	if(markerDetectedSet && trackingBoxSet) {
-		Point2d detectedPoint = Point(markerDetected.marker.center);
-		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
-		double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
-		double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
-		double detectedPointWeight = actualDistance / maxDistance;
-		if(detectedPointWeight < 0.0) {
-			detectedPointWeight = 0.0;
-		} else if(detectedPointWeight > 1.0) {
-			detectedPointWeight = 1.0;
-		}
-		double trackingPointWeight = 1.0 - detectedPointWeight;
-		detectedPoint.x = detectedPoint.x * detectedPointWeight;
-		detectedPoint.y = detectedPoint.y * detectedPointWeight;
-		trackingPoint.x = trackingPoint.x * trackingPointWeight;
-		trackingPoint.y = trackingPoint.y * trackingPointWeight;
-		markerPoint = detectedPoint + trackingPoint;
-		markerPointSet = true;
-	} else if(markerDetectedSet) {
-		markerPoint = markerDetected.marker.center;
-		markerPointSet = true;
-	} else if(trackingBoxSet) {
-		markerPoint = Utilities::centerRect(trackingBox);
-		markerPointSet = true;
-	} else {
-		trackerState = LOST;
-		fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
-	}
+	assignMarkerPoint();
 
 	return trackerState;
 }
@@ -202,7 +169,7 @@ void MarkerTracker::performDetection(void) {
 	}
 
 	if(markerDetectedSet) {
-		if(trackerState != TRACKING || trackerDriftingExcessively()) {
+		if(!trackingBoxSet || trackerDriftingExcessively()) {
 			performInitializationOfTracker();
 		}
 	}
@@ -213,7 +180,6 @@ void MarkerTracker::performInitializationOfTracker(void) {
 		throw invalid_argument("MarkerTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
 	trackerState = TRACKING;
-	transitionedToTrackingThisFrame = true;
 	#if (CV_MINOR_VERSION < 3)
 	tracker = Tracker::create("KCF");
 	#else
@@ -226,13 +192,16 @@ void MarkerTracker::performInitializationOfTracker(void) {
 }
 
 bool MarkerTracker::performTracking(void) {
-	bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
-	if(!trackSuccess) {
-		trackingBoxSet = false;
-		return false;
+	if(trackerState == TRACKING) {
+		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
+		if(!trackSuccess) {
+			trackingBoxSet = false;
+			return false;
+		}
+		trackingBoxSet = true;
+		return true;
 	}
-	trackingBoxSet = true;
-	return true;
+	return false;
 }
 
 bool MarkerTracker::trackerDriftingExcessively(void) {
@@ -265,6 +234,38 @@ bool MarkerTracker::attemptToClaimMarkerCandidate(MarkerCandidate markerCandidat
 	markerDetected = markerCandidate;
 	markerDetectedSet = true;
 	return true;
+}
+
+void MarkerTracker::assignMarkerPoint(void) {
+	markerPointSet = false;
+	if(markerDetectedSet && trackingBoxSet) {
+		Point2d detectedPoint = Point(markerDetected.marker.center);
+		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
+		double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
+		double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+		double detectedPointWeight = actualDistance / maxDistance;
+		if(detectedPointWeight < 0.0) {
+			detectedPointWeight = 0.0;
+		} else if(detectedPointWeight > 1.0) {
+			detectedPointWeight = 1.0;
+		}
+		double trackingPointWeight = 1.0 - detectedPointWeight;
+		detectedPoint.x = detectedPoint.x * detectedPointWeight;
+		detectedPoint.y = detectedPoint.y * detectedPointWeight;
+		trackingPoint.x = trackingPoint.x * trackingPointWeight;
+		trackingPoint.y = trackingPoint.y * trackingPointWeight;
+		markerPoint = detectedPoint + trackingPoint;
+		markerPointSet = true;
+	} else if(markerDetectedSet) {
+		markerPoint = markerDetected.marker.center;
+		markerPointSet = true;
+	} else if(trackingBoxSet) {
+		markerPoint = Utilities::centerRect(trackingBox);
+		markerPointSet = true;
+	} else {
+		trackerState = LOST;
+		fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
+	}	
 }
 
 bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {

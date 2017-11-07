@@ -54,13 +54,13 @@ WhichEye EyeTracker::getWhichEye(void) {
 TrackerState EyeTracker::processCurrentFrame(void) {
 	transitionedToTrackingThisFrame = false;
 	if(trackerState == DETECTING || trackerState == LOST || trackerState == STALE) {
-		this->performDetection();
+		performDetection();
 	}
 	if((trackerState == TRACKING && !transitionedToTrackingThisFrame) || trackerState == STALE) {
-		this->performTracking();
+		performTracking();
 		if(trackerState == LOST) {
 			//Attempt to re-process this same frame in LOST mode.
-			return this->processCurrentFrame();
+			return processCurrentFrame();
 		}
 	}
 	return trackerState;

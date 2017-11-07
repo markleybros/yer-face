@@ -43,7 +43,8 @@ private:
 	bool performTracking(void);
 	bool trackerDriftingExcessively(void);
 	bool attemptToClaimMarkerCandidate(MarkerCandidate markerCandidate);
-
+	void assignMarkerPoint(void);
+	
 	static vector<MarkerTracker *> markerTrackers;
 
 	MarkerType markerType;
@@ -55,7 +56,6 @@ private:
 
 	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;
-	bool transitionedToTrackingThisFrame;
 	TrackerState trackerState;
 	MarkerCandidate markerDetected;
 	bool markerDetectedSet;
