@@ -98,24 +98,22 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 	markerPointSet = false;
 	if(markerDetectedSet && trackingBoxSet) {
-		// Point2d detectedPoint = Point(markerDetected.marker.center);
-		// Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
-		// double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
-		// double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
-		// double detectedPointWeight = actualDistance / maxDistance;
-		// if(detectedPointWeight < 0.0) {
-		// 	detectedPointWeight = 0.0;
-		// } else if(detectedPointWeight > 1.0) {
-		// 	detectedPointWeight = 1.0;
-		// }
-		// double trackingPointWeight = 1.0 - detectedPointWeight;
-		// detectedPoint.x = detectedPoint.x * detectedPointWeight;
-		// detectedPoint.y = detectedPoint.y * detectedPointWeight;
-		// trackingPoint.x = trackingPoint.x * trackingPointWeight;
-		// trackingPoint.y = trackingPoint.y * trackingPointWeight;
-		// markerPoint = detectedPoint + trackingPoint;
-		// markerPointSet = true;
-		markerPoint = markerDetected.marker.center;
+		Point2d detectedPoint = Point(markerDetected.marker.center);
+		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
+		double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
+		double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+		double detectedPointWeight = actualDistance / maxDistance;
+		if(detectedPointWeight < 0.0) {
+			detectedPointWeight = 0.0;
+		} else if(detectedPointWeight > 1.0) {
+			detectedPointWeight = 1.0;
+		}
+		double trackingPointWeight = 1.0 - detectedPointWeight;
+		detectedPoint.x = detectedPoint.x * detectedPointWeight;
+		detectedPoint.y = detectedPoint.y * detectedPointWeight;
+		trackingPoint.x = trackingPoint.x * trackingPointWeight;
+		trackingPoint.y = trackingPoint.y * trackingPointWeight;
+		markerPoint = detectedPoint + trackingPoint;
 		markerPointSet = true;
 	} else if(markerDetectedSet) {
 		markerPoint = markerDetected.marker.center;
@@ -285,22 +283,13 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 	if(verbose) {
 		if(trackingBoxSet) {
 			rectangle(frame, trackingBox, color, 1);
-		} else {
-			fprintf(stderr, "MarkerTracker <%s>: WARNING: tracking box unset at preview???\n", markerType.toString());
 		}
 		if(markerDetectedSet) {
 			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
-		} else {
-			fprintf(stderr, "MarkerTracker <%s>: WARNING: detected marker unset at preview???\n", markerType.toString());
 		}
 	}
 	if(markerPointSet) {
 		Utilities::drawX(frame, markerPoint, color);
-	} else {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING: marker point unset at preview???\n", markerType.toString());
-	}
-	if(!markerPointSet && !trackingBoxSet && !markerDetectedSet) {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING: Everything is unset at preview???\n", markerType.toString());
 	}
 }
 
