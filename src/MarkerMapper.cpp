@@ -105,6 +105,15 @@ void MarkerMapper::calculateEyeLine(void) {
 	if(!calculateEyeCenter(markerEyelidRightTop, markerEyelidRightBottom, &eyeLineRight)) {
 		return;
 	}
+
+	double originalEyeLineLength = Utilities::distance(eyeLineLeft, eyeLineRight);
+	double desiredEyeLineLength = originalEyeLineLength * 2.25; //FIXME - magic numbers?
+	Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
+	eyeLineCenter.x = eyeLineCenter.x / 2.0;
+	eyeLineCenter.y = eyeLineCenter.y / 2.0;
+
+	eyeLineLeft = Utilities::adjustLineDistance(eyeLineCenter, eyeLineLeft, (desiredEyeLineLength / 2.0));
+	eyeLineRight = Utilities::adjustLineDistance(eyeLineCenter, eyeLineRight, (desiredEyeLineLength / 2.0));
 	eyeLineSet = true;
 }
 
@@ -121,7 +130,7 @@ bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom,
 	if(!bottomPointSet) {
 		return false;
 	}
-	double bottomPointWeight = 0.75; //FIXME magic numbers?
+	double bottomPointWeight = 0.6; //FIXME magic numbers?
 	bottomPoint.x = bottomPoint.x * bottomPointWeight;
 	bottomPoint.y = bottomPoint.y * bottomPointWeight;
 	topPoint.x = topPoint.x * (1.0 - bottomPointWeight);

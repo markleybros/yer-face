@@ -30,7 +30,15 @@ Point2d Utilities::centerRect(Rect2d rect) {
 
 double Utilities::distance(Point2d a, Point2d b) {
     Point2d d = a - b;
-    return std::sqrt(d.x*d.x + d.y*d.y);
+    return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
+}
+
+Point2d Utilities::adjustLineDistance(Point2d a, Point2d b, double newDistance) {
+	Point2d temp;
+	double lenAB = std::sqrt(std::pow(a.x - b.x, 2.0) + pow(a.y - b.y, 2.0));
+	temp.x = a.x + ((b.x - a.x) / lenAB) * newDistance;
+	temp.y = a.y + ((b.y - a.y) / lenAB) * newDistance;
+	return temp;
 }
 
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {
