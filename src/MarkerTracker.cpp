@@ -357,7 +357,7 @@ bool MarkerTracker::trackerDriftingExcessively(void) {
 	if(!markerDetectedSet || !trackingBoxSet) {
 		throw invalid_argument("MarkerTracker::trackerDriftingExcessively() called while one or both of markerDetectedSet or trackingBoxSet are false");
 	}
-	double actualDistance = Utilities::distance(markerDetected.marker.center, Utilities::centerRect(trackingBox));
+	double actualDistance = Utilities::lineDistance(markerDetected.marker.center, Utilities::centerRect(trackingBox));
 	double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
 		fprintf(stderr, "MarkerTracker <%s>: WARNING: Optical tracker drifting excessively! Resetting it.\n", markerType.toString());
@@ -402,7 +402,7 @@ void MarkerTracker::assignMarkerPoint(void) {
 	if(markerDetectedSet && trackingBoxSet) {
 		Point2d detectedPoint = Point(markerDetected.marker.center);
 		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
-		double actualDistance = Utilities::distance(detectedPoint, trackingPoint);
+		double actualDistance = Utilities::lineDistance(detectedPoint, trackingPoint);
 		double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
 		double detectedPointWeight = actualDistance / maxDistance;
 		if(detectedPointWeight < 0.0) {
@@ -448,7 +448,7 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 		if(boundingRect == NULL || (markerRect & (*boundingRect)).area() > 0) {
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
-			markerCandidate.distanceFromPointOfInterest = Utilities::distance(pointOfInterest, markerCandidate.marker.center);
+			markerCandidate.distanceFromPointOfInterest = Utilities::lineDistance(pointOfInterest, markerCandidate.marker.center);
 			markerCandidate.angleFromPointOfInterest = Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center);
 			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 			markerCandidateList->push_back(markerCandidate);

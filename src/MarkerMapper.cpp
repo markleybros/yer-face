@@ -120,7 +120,7 @@ void MarkerMapper::calculateEyeLine(void) {
 		return;
 	}
 
-	double originalEyeLineLength = Utilities::distance(eyeLineLeft, eyeLineRight);
+	double originalEyeLineLength = Utilities::lineDistance(eyeLineLeft, eyeLineRight);
 	double desiredEyeLineLength = originalEyeLineLength * eyeLineLengthPercentage;
 	Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
 	eyeLineCenter.x = eyeLineCenter.x / 2.0;

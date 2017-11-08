@@ -31,7 +31,7 @@ Point2d Utilities::centerRect(Rect2d rect) {
 	return rect.tl() + center;
 }
 
-double Utilities::distance(Point2d a, Point2d b) {
+double Utilities::lineDistance(Point2d a, Point2d b) {
     Point2d d = a - b;
     return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
 }
