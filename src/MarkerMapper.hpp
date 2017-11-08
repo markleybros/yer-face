@@ -17,7 +17,7 @@ class MarkerTracker;
 
 class MarkerMapper {
 public:
-	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker);
+	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25);
 	~MarkerMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -30,6 +30,9 @@ private:
 	FaceTracker *faceTracker;
 	EyeTracker *leftEyeTracker;
 	EyeTracker *rightEyeTracker;
+	float eyelidBottomPointWeight;
+	float eyeLineLengthPercentage;
+
 	MarkerSeparator *markerSeparator;
 
 	MarkerTracker *markerEyelidLeftTop;

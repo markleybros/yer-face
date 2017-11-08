@@ -10,7 +10,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker) {
+MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker, float myEyelidBottomPointWeight, float myEyeLineLengthPercentage) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -26,6 +26,14 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	rightEyeTracker = myRightEyeTracker;
 	if(rightEyeTracker == NULL) {
 		throw invalid_argument("rightEyeTracker cannot be NULL");
+	}
+	eyelidBottomPointWeight = myEyelidBottomPointWeight;
+	if(eyelidBottomPointWeight < 0.0 || eyelidBottomPointWeight > 1.0) {
+		throw invalid_argument("eyelidBottomPointWeight cannot be less than 0.0 or greater than 1.0");
+	}
+	eyeLineLengthPercentage = myEyeLineLengthPercentage;
+	if(eyeLineLengthPercentage <= 0.0) {
+		throw invalid_argument("eyeLineLengthPercentage cannot be less than or equal to 0.0");
 	}
 
 	eyeLineSet = false;
@@ -107,7 +115,7 @@ void MarkerMapper::calculateEyeLine(void) {
 	}
 
 	double originalEyeLineLength = Utilities::distance(eyeLineLeft, eyeLineRight);
-	double desiredEyeLineLength = originalEyeLineLength * 2.25; //FIXME - magic numbers?
+	double desiredEyeLineLength = originalEyeLineLength * eyeLineLengthPercentage;
 	Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
 	eyeLineCenter.x = eyeLineCenter.x / 2.0;
 	eyeLineCenter.y = eyeLineCenter.y / 2.0;
@@ -130,7 +138,7 @@ bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom,
 	if(!bottomPointSet) {
 		return false;
 	}
-	double bottomPointWeight = 0.6; //FIXME magic numbers?
+	double bottomPointWeight = eyelidBottomPointWeight;
 	bottomPoint.x = bottomPoint.x * bottomPointWeight;
 	bottomPoint.y = bottomPoint.y * bottomPointWeight;
 	topPoint.x = topPoint.x * (1.0 - bottomPointWeight);
