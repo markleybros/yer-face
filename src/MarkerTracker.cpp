@@ -141,8 +141,19 @@ void MarkerTracker::performDetection(void) {
 	if((*markerList).size() < 1) {
 		return;
 	}
+	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
-	
+	bool eyeLineSet;
+	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
+	std::tie(eyeLineLeft, eyeLineRight, eyeLineSet) = markerMapper->getEyeLine();
+	if(eyeLineSet) {
+		eyeLineCenter = (eyeLineLeft + eyeLineRight);
+		eyeLineCenter.x = eyeLineCenter.x / 2.0;
+		eyeLineCenter.y = eyeLineCenter.y / 2.0;
+	}
+	Size frameSize = frameDerivatives->getCurrentFrame().size();
+	Rect2d boundingRect;
+
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 		Rect2d eyeRect;
 		bool eyeRectSet;
@@ -191,23 +202,14 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
-		int xDirection = -1;
+		if(!eyeLineSet) {
+			return;
+		}
+		xDirection = -1;
 		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter) {
 			xDirection = 1;
 		}
 
-		Point2d eyeLineLeft, eyeLineRight;
-		bool eyeLineSet;
-		std::tie(eyeLineLeft, eyeLineRight, eyeLineSet) = markerMapper->getEyeLine();
-		if(!eyeLineSet) {
-			return;
-		}
-		Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
-		eyeLineCenter.x = eyeLineCenter.x / 2.0;
-		eyeLineCenter.y = eyeLineCenter.y / 2.0;
-
-		Size frameSize = frameDerivatives->getCurrentFrame().size();
-		Rect2d boundingRect;
 		boundingRect.y = 0;
 		boundingRect.height = eyeLineCenter.y;
 		if(xDirection < 0) {
@@ -268,6 +270,51 @@ void MarkerTracker::performDetection(void) {
 			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
 				return;
 			}
+		}
+	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
+		if(!eyeLineSet) {
+			return;
+		}
+
+		xDirection = -1;
+		if(markerType.type == CheekLeft) {
+			xDirection = 1;
+		}
+
+		MarkerTracker *eyelidTracker;
+		if(xDirection < 0) {
+			eyelidTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyelidRightBottom));
+		} else {
+			eyelidTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyelidLeftBottom));
+		}
+		if(eyelidTracker == NULL) {
+			return;
+		}
+
+		Point2d eyelidPoint;
+		bool eyelidPointSet;
+		std::tie(eyelidPoint, eyelidPointSet) = eyelidTracker->getMarkerPoint();
+		if(!eyelidPointSet) {
+			return;
+		}
+
+		boundingRect.y = eyelidPoint.y;
+		boundingRect.height = frameSize.height - eyelidPoint.y;
+		if(xDirection < 0) {
+			boundingRect.x = 0;
+			boundingRect.width = eyeLineCenter.x;
+		} else {
+			boundingRect.x = eyeLineCenter.x;
+			boundingRect.width = frameSize.width - eyeLineCenter.x;
+		}
+
+		generateMarkerCandidateList(&markerCandidateList, eyeLineCenter, &boundingRect);
+		if(markerCandidateList.size() < 1) {
+			return;
+		}
+
+		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
+			return;
 		}
 	}
 }
@@ -422,6 +469,8 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 		} else if(markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightOuter) {
 			color[2] = 255;
 		}
+	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
+		color = Scalar(255, 255, 0);
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {

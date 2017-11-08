@@ -52,6 +52,9 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	markerEyebrowLeftOuter = new MarkerTracker(EyebrowLeftOuter, this, frameDerivatives, markerSeparator);
 	markerEyebrowRightOuter = new MarkerTracker(EyebrowRightOuter, this, frameDerivatives, markerSeparator);
 
+	markerCheekLeft = new MarkerTracker(CheekLeft, this, frameDerivatives, markerSeparator);
+	markerCheekRight = new MarkerTracker(CheekRight, this, frameDerivatives, markerSeparator);
+	
 	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
 
@@ -84,6 +87,9 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerEyebrowRightMiddle->processCurrentFrame();
 	markerEyebrowLeftOuter->processCurrentFrame();
 	markerEyebrowRightOuter->processCurrentFrame();
+
+	markerCheekLeft->processCurrentFrame();
+	markerCheekRight->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {

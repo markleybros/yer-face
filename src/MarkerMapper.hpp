@@ -47,6 +47,9 @@ private:
 	MarkerTracker *markerEyebrowRightMiddle;
 	MarkerTracker *markerEyebrowRightOuter;
 
+	MarkerTracker *markerCheekLeft;
+	MarkerTracker *markerCheekRight;
+
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;
 	bool eyeLineSet;
