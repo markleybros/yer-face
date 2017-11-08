@@ -1,4 +1,7 @@
+
 #include "Utilities.hpp"
+#define _USE_MATH_DEFINES
+#include <cmath>
 
 using namespace std;
 using namespace cv;
@@ -16,7 +19,7 @@ Rect2d Utilities::scaleRect(Rect2d rect, double scale) {
 Rect2d Utilities::insetBox(Rect2d originalBox, double scale) {
 	double newBoxWidth = originalBox.width * scale;
 	double newBoxHeight = originalBox.height * scale;
-	return  Rect2d(
+	return Rect2d(
 		originalBox.x + ((originalBox.width - newBoxWidth) / 2.0),
 		originalBox.y + ((originalBox.height - newBoxHeight) / 2.0),
 		newBoxWidth,
@@ -39,6 +42,12 @@ Point2d Utilities::adjustLineDistance(Point2d a, Point2d b, double newDistance) 
 	temp.x = a.x + ((b.x - a.x) / lenAB) * newDistance;
 	temp.y = a.y + ((b.y - a.y) / lenAB) * newDistance;
 	return temp;
+}
+
+double Utilities::lineAngle(Point2d a, Point2d b) {
+	Point2d delta = b - a;
+	double radians = atan2(delta.y, delta.x);
+	return radians * (180 / M_PI);
 }
 
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {

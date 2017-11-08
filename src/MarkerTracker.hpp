@@ -25,6 +25,7 @@ public:
 	RotatedRect marker;
 	unsigned int markerListIndex;
 	double distanceFromPointOfInterest;
+	double angleFromPointOfInterest;
 	double sqrtArea;
 };
 
@@ -42,6 +43,8 @@ public:
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
+	static bool sortMarkerCandidatesByAngleFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
+	static bool sortMarkerCandidatesByAngleFromPointOfInterestInverted(const MarkerCandidate a, const MarkerCandidate b);
 private:
 	void performTrackToSeparatedCorrelation(void);
 	void performDetection(void);

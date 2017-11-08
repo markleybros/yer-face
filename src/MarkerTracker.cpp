@@ -128,6 +128,7 @@ void MarkerTracker::performTrackToSeparatedCorrelation(void) {
 	if(markerCandidateList.size() <= 0) {
 		return;
 	}
+	markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	if(!claimMarkerCandidate(markerCandidateList.front())) {
 		return;
 	}
@@ -164,7 +165,8 @@ void MarkerTracker::performDetection(void) {
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
 		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);
-
+		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+		
 		if(markerCandidateList.size() == 1) {
 			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
 				return;
@@ -225,7 +227,8 @@ void MarkerTracker::performDetection(void) {
 			if(markerCandidateList.size() < 1) {
 				return;
 			}
-
+			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+			
 			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
 				return;
 			}
@@ -266,7 +269,8 @@ void MarkerTracker::performDetection(void) {
 			if(markerCandidateList.size() < 1) {
 				return;
 			}
-
+			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+			
 			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
 				return;
 			}
@@ -301,18 +305,19 @@ void MarkerTracker::performDetection(void) {
 		boundingRect.y = eyelidPoint.y;
 		boundingRect.height = frameSize.height - eyelidPoint.y;
 		if(xDirection < 0) {
-			boundingRect.x = 0;
-			boundingRect.width = eyeLineCenter.x;
+			boundingRect.x = eyeLineRight.x;
+			boundingRect.width = eyeLineCenter.x - eyeLineRight.x;
 		} else {
 			boundingRect.x = eyeLineCenter.x;
-			boundingRect.width = frameSize.width - eyeLineCenter.x;
+			boundingRect.width = eyeLineLeft.x - eyeLineCenter.x;
 		}
 
-		generateMarkerCandidateList(&markerCandidateList, eyeLineCenter, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
-
+		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+		
 		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
 			return;
 		}
@@ -444,15 +449,23 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
 			markerCandidate.distanceFromPointOfInterest = Utilities::distance(pointOfInterest, markerCandidate.marker.center);
+			markerCandidate.angleFromPointOfInterest = Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center);
 			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 			markerCandidateList->push_back(markerCandidate);
 		}
 	}
-	markerCandidateList->sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 }
 
 bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
 	return (a.distanceFromPointOfInterest < b.distanceFromPointOfInterest);
+}
+
+bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
+	return (a.angleFromPointOfInterest < b.angleFromPointOfInterest);
+}
+
+bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterestInverted(const MarkerCandidate a, const MarkerCandidate b) {
+	return (a.angleFromPointOfInterest > b.angleFromPointOfInterest);
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {
