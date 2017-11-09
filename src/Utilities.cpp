@@ -50,6 +50,29 @@ double Utilities::lineAngle(Point2d a, Point2d b) {
 	return radians * (180 / M_PI);
 }
 
+bool Utilities::leastSquaresFit(vector<Point2d> points, double *m, double *b) {
+	double sumX = 0.0, sumXX = 0.0, sumXY = 0.0, sumY = 0.0; //, sumYY = 0.0;
+
+	size_t count = points.size();
+	for(size_t i = 0; i < count; i++) {
+		sumX += points[i].x;
+		sumXX += std::pow(points[i].x, 2.0);
+		sumXY += points[i].x * points[i].y;
+		sumY += points[i].y;
+		//sumYY += std::pow(points[i].y, 2.0);
+	}
+
+	double denominator = ((count * sumXX) - std::pow(sumX, 2.0));
+	if(denominator == 0.0) {
+		return false;
+	}
+
+	*m = ((count * sumXY) - (sumX * sumY)) / denominator;
+	*b = ((sumY * sumXX) - (sumX * sumXY)) / denominator;
+	//*r = (sumXY - ((sumX * sumY) / count)) / std::sqrt((sumXX - (std::pow(sumX, 2.0) / count)) * (sumYY - (std:pow(sumY, 2.0) / count)));
+	return true;
+}
+
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {
 	Point2f vertices[4];
 	rrect.points(vertices);

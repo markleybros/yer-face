@@ -88,11 +88,14 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerEyebrowLeftOuter->processCurrentFrame();
 	markerEyebrowRightOuter->processCurrentFrame();
 
+	calculateEyebrowLine();
+
 	markerCheekLeft->processCurrentFrame();
 	markerCheekRight->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
+	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
 		markerSeparator->renderPreviewHUD(true);
 	}
@@ -102,8 +105,10 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 		(*markerTrackers)[i]->renderPreviewHUD(verbose);
 	}
 	if(eyeLineSet) {
-		Mat frame = frameDerivatives->getPreviewFrame();
 		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
+	}
+	if(eyebrowLineSet) {
+		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
 	}
 }
 
@@ -151,6 +156,40 @@ bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom,
 	topPoint.y = topPoint.y * (1.0 - bottomPointWeight);
 	*center = bottomPoint + topPoint;
 	return true;
+}
+
+void MarkerMapper::calculateEyebrowLine(void) {
+	eyebrowLineSet = false;
+	vector<MarkerTracker *> eyebrows = {markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter};
+	vector<Point2d> points;
+	double minX = -1.0;
+	double maxX = -1.0;
+	size_t count = eyebrows.size();
+	for(size_t i = 0; i < count; i++) {
+		bool pointSet;
+		Point2d point;
+		std::tie(point, pointSet) = eyebrows[i]->getMarkerPoint();
+		if(pointSet) {
+			if(minX < 0.0 || point.x < minX) {
+				minX = point.x;
+			}
+			if(maxX < 0.0 || point.x > maxX) {
+				maxX = point.x;
+			}
+			points.push_back(point);
+		}
+	}
+	if(points.size() > 3) {
+		double slope, intercept;
+		if(!Utilities::leastSquaresFit(points, &slope, &intercept)) {
+			return;
+		}
+		eyebrowLineLeft.x = maxX;
+		eyebrowLineLeft.y = (slope * maxX) + intercept;
+		eyebrowLineRight.x = minX;
+		eyebrowLineRight.y = (slope * minX) + intercept;
+	}
+	eyebrowLineSet = true;
 }
 
 }; //namespace YerFace
