@@ -21,7 +21,7 @@ public:
 	~MarkerMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
-	tuple<Point2d, Point2d, bool> getEyeLine(void);
+	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
 private:
 	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
@@ -54,12 +54,15 @@ private:
 
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;
+	Point2d eyeLineCenter;
 	bool eyeLineSet;
 	Point2d eyebrowLineLeft;
 	Point2d eyebrowLineRight;
+	Point2d eyebrowLineCenter;
 	bool eyebrowLineSet;
 	Point2d midLineLeft;
 	Point2d midLineRight;
+	Point2d midLineCenter;
 	bool midLineSet;
 };
 

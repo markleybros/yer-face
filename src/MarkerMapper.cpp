@@ -108,17 +108,20 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	}
 	if(eyeLineSet) {
 		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
+		Utilities::drawX(frame, eyeLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 	if(eyebrowLineSet) {
 		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
+		Utilities::drawX(frame, eyebrowLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 	if(midLineSet) {
 		line(frame, midLineLeft, midLineRight, Scalar(0, 255, 0), 2);
+		Utilities::drawX(frame, midLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 }
 
-tuple<Point2d, Point2d, bool> MarkerMapper::getEyeLine(void) {
-	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineSet);
+tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getEyeLine(void) {
+	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet);
 }
 
 void MarkerMapper::calculateEyeLine(void) {
@@ -132,7 +135,7 @@ void MarkerMapper::calculateEyeLine(void) {
 
 	double originalEyeLineLength = Utilities::lineDistance(eyeLineLeft, eyeLineRight);
 	double desiredEyeLineLength = originalEyeLineLength * eyeLineLengthPercentage;
-	Point2d eyeLineCenter = (eyeLineLeft + eyeLineRight);
+	eyeLineCenter = (eyeLineLeft + eyeLineRight);
 	eyeLineCenter.x = eyeLineCenter.x / 2.0;
 	eyeLineCenter.y = eyeLineCenter.y / 2.0;
 
@@ -167,8 +170,7 @@ void MarkerMapper::calculateEyebrowLine(void) {
 	eyebrowLineSet = false;
 	vector<MarkerTracker *> eyebrows = {markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter};
 	vector<Point2d> points;
-	double minX = -1.0;
-	double maxX = -1.0;
+	double minX = -1.0, maxX = -1.0, innerLeftX = -1.0, innerRightX = -1.0;
 	size_t count = eyebrows.size();
 	for(size_t i = 0; i < count; i++) {
 		bool pointSet;
@@ -181,8 +183,17 @@ void MarkerMapper::calculateEyebrowLine(void) {
 			if(maxX < 0.0 || point.x > maxX) {
 				maxX = point.x;
 			}
+			if(eyebrows[i]->getMarkerType().type == EyebrowLeftInner) {
+				innerLeftX = point.x;
+			}
+			if(eyebrows[i]->getMarkerType().type == EyebrowRightInner) {
+				innerRightX = point.x;
+			}
 			points.push_back(point);
 		}
+	}
+	if(innerLeftX < 0 || innerRightX < 0) {
+		return;
 	}
 	if(points.size() > 3) {
 		double slope, intercept;
@@ -193,6 +204,8 @@ void MarkerMapper::calculateEyebrowLine(void) {
 		eyebrowLineLeft.y = (slope * maxX) + intercept;
 		eyebrowLineRight.x = minX;
 		eyebrowLineRight.y = (slope * minX) + intercept;
+		eyebrowLineCenter.x = ((innerLeftX + innerRightX) / 2.0);
+		eyebrowLineCenter.y = (slope * eyebrowLineCenter.x) + intercept;
 	}
 	eyebrowLineSet = true;
 }
@@ -209,6 +222,9 @@ void MarkerMapper::calculateMidLine(void) {
 	if(!midLineRightSet) {
 		return;
 	}
+	midLineCenter = (midLineLeft + midLineRight);
+	midLineCenter.x = midLineCenter.x / 2.0;
+	midLineCenter.y = midLineCenter.y / 2.0;
 	midLineSet = true;
 }
 

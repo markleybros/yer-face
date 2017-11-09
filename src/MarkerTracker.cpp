@@ -146,12 +146,7 @@ void MarkerTracker::performDetection(void) {
 	list<MarkerCandidate> markerCandidateList;
 	bool eyeLineSet;
 	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
-	std::tie(eyeLineLeft, eyeLineRight, eyeLineSet) = markerMapper->getEyeLine();
-	if(eyeLineSet) {
-		eyeLineCenter = (eyeLineLeft + eyeLineRight);
-		eyeLineCenter.x = eyeLineCenter.x / 2.0;
-		eyeLineCenter.y = eyeLineCenter.y / 2.0;
-	}
+	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = markerMapper->getEyeLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
