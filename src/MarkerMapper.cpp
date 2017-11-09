@@ -92,6 +92,8 @@ void MarkerMapper::processCurrentFrame(void) {
 
 	markerCheekLeft->processCurrentFrame();
 	markerCheekRight->processCurrentFrame();
+
+	calculateMidLine();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
@@ -109,6 +111,9 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	}
 	if(eyebrowLineSet) {
 		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
+	}
+	if(midLineSet) {
+		line(frame, midLineLeft, midLineRight, Scalar(0, 255, 0), 2);
 	}
 }
 
@@ -190,6 +195,21 @@ void MarkerMapper::calculateEyebrowLine(void) {
 		eyebrowLineRight.y = (slope * minX) + intercept;
 	}
 	eyebrowLineSet = true;
+}
+
+void MarkerMapper::calculateMidLine(void) {
+	midLineSet = false;
+	bool midLineLeftSet;
+	std::tie(midLineLeft, midLineLeftSet) = markerCheekLeft->getMarkerPoint();
+	if(!midLineLeftSet) {
+		return;
+	}
+	bool midLineRightSet;
+	std::tie(midLineRight, midLineRightSet) = markerCheekRight->getMarkerPoint();
+	if(!midLineRightSet) {
+		return;
+	}
+	midLineSet = true;
 }
 
 }; //namespace YerFace

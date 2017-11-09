@@ -26,6 +26,7 @@ private:
 	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
+	void calculateMidLine(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
@@ -57,6 +58,9 @@ private:
 	Point2d eyebrowLineLeft;
 	Point2d eyebrowLineRight;
 	bool eyebrowLineSet;
+	Point2d midLineLeft;
+	Point2d midLineRight;
+	bool midLineSet;
 };
 
 }; //namespace YerFace
