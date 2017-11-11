@@ -24,13 +24,13 @@ public:
 	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
-	tuple<Point2d, Point2d, double, double, bool> getCenterLine(void);
+	tuple<Point2d, Point2d, double, double, bool, bool> getCenterLine(void);
 private:
 	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
 	void calculateMidLine(void);
-	void calculateCenterLine(void);
+	void calculateCenterLine(bool intermediate);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
@@ -74,6 +74,7 @@ private:
 	Point2d centerLineBottom;
 	double centerLineSlope;
 	double centerLineIntercept;
+	bool centerLineIsIntermediate;
 	bool centerLineSet;
 };
 

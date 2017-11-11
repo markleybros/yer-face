@@ -99,9 +99,11 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerCheekRight->processCurrentFrame();
 
 	calculateMidLine();
-	calculateCenterLine();
+	calculateCenterLine(true);
 
 	markerJaw->processCurrentFrame();
+
+	calculateCenterLine(false);
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
@@ -143,8 +145,8 @@ tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getMidLine(void) {
 	return std::make_tuple(midLineLeft, midLineRight, midLineCenter, midLineSet);
 }
 
-tuple<Point2d, Point2d, double, double, bool> MarkerMapper::getCenterLine(void) {
-	return std::make_tuple(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineSet);
+tuple<Point2d, Point2d, double, double, bool, bool> MarkerMapper::getCenterLine(void) {
+	return std::make_tuple(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet);
 }
 
 void MarkerMapper::calculateEyeLine(void) {
@@ -249,18 +251,34 @@ void MarkerMapper::calculateMidLine(void) {
 	midLineSet = true;
 }
 
-void MarkerMapper::calculateCenterLine(void) {
+void MarkerMapper::calculateCenterLine(bool intermediate) {
 	centerLineSet = false;
+	bool jawPointSet;
+	Point2d jawPoint;
 	if(!eyebrowLineSet || !eyeLineSet || !midLineSet) {
 		return;
 	}
+	centerLineIsIntermediate = intermediate;
 
 	vector<Point2d> points = {eyebrowLineCenter, eyeLineCenter, midLineCenter};
+	if(!intermediate) {
+		std::tie(jawPoint, jawPointSet) = markerJaw->getMarkerPoint();
+		if(jawPointSet) {
+			points.push_back(jawPoint);
+		} else {
+			return;
+		}
+	}
+
 	Utilities::lineBestFit(points, &centerLineSlope, &centerLineIntercept);
 
 	centerLineTop.y = eyebrowLineCenter.y;
 	centerLineTop.x = (centerLineTop.y - centerLineIntercept) / centerLineSlope;
-	centerLineBottom.y = midLineCenter.y;
+	if(!intermediate) {
+		centerLineBottom.y = jawPoint.y;
+	} else {
+		centerLineBottom.y = midLineCenter.y;
+	}
 	centerLineBottom.x = (centerLineBottom.y - centerLineIntercept) / centerLineSlope;
 	centerLineSet = true;
 }

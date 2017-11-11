@@ -150,10 +150,10 @@ void MarkerTracker::performDetection(void) {
 	bool midLineSet;
 	Point2d midLineLeft, midLineRight, midLineCenter;
 	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = markerMapper->getMidLine();
-	bool centerLineSet;
+	bool centerLineSet, centerLineIsIntermediate;
 	Point2d centerLineTop, centerLineBottom;
 	double centerLineSlope, centerLineIntercept;
-	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineSet) = markerMapper->getCenterLine();
+	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = markerMapper->getCenterLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
