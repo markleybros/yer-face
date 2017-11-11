@@ -31,6 +31,7 @@ private:
 	void calculateEyebrowLine(void);
 	void calculateMidLine(void);
 	void calculateCenterLine(bool intermediate);
+	void calculateFaceRotation(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
@@ -85,6 +86,10 @@ private:
 	double centerLineIntercept;
 	bool centerLineIsIntermediate;
 	bool centerLineSet;
+
+	vector<Point2d> faceRotationBaselinePoints, faceRotationCurrentPoints;
+	bool faceRotationBaselinePointsSet;
+	bool faceRotationSet;
 };
 
 }; //namespace YerFace

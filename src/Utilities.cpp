@@ -65,6 +65,22 @@ void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
 	*b = pointA.y - (*m * pointA.x);
 }
 
+Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R) {
+	double sy = std::sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0));
+
+	double x, y, z;
+	if(sy > 0.0) {
+		x = atan2(R.at<double>(2,1) , R.at<double>(2,2));
+		y = atan2(-R.at<double>(2,0), sy);
+		z = atan2(R.at<double>(1,0), R.at<double>(0,0));
+	} else {
+		x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
+		y = atan2(-R.at<double>(2,0), sy);
+		z = 0;
+	}
+	return Vec3d(x, y, z);
+}
+
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {
 	Point2f vertices[4];
 	rrect.points(vertices);
