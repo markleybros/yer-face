@@ -220,9 +220,7 @@ void MarkerMapper::calculateEyebrowLine(void) {
 	}
 	if(points.size() > 3) {
 		double slope, intercept;
-		if(!Utilities::leastSquaresFit(points, &slope, &intercept)) {
-			return;
-		}
+		Utilities::leastSquaresFit(points, &slope, &intercept);
 		eyebrowLineLeft.x = maxX;
 		eyebrowLineLeft.y = (slope * maxX) + intercept;
 		eyebrowLineRight.x = minX;
@@ -258,9 +256,7 @@ void MarkerMapper::calculateCenterLine(void) {
 	}
 
 	vector<Point2d> points = {eyebrowLineCenter, eyeLineCenter, midLineCenter};
-	if(!Utilities::leastSquaresFit(points, &centerLineSlope, &centerLineIntercept)) {
-		return;
-	}
+	Utilities::leastSquaresFit(points, &centerLineSlope, &centerLineIntercept);
 
 	centerLineTop.y = eyebrowLineCenter.y;
 	centerLineTop.x = (centerLineTop.y - centerLineIntercept) / centerLineSlope;
