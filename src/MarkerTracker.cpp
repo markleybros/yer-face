@@ -331,15 +331,20 @@ void MarkerTracker::performDetection(void) {
 		jawCloseTo.y = frameSize.height;
 		jawCloseTo.x = (jawCloseTo.y - centerLineIntercept) / centerLineSlope;
 
-
 		boundingRect.x = midLineRight.x;
 		boundingRect.width = midLineLeft.x - midLineRight.x;
 		boundingRect.y = midLineRight.y;
 		boundingRect.height = jawCloseTo.y - midLineRight.y;
 
-		Mat prevFrame = frameDerivatives->getPreviewFrame();
-		rectangle(prevFrame, boundingRect, Scalar(255, 0, 0));
-		Utilities::drawX(prevFrame, jawCloseTo, Scalar(0, 0, 255), 10, 3);
+		generateMarkerCandidateList(&markerCandidateList, jawCloseTo, &boundingRect);
+		if(markerCandidateList.size() < 1) {
+			return;
+		}
+		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+		
+		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
+			return;
+		}
 	}
 }
 
@@ -503,6 +508,8 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 		}
 	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
 		color = Scalar(255, 255, 0);
+	} else if(markerType.type == Jaw) {
+		color = Scalar(0, 255, 0);
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {

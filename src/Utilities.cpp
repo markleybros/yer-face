@@ -50,7 +50,7 @@ double Utilities::lineAngle(Point2d a, Point2d b) {
 	return radians * (180 / M_PI);
 }
 
-void Utilities::leastSquaresFit(vector<Point2d> points, double *m, double *b) {
+void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
 	Vec4d line;
 	fitLine(points, line, DIST_L2, 0, 0.01, 0.01);
 
