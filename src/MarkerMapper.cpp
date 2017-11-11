@@ -59,6 +59,9 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	markerCheekRight = new MarkerTracker(CheekRight, this, frameDerivatives, markerSeparator);
 	
 	markerJaw = new MarkerTracker(Jaw, this, frameDerivatives, markerSeparator);
+
+	markerLipsLeftCorner = new MarkerTracker(LipsLeftCorner, this, frameDerivatives, markerSeparator);
+	markerLipsRightCorner = new MarkerTracker(LipsRightCorner, this, frameDerivatives, markerSeparator);
 	
 	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
@@ -104,6 +107,9 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerJaw->processCurrentFrame();
 
 	calculateCenterLine(false);
+
+	markerLipsLeftCorner->processCurrentFrame();
+	markerLipsRightCorner->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {

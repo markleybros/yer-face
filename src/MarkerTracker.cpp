@@ -95,7 +95,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	markerDetectedSet = false;
 	markerList = markerSeparator->getMarkerList();
 	
-	//performTrackToSeparatedCorrelation();
+	performTrackToSeparatedCorrelation();
 
 	if(!markerDetectedSet) {
 		performDetection();
@@ -324,6 +324,48 @@ void MarkerTracker::performDetection(void) {
 		boundingRect.height = jawCloseTo.y - midLineRight.y;
 
 		generateMarkerCandidateList(&markerCandidateList, jawCloseTo, &boundingRect);
+		if(markerCandidateList.size() < 1) {
+			return;
+		}
+		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
+	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
+		if(!midLineSet) {
+			return;
+		}
+
+		MarkerTracker *jawTracker;
+		jawTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(Jaw));
+		if(jawTracker == NULL) {
+			return;
+		}
+		
+		Point2d jawPoint;
+		bool jawPointSet;
+		std::tie(jawPoint, jawPointSet) = jawTracker->getMarkerPoint();
+		if(!jawPointSet) {
+			return;
+		}
+
+		Point2d cheekPointOfInterest;
+		if(markerType.type == LipsLeftCorner) {
+			boundingRect.y = midLineLeft.y;
+			boundingRect.height = jawPoint.y - boundingRect.y;
+			boundingRect.x = jawPoint.x;
+			boundingRect.width = midLineLeft.x - boundingRect.x;
+
+			cheekPointOfInterest = Point2d(boundingRect.x + boundingRect.width, boundingRect.y) + boundingRect.br();
+		} else {
+			boundingRect.y = midLineRight.y;
+			boundingRect.height = jawPoint.y - boundingRect.y;
+			boundingRect.x = midLineRight.x;
+			boundingRect.width = jawPoint.x - boundingRect.x;
+
+			cheekPointOfInterest = boundingRect.tl() + Point2d(boundingRect.x, boundingRect.y + boundingRect.height);
+		}
+		cheekPointOfInterest.x = cheekPointOfInterest.x / 2.0;
+		cheekPointOfInterest.y = cheekPointOfInterest.y / 2.0;
+
+		generateMarkerCandidateList(&markerCandidateList, cheekPointOfInterest, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
