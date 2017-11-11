@@ -202,9 +202,8 @@ void MarkerTracker::performDetection(void) {
 					}
 				}
 			}
-		} else {
-			return;
 		}
+		return;
 	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
 		if(!eyeLineSet) {
 			return;
@@ -230,10 +229,6 @@ void MarkerTracker::performDetection(void) {
 				return;
 			}
 			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
-			
-			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
-				return;
-			}
 		} else {
 			MarkerTracker *eyebrowTracker;
 			if(xDirection > 0) {
@@ -272,10 +267,6 @@ void MarkerTracker::performDetection(void) {
 				return;
 			}
 			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
-			
-			if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
-				return;
-			}
 		}
 	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
 		if(!eyeLineSet) {
@@ -319,10 +310,6 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
-		
-		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
-			return;
-		}
 	} else if(markerType.type == Jaw) {
 		if(!centerLineSet || !midLineSet) {
 			return;
@@ -341,10 +328,9 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
-		
-		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
-			return;
-		}
+	}
+	if(markerCandidateList.size() > 0) {
+		claimFirstAvailableMarkerCandidate(&markerCandidateList);
 	}
 }
 
