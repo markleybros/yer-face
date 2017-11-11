@@ -448,8 +448,10 @@ void MarkerTracker::assignMarkerPoint(void) {
 		markerPoint = Utilities::centerRect(trackingBox);
 		markerPointSet = true;
 	} else {
-		trackerState = LOST;
-		fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
+		if(trackerState == TRACKING) {
+			trackerState = LOST;
+			fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
+		}
 	}	
 }
 
