@@ -328,7 +328,7 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
-	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
+	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner || markerType.type == LipsLeftTop || markerType.type == LipsRightTop || markerType.type == LipsLeftBottom || markerType.type == LipsRightBottom) {
 		if(!midLineSet) {
 			return;
 		}
@@ -346,26 +346,34 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 
-		Point2d cheekPointOfInterest;
-		if(markerType.type == LipsLeftCorner) {
+		Point2d lipPointOfInterest;
+		if(markerType.type == LipsLeftCorner || markerType.type == LipsLeftTop || markerType.type == LipsLeftBottom) {
 			boundingRect.y = midLineLeft.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
 			boundingRect.x = jawPoint.x;
 			boundingRect.width = midLineLeft.x - boundingRect.x;
-
-			cheekPointOfInterest = Point2d(boundingRect.x + boundingRect.width, boundingRect.y) + boundingRect.br();
 		} else {
 			boundingRect.y = midLineRight.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
 			boundingRect.x = midLineRight.x;
 			boundingRect.width = jawPoint.x - boundingRect.x;
-
-			cheekPointOfInterest = boundingRect.tl() + Point2d(boundingRect.x, boundingRect.y + boundingRect.height);
 		}
-		cheekPointOfInterest.x = cheekPointOfInterest.x / 2.0;
-		cheekPointOfInterest.y = cheekPointOfInterest.y / 2.0;
 
-		generateMarkerCandidateList(&markerCandidateList, cheekPointOfInterest, &boundingRect);
+		if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
+			if(markerType.type == LipsLeftCorner) {
+				lipPointOfInterest = Point2d(boundingRect.x + boundingRect.width, boundingRect.y) + boundingRect.br();
+			} else {
+				lipPointOfInterest = boundingRect.tl() + Point2d(boundingRect.x, boundingRect.y + boundingRect.height);
+			}
+			lipPointOfInterest.x = lipPointOfInterest.x / 2.0;
+			lipPointOfInterest.y = lipPointOfInterest.y / 2.0;
+		} else if(markerType.type == LipsLeftTop || markerType.type == LipsRightTop) {
+			lipPointOfInterest = midLineCenter;
+		} else {
+			lipPointOfInterest = jawPoint;
+		}
+
+		generateMarkerCandidateList(&markerCandidateList, lipPointOfInterest, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
@@ -540,6 +548,16 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 		color = Scalar(255, 255, 0);
 	} else if(markerType.type == Jaw) {
 		color = Scalar(0, 255, 0);
+	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner || markerType.type == LipsLeftTop || markerType.type == LipsRightTop || markerType.type == LipsLeftBottom || markerType.type == LipsRightBottom) {
+		color = Scalar(0, 0, 255);
+		if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
+			color[1] = 127;
+		} else if(markerType.type == LipsLeftTop || markerType.type == LipsRightTop) {
+			color[0] = 127;
+		} else {
+			color[0] = 127;
+			color[1] = 127;
+		}
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {

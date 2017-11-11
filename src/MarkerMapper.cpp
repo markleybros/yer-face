@@ -62,6 +62,12 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 
 	markerLipsLeftCorner = new MarkerTracker(LipsLeftCorner, this, frameDerivatives, markerSeparator);
 	markerLipsRightCorner = new MarkerTracker(LipsRightCorner, this, frameDerivatives, markerSeparator);
+
+	markerLipsLeftTop = new MarkerTracker(LipsLeftTop, this, frameDerivatives, markerSeparator);
+	markerLipsRightTop = new MarkerTracker(LipsRightTop, this, frameDerivatives, markerSeparator);
+
+	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this, frameDerivatives, markerSeparator);
+	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this, frameDerivatives, markerSeparator);
 	
 	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
@@ -110,6 +116,12 @@ void MarkerMapper::processCurrentFrame(void) {
 
 	markerLipsLeftCorner->processCurrentFrame();
 	markerLipsRightCorner->processCurrentFrame();
+
+	markerLipsLeftTop->processCurrentFrame();
+	markerLipsRightTop->processCurrentFrame();
+
+	markerLipsLeftBottom->processCurrentFrame();
+	markerLipsRightBottom->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {

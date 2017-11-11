@@ -61,6 +61,12 @@ private:
 	MarkerTracker *markerLipsLeftCorner;
 	MarkerTracker *markerLipsRightCorner;
 
+	MarkerTracker *markerLipsLeftTop;
+	MarkerTracker *markerLipsRightTop;
+	
+	MarkerTracker *markerLipsLeftBottom;
+	MarkerTracker *markerLipsRightBottom;
+
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;
 	Point2d eyeLineCenter;
