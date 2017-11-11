@@ -136,15 +136,15 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	}
 	if(eyeLineSet) {
 		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
-		Utilities::drawX(frame, eyeLineCenter, Scalar(0, 255, 255), 10, 2);
+		// Utilities::drawX(frame, eyeLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 	if(eyebrowLineSet) {
 		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
-		Utilities::drawX(frame, eyebrowLineCenter, Scalar(0, 255, 255), 10, 2);
+		// Utilities::drawX(frame, eyebrowLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 	if(midLineSet) {
 		line(frame, midLineLeft, midLineRight, Scalar(0, 255, 0), 2);
-		Utilities::drawX(frame, midLineCenter, Scalar(0, 255, 255), 10, 2);
+		// Utilities::drawX(frame, midLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
 	if(centerLineSet) {
 		line(frame, centerLineTop, centerLineBottom, Scalar(0, 255, 255), 2);
