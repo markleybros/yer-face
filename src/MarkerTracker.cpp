@@ -95,7 +95,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	markerDetectedSet = false;
 	markerList = markerSeparator->getMarkerList();
 	
-	performTrackToSeparatedCorrelation();
+	//performTrackToSeparatedCorrelation();
 
 	if(!markerDetectedSet) {
 		performDetection();
@@ -147,6 +147,13 @@ void MarkerTracker::performDetection(void) {
 	bool eyeLineSet;
 	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
 	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = markerMapper->getEyeLine();
+	bool midLineSet;
+	Point2d midLineLeft, midLineRight, midLineCenter;
+	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = markerMapper->getMidLine();
+	bool centerLineSet;
+	Point2d centerLineTop, centerLineBottom;
+	double centerLineSlope, centerLineIntercept;
+	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineSet) = markerMapper->getCenterLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
@@ -316,6 +323,23 @@ void MarkerTracker::performDetection(void) {
 		if(!claimFirstAvailableMarkerCandidate(&markerCandidateList)) {
 			return;
 		}
+	} else if(markerType.type == Jaw) {
+		if(!centerLineSet || !midLineSet) {
+			return;
+		}
+		Point2d jawCloseTo;
+		jawCloseTo.y = frameSize.height;
+		jawCloseTo.x = (jawCloseTo.y - centerLineIntercept) / centerLineSlope;
+
+
+		boundingRect.x = midLineRight.x;
+		boundingRect.width = midLineLeft.x - midLineRight.x;
+		boundingRect.y = midLineRight.y;
+		boundingRect.height = jawCloseTo.y - midLineRight.y;
+
+		Mat prevFrame = frameDerivatives->getPreviewFrame();
+		rectangle(prevFrame, boundingRect, Scalar(255, 0, 0));
+		Utilities::drawX(prevFrame, jawCloseTo, Scalar(0, 0, 255), 10, 3);
 	}
 }
 

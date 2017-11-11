@@ -37,6 +37,9 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	}
 
 	eyeLineSet = false;
+	eyebrowLineSet = false;
+	midLineSet = false;
+	centerLineSet = false;
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
@@ -54,6 +57,8 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 
 	markerCheekLeft = new MarkerTracker(CheekLeft, this, frameDerivatives, markerSeparator);
 	markerCheekRight = new MarkerTracker(CheekRight, this, frameDerivatives, markerSeparator);
+	
+	markerJaw = new MarkerTracker(Jaw, this, frameDerivatives, markerSeparator);
 	
 	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
 }
@@ -94,6 +99,9 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerCheekRight->processCurrentFrame();
 
 	calculateMidLine();
+	calculateCenterLine();
+
+	markerJaw->processCurrentFrame();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
@@ -118,10 +126,25 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 		line(frame, midLineLeft, midLineRight, Scalar(0, 255, 0), 2);
 		Utilities::drawX(frame, midLineCenter, Scalar(0, 255, 255), 10, 2);
 	}
+	if(centerLineSet) {
+		line(frame, centerLineTop, centerLineBottom, Scalar(0, 255, 255), 2);
+	}
 }
 
 tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getEyeLine(void) {
 	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet);
+}
+
+tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getEyebrowLine(void) {
+	return std::make_tuple(eyebrowLineLeft, eyebrowLineRight, eyebrowLineCenter, eyebrowLineSet);
+}
+
+tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getMidLine(void) {
+	return std::make_tuple(midLineLeft, midLineRight, midLineCenter, midLineSet);
+}
+
+tuple<Point2d, Point2d, double, double, bool> MarkerMapper::getCenterLine(void) {
+	return std::make_tuple(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineSet);
 }
 
 void MarkerMapper::calculateEyeLine(void) {
@@ -226,6 +249,24 @@ void MarkerMapper::calculateMidLine(void) {
 	midLineCenter.x = midLineCenter.x / 2.0;
 	midLineCenter.y = midLineCenter.y / 2.0;
 	midLineSet = true;
+}
+
+void MarkerMapper::calculateCenterLine(void) {
+	centerLineSet = false;
+	if(!eyebrowLineSet || !eyeLineSet || !midLineSet) {
+		return;
+	}
+
+	vector<Point2d> points = {eyebrowLineCenter, eyeLineCenter, midLineCenter};
+	if(!Utilities::leastSquaresFit(points, &centerLineSlope, &centerLineIntercept)) {
+		return;
+	}
+
+	centerLineTop.y = eyebrowLineCenter.y;
+	centerLineTop.x = (centerLineTop.y - centerLineIntercept) / centerLineSlope;
+	centerLineBottom.y = midLineCenter.y;
+	centerLineBottom.x = (centerLineBottom.y - centerLineIntercept) / centerLineSlope;
+	centerLineSet = true;
 }
 
 }; //namespace YerFace

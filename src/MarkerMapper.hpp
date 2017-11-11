@@ -22,11 +22,15 @@ public:
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
+	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
+	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
+	tuple<Point2d, Point2d, double, double, bool> getCenterLine(void);
 private:
 	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
 	void calculateMidLine(void);
+	void calculateCenterLine(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
@@ -52,6 +56,8 @@ private:
 	MarkerTracker *markerCheekLeft;
 	MarkerTracker *markerCheekRight;
 
+	MarkerTracker *markerJaw;
+
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;
 	Point2d eyeLineCenter;
@@ -64,6 +70,11 @@ private:
 	Point2d midLineRight;
 	Point2d midLineCenter;
 	bool midLineSet;
+	Point2d centerLineTop;
+	Point2d centerLineBottom;
+	double centerLineSlope;
+	double centerLineIntercept;
+	bool centerLineSet;
 };
 
 }; //namespace YerFace
