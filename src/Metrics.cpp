@@ -42,6 +42,9 @@ void Metrics::endFrame(void) {
 	while(frameTickStartTimes.size() >= frameBufferSize) {
 		frameTickStartTimes.pop_back();
 	}
+	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
+	snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
+	fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
 }
 
 double Metrics::getAverageTimeSeconds(void) {
@@ -54,6 +57,14 @@ double Metrics::getWorstTimeSeconds(void) {
 
 double Metrics::getFPS(void) {
 	return fps;
+}
+
+char *Metrics::getTimesString(void) {
+	return timesString;
+}
+
+char *Metrics::getFPSString(void) {
+	return fpsString;
 }
 
 } //namespace YerFace

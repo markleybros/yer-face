@@ -5,6 +5,8 @@
 
 using namespace std;
 
+#define METRICS_STRING_LENGTH 256
+
 namespace YerFace {
 
 class Metrics {
@@ -15,7 +17,9 @@ public:
 	void endFrame(void);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
+	char *getTimesString(void);
 	double getFPS(void);
+	char *getFPSString(void);
 private:
 	unsigned int frameBufferSize;
 	double timer;
@@ -24,6 +28,7 @@ private:
 	double averageTimeSeconds;
 	double worstTimeSeconds;
 	double fps;
+	char timesString[METRICS_STRING_LENGTH], fpsString[METRICS_STRING_LENGTH];
 };
 
 }; //namespace YerFace

@@ -101,14 +101,9 @@ int main(int argc, const char** argv) {
 
 		Mat previewFrame = frameDerivatives->getPreviewFrame();
 
-		//Display some metrics on frame.
-		char metricsStringA[256];
-		snprintf(metricsStringA, 256, "Times: <Avg %.02fms, Worst %.02fms>", metrics->getAverageTimeSeconds() * 1000.0, metrics->getWorstTimeSeconds() * 1000.0);
-		char metricsStringB[256];
-		snprintf(metricsStringB, 256, "FPS: <%.02f>", metrics->getFPS());
 		//fprintf(stderr, "Frame %lu %s, %s\n", frameNum, metricsStringA, metricsStringB);
-		putText(previewFrame, metricsStringA, Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-		putText(previewFrame, metricsStringB, Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
 		//Display preview frame.
 		imshow(window_name, previewFrame);
