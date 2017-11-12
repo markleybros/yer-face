@@ -41,8 +41,8 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	eyebrowLineSet = false;
 	midLineSet = false;
 	centerLineSet = false;
-	faceRotationBaselinePointsSet = false;
-	faceRotationSet = false;
+	faceTransformationBaselinePointsSet = false;
+	faceTransformationSet = false;
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
@@ -126,7 +126,7 @@ void MarkerMapper::processCurrentFrame(void) {
 	markerLipsLeftBottom->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
 
-	calculateFaceRotation();
+	calculateFaceTransformation();
 }
 
 void MarkerMapper::renderPreviewHUD(bool verbose) {
@@ -306,40 +306,36 @@ void MarkerMapper::calculateCenterLine(bool intermediate) {
 	centerLineSet = true;
 }
 
-void MarkerMapper::calculateFaceRotation(void) {
+void MarkerMapper::calculateFaceTransformation(void) {
 	vector<Point2d> *points;
-	if(!faceRotationBaselinePointsSet) {
-		points = &faceRotationBaselinePoints;
+	if(!faceTransformationBaselinePointsSet) {
+		points = &faceTransformationBaselinePoints;
 	} else {
-		points = &faceRotationCurrentPoints;
+		points = &faceTransformationCurrentPoints;
 	}
 	points->clear();
-	if(!eyebrowLineSet) {
-		return;
+	//vector<MarkerTracker *> markers = {markerEyelidLeftTop, markerEyelidRightTop, markerEyelidLeftBottom, markerEyelidRightBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter, markerCheekLeft, markerCheekRight, markerJaw, markerLipsLeftCorner, markerLipsRightCorner, markerLipsLeftTop, markerLipsRightTop, markerLipsLeftBottom, markerLipsRightBottom };
+	vector<MarkerTracker *> markers = {markerEyelidLeftTop, markerEyelidRightTop, markerEyelidLeftBottom, markerEyelidRightBottom, markerEyebrowLeftInner, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightOuter, markerCheekLeft, markerCheekRight };
+
+	size_t count = markers.size();
+	for(size_t i = 0; i < count; i++) {
+		bool pointSet;
+		Point2d point;
+		std::tie(point, pointSet) = markers[i]->getMarkerPoint();
+		if(!pointSet) {
+			return;
+		}
+		points->push_back(point);
 	}
-	points->push_back(eyebrowLineLeft);
-	points->push_back(eyebrowLineRight);
-	if(!eyeLineSet) {
-		return;
-	}
-	points->push_back(eyeLineLeft);
-	points->push_back(eyeLineRight);
-	if(!centerLineSet) {
-		return;
-	}
-	points->push_back(centerLineTop);
-	points->push_back(centerLineBottom);
-	if(!faceRotationBaselinePointsSet) {
-		faceRotationBaselinePointsSet = true;
+	if(!faceTransformationBaselinePointsSet) {
+		faceTransformationBaselinePointsSet = true;
 		return;
 	}
 	Mat rotation, translation;
-	Mat essentialMatrix = findEssentialMat(faceRotationBaselinePoints, faceRotationCurrentPoints);
-	int valid = recoverPose(essentialMatrix, faceRotationBaselinePoints, faceRotationCurrentPoints, rotation, translation);
+	Mat essentialMatrix = findEssentialMat(faceTransformationBaselinePoints, faceTransformationCurrentPoints);
+	int valid = recoverPose(essentialMatrix, faceTransformationBaselinePoints, faceTransformationCurrentPoints, rotation, translation);
 	Vec3d rotAngles = Utilities::rotationMatrixToEulerAngles(rotation);
-	fprintf(stderr, "MarkerMapper: Recovered facial transformation with %d valid points.\n", valid);
-	fprintf(stderr, "MarkerMapper: Facial Rotation: <%.02f, %.02f, %.02f>\n", rotAngles[0], rotAngles[1], rotAngles[2]);
-	fprintf(stderr, "MarkerMapper: Translation is <%.02f, %.02f, %.02f>\n", translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
+	fprintf(stderr, "MarkerMapper: Recovered facial transformation with %d valid points. Rotation: <%.02f, %.02f, %.02f> Translation: <%.02f, %.02f, %.02f>\n", valid, rotAngles[0], rotAngles[1], rotAngles[2], translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
 }
 
 }; //namespace YerFace

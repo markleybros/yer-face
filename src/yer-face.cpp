@@ -7,6 +7,7 @@
 
 // best available resolution / rate: ffplay -pixel_format mjpeg -video_size 1920x1080 /dev/video1
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
+// alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
 
 #include "FaceTracker.hpp"
 #include "EyeTracker.hpp"

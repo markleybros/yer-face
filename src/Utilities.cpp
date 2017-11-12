@@ -47,6 +47,10 @@ Point2d Utilities::adjustLineDistance(Point2d a, Point2d b, double newDistance) 
 double Utilities::lineAngle(Point2d a, Point2d b) {
 	Point2d delta = b - a;
 	double radians = atan2(delta.y, delta.x);
+	return Utilities::radiansToDegrees(radians);
+}
+
+double Utilities::radiansToDegrees(double radians) {
 	return radians * (180 / M_PI);
 }
 
@@ -70,12 +74,12 @@ Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R) {
 
 	double x, y, z;
 	if(sy > 0.0) {
-		x = atan2(R.at<double>(2,1) , R.at<double>(2,2));
-		y = atan2(-R.at<double>(2,0), sy);
-		z = atan2(R.at<double>(1,0), R.at<double>(0,0));
+		x = Utilities::radiansToDegrees(atan2(R.at<double>(2,1) , R.at<double>(2,2)));
+		y = Utilities::radiansToDegrees(atan2(-R.at<double>(2,0), sy));
+		z = Utilities::radiansToDegrees(atan2(R.at<double>(1,0), R.at<double>(0,0)));
 	} else {
-		x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
-		y = atan2(-R.at<double>(2,0), sy);
+		x = Utilities::radiansToDegrees(atan2(-R.at<double>(1,2), R.at<double>(1,1)));
+		y = Utilities::radiansToDegrees(atan2(-R.at<double>(2,0), sy));
 		z = 0;
 	}
 	return Vec3d(x, y, z);

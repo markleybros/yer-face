@@ -15,6 +15,7 @@ public:
 	static double lineDistance(Point2d a, Point2d b);
 	static Point2d adjustLineDistance(Point2d a, Point2d b, double newDistance);
 	static double lineAngle(Point2d a, Point2d b);
+	static double radiansToDegrees(double radians);
 	static void lineBestFit(vector<Point2d> points, double *m, double *b);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R);
 	static void drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color = Scalar(0, 0, 255), int thickness = 1);
