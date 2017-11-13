@@ -5,6 +5,12 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/tracking.hpp"
 
+#include "dlib/opencv.h"
+#include "dlib/image_processing/frontal_face_detector.h"
+#include "dlib/image_processing/render_face_detections.h"
+#include "dlib/image_processing.h"
+
+
 // best available resolution / rate: ffplay -pixel_format mjpeg -video_size 1920x1080 /dev/video1
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 // alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
@@ -20,11 +26,13 @@
 
 using namespace std;
 using namespace cv;
+using namespace dlib;
 using namespace YerFace;
 
 String face_cascade_name;
 String eyes_cascade_name;
 String capture_file;
+String dlib_shape_predictor;
 String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
@@ -41,6 +49,7 @@ int main(int argc, const char** argv) {
 		"{help h||Usage message.}"
 		"{face_cascade|data/haarcascades/haarcascade_frontalface_default.xml|Model for detecting the face within the frame.}"
 		"{eyes_cascade|data/haarcascades/haarcascade_eye.xml|Model for detecting eyes within the face.}"
+		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_5_face_landmarks.dat|Model for dlib's facial landmark detector.}"
 		"{capture_file|/dev/video0|Video file or video capture device file to open.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -58,8 +67,14 @@ int main(int argc, const char** argv) {
 	face_cascade_name = parser.get<string>("face_cascade");
 	eyes_cascade_name = parser.get<string>("eyes_cascade");
 	capture_file = parser.get<string>("capture_file");
+	dlib_shape_predictor = parser.get<string>("dlib_shape_predictor");
 	VideoCapture capture;
 	Mat frame;
+
+	// ---DLIB---
+	frontal_face_detector detector = get_frontal_face_detector();
+	shape_predictor pose_model;
+	deserialize(dlib_shape_predictor.c_str()) >> pose_model;
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
@@ -87,6 +102,15 @@ int main(int argc, const char** argv) {
 		}
 
 		frameDerivatives->setCurrentFrame(frame);
+
+		Mat tempFrame;
+		resize(frame, tempFrame, Size(), 0.25, 0.25);
+		cv_image<bgr_pixel> dlibFrame(tempFrame);
+		std::vector<dlib::rectangle> faces = detector(dlibFrame);
+		std::vector<full_object_detection> shapes;
+		for (unsigned long i = 0; i < faces.size(); ++i)
+			shapes.push_back(pose_model(dlibFrame, faces[i]));
+		
 		faceTracker->processCurrentFrame();
 		eyeTrackerLeft->processCurrentFrame();
 		eyeTrackerRight->processCurrentFrame();
