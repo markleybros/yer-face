@@ -31,12 +31,21 @@ Point2d Utilities::centerRect(Rect2d rect) {
 	return rect.tl() + center;
 }
 
+void Utilities::lineSlopeIntercept(Point2d pointA, Point2d pointB, double *m, double *b) {
+	*m = (pointA.y - pointB.y) / (pointA.x - pointB.x);
+	int classification = fpclassify(*m);
+	if(classification == FP_NAN || classification == FP_INFINITE) {
+		*m = 0;
+	}
+	*b = pointA.y - (*m * pointA.x);
+}
+
 double Utilities::lineDistance(Point2d a, Point2d b) {
     Point2d d = a - b;
     return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
 }
 
-Point2d Utilities::adjustLineDistance(Point2d a, Point2d b, double newDistance) {
+Point2d Utilities::lineAdjustDistance(Point2d a, Point2d b, double newDistance) {
 	Point2d temp;
 	double lenAB = std::sqrt(std::pow(a.x - b.x, 2.0) + pow(a.y - b.y, 2.0));
 	temp.x = a.x + ((b.x - a.x) / lenAB) * newDistance;
@@ -44,14 +53,9 @@ Point2d Utilities::adjustLineDistance(Point2d a, Point2d b, double newDistance) 
 	return temp;
 }
 
-double Utilities::lineAngle(Point2d a, Point2d b) {
+double Utilities::lineAngleRadians(Point2d a, Point2d b) {
 	Point2d delta = b - a;
-	double radians = atan2(delta.y, delta.x);
-	return Utilities::radiansToDegrees(radians);
-}
-
-double Utilities::radiansToDegrees(double radians) {
-	return radians * (180 / M_PI);
+	return atan2(delta.y, delta.x);
 }
 
 void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
@@ -60,13 +64,28 @@ void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
 
 	Point2d pointA = Point2d(line[2],line[3]);
 	Point2d pointB = Point2d(line[2]+line[0],line[3]+line[1]);
+	Utilities::lineSlopeIntercept(pointA, pointB, m, b);
+}
 
-	*m = (pointA.y - pointB.y) / (pointA.x - pointB.x);
-	int classification = fpclassify(*m);
-	if(classification == FP_NAN || classification == FP_INFINITE) {
-		*m = 0;
+Vec2d Utilities::radiansToVector(double radians) {
+	Vec2d vector;
+	vector[0] = cos(radians);
+	vector[1] = sin(radians);
+	return vector;
+}
+
+double Utilities::degreesToRadians(double degrees) {
+	return degrees * (M_PI / 180.0);
+}
+
+double Utilities::radiansToDegrees(double radians, bool normalize) {
+	double degrees = radians * (180 / M_PI);
+	if(normalize) {
+		while(degrees < 0.0) {
+			degrees += 360.0;
+		}
 	}
-	*b = pointA.y - (*m * pointA.x);
+	return degrees;
 }
 
 Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R) {

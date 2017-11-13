@@ -511,7 +511,7 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
 			markerCandidate.distanceFromPointOfInterest = Utilities::lineDistance(pointOfInterest, markerCandidate.marker.center);
-			markerCandidate.angleFromPointOfInterest = Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center);
+			//markerCandidate.angleFromPointOfInterest = Utilities::radiansToDegrees(Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center));
 			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 			markerCandidateList->push_back(markerCandidate);
 		}
