@@ -22,11 +22,7 @@ FrameDerivatives::~FrameDerivatives() {
 void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	currentFrame = newFrame;
 
-	//Perform derivation for classification operations.
-	Mat tempFrame;
-	cvtColor(currentFrame, tempFrame, COLOR_BGR2GRAY);
-	resize(tempFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
-	equalizeHist(classificationFrame, classificationFrame);
+	resize(currentFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
 
 	previewFrameCloned = false;
 }

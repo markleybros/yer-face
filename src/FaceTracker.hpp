@@ -5,6 +5,11 @@
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
+#include "dlib/opencv.h"
+#include "dlib/image_processing/frontal_face_detector.h"
+#include "dlib/image_processing/render_face_detections.h"
+#include "dlib/image_processing.h"
+
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 
@@ -15,29 +20,28 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMinFaceSizePercentage = 0.1, int myOpticalTrackStaleFramesInterval = 15);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myMinFaceSizePercentage = 0.1);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
 	tuple<Rect2d, bool> getFaceRect(void);
 private:
-	string classifierFileName;
-	float trackingBoxPercentage;
+	void doClassifyFace(void);
+
+	string modelFileName;
 	float minFaceSizePercentage;
-	int opticalTrackStaleFramesInterval;
-	CascadeClassifier cascadeClassifier;
-	Ptr<Tracker> tracker;
 	FrameDerivatives *frameDerivatives;
 	TrackerState trackerState;
 	bool classificationBoxSet;
-	bool trackingBoxSet;
 	bool faceRectSet;
-	Rect classificationBox;
-	Rect classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	Rect2d trackingBox;
+	dlib::rectangle classificationBoxDlib;
+	Rect2d classificationBox;
+	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	Rect2d faceRect;
-	int staleCounter;
+	dlib::frontal_face_detector frontalFaceDetector;
+	dlib::shape_predictor shapePredictor;
+	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
 };
 
 }; //namespace YerFace

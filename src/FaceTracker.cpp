@@ -7,34 +7,25 @@
 #include <cstdlib>
 
 using namespace std;
+using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myClassifierFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMinFaceSizePercentage, int myOpticalTrackStaleFramesInterval) {
-	classifierFileName = myClassifierFileName;
+FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myMinFaceSizePercentage) {
+	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
-	trackingBoxSet = false;
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	trackingBoxPercentage = myTrackingBoxPercentage;
-	if(trackingBoxPercentage <= 0.0 || trackingBoxPercentage > 1.0) {
-		throw invalid_argument("trackingBoxPercentage is out of range.");
-	}
 	minFaceSizePercentage = myMinFaceSizePercentage;
 	if(minFaceSizePercentage <= 0.0 || minFaceSizePercentage > 1.0) {
 		throw invalid_argument("minFaceSizePercentage is out of range.");
 	}
-	opticalTrackStaleFramesInterval = myOpticalTrackStaleFramesInterval;
-	if(opticalTrackStaleFramesInterval <= 0) {
-		throw invalid_argument("opticalTrackStaleFramesInterval is out of range.");
-	}
-	if(!cascadeClassifier.load(classifierFileName)) {
-		throw invalid_argument("Unable to load specified classifier.");
-	}
+	frontalFaceDetector = get_frontal_face_detector();
+	deserialize(modelFileName.c_str()) >> shapePredictor;
 	fprintf(stderr, "FaceTracker object constructed and ready to go!\n");
 }
 
@@ -43,89 +34,70 @@ FaceTracker::~FaceTracker() {
 }
 
 TrackerState FaceTracker::processCurrentFrame(void) {
+	doClassifyFace();
+
+	Mat classificationFrame = frameDerivatives->getClassificationFrame();
+	dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame);
+
+	if(!classificationBoxSet) {
+		return trackerState;
+	}
+
+	full_object_detection result = shapePredictor(dlibClassificationFrame, classificationBoxDlib);
+
+	Mat prevFrame = frameDerivatives->getPreviewFrame();
 	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-	bool transitionedToTrackingThisFrame = false;
-	if(trackerState == DETECTING || trackerState == LOST || trackerState == STALE) {
-		classificationBoxSet = false;
-		std::vector<Rect> faces;
-		Mat classificationFrame = frameDerivatives->getClassificationFrame();
-		double classificationFrameArea = (double)classificationFrame.size().area();
-		double minFaceSize = std::sqrt(classificationFrameArea * minFaceSizePercentage);
-		cascadeClassifier.detectMultiScale(classificationFrame, faces, 1.1, 3, 0|CASCADE_SCALE_IMAGE, Size(minFaceSize, minFaceSize));
+	for(unsigned long i = 0; i < result.num_parts(); i++) {
+		dlib::point part = result.part(i);
+		if(part == OBJECT_PART_NOT_PRESENT) {
+			continue;
+		}
+		Point2d partPoint = Point2d(part.x(), part.y());
+		fprintf(stderr, "part %lu <%ld, %ld>\n", i, part.x(), part.y());
+		partPoint.x /= classificationScaleFactor;
+		partPoint.y /= classificationScaleFactor;
+		fprintf(stderr, "after scaling... <%.02f, %.02f>\n", partPoint.x, partPoint.y);
+		Utilities::drawX(prevFrame, partPoint, Scalar(0, 0, 255), 10, 3);
+	}
 
-		int largestFace = -1;
-		int largestFaceArea = -1;
-		Rect2d scaledTrackingBox;
-		if(trackerState == STALE && trackingBoxSet) {
-			scaledTrackingBox = Rect(Utilities::scaleRect(trackingBox, classificationScaleFactor));
-		}
-		for(size_t i = 0; i < faces.size(); i++) {
-			if(faces[i].area() > largestFaceArea) {
-				if(trackerState == STALE && trackingBoxSet) {
-					//This face is only a candidate if it overlaps (at least a bit) with the face we have been tracking.
-					Rect2d candidateFace = Rect2d(faces[i]);
-					if((scaledTrackingBox & candidateFace).area() <= 0) {
-						continue;
-					}
-				}
-				largestFace = i;
-				largestFaceArea = faces[i].area();
-			}
-		}
-		if(largestFace >= 0) {
-			classificationBoxSet = true;
-			classificationBox = faces[largestFace];
-			classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
-			//Switch to TRACKING
-			trackerState = TRACKING;
-			transitionedToTrackingThisFrame = true;
-			#if (CV_MINOR_VERSION < 3)
-			tracker = Tracker::create("KCF");
-			#else
-			tracker = TrackerKCF::create();
-			#endif
-			trackingBox = Rect(Utilities::insetBox(classificationBoxNormalSize, trackingBoxPercentage));
-			trackingBoxSet = true;
-
-			tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
-			staleCounter = opticalTrackStaleFramesInterval;
-		}
-	}
-	if((trackerState == TRACKING && !transitionedToTrackingThisFrame) || trackerState == STALE) {
-		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
-		if(!trackSuccess) {
-			fprintf(stderr, "FaceTracker WARNING! Track lost. Will keep searching...\n");
-			trackingBoxSet = false;
-			trackerState = LOST;
-			//Attempt to re-process this same frame in LOST mode.
-			return processCurrentFrame();
-		} else {
-			trackingBoxSet = true;
-			staleCounter--;
-			if(staleCounter <= 0) {
-				trackerState = STALE;
-			}
-		}
-	}
-	faceRectSet = false;
-	if(trackingBoxSet) {
-		faceRect = Rect(Utilities::insetBox(trackingBox, 1.0 / trackingBoxPercentage));
-		faceRectSet = true;
-	}
 	return trackerState;
+}
+
+void FaceTracker::doClassifyFace(void) {
+	classificationBoxSet = false;
+	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
+
+	int largestFace = -1;
+	int largestFaceArea = -1;
+	size_t facesCount = faces.size();
+	for(size_t i = 0; i < facesCount; i++) {
+		if((int)faces[i].area() > largestFaceArea) {
+			largestFace = i;
+			largestFaceArea = faces[i].area();
+		}
+	}
+	if(largestFace >= 0) {
+		trackerState = TRACKING;
+		classificationBox.x = faces[largestFace].left();
+		classificationBox.y = faces[largestFace].top();
+		classificationBox.width = faces[largestFace].right() - classificationBox.x;
+		classificationBox.height = faces[largestFace].bottom() - classificationBox.y;
+		double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
+		classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
+		classificationBoxDlib = faces[largestFace];
+		classificationBoxSet = true;
+	} else {
+		if(trackerState != DETECTING) {
+			trackerState = LOST;
+		}
+	}
 }
 
 void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(faceRectSet) {
-		rectangle(frame, faceRect, Scalar(0, 0, 255), 2);
-	}
 	if(verbose) {
 		if(classificationBoxSet) {
-			rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
-		}
-		if(trackingBoxSet) {
-			rectangle(frame, trackingBox, Scalar(255, 0, 0), 1);
+			cv::rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
 		}
 	}
 }
