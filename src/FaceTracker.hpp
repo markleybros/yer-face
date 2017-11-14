@@ -20,25 +20,30 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myMinFaceSizePercentage = 0.1);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 4);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
-	tuple<Rect2d, bool> getFaceRect(void);
 private:
 	void doClassifyFace(void);
+	void doIdentifyFeatures(void);
 
 	string modelFileName;
-	float minFaceSizePercentage;
 	FrameDerivatives *frameDerivatives;
+	int featureBufferSize;
+
 	TrackerState trackerState;
-	bool classificationBoxSet;
-	bool faceRectSet;
-	dlib::rectangle classificationBoxDlib;
+
 	Rect2d classificationBox;
 	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	Rect2d faceRect;
+	bool classificationBoxSet;
+
+	std::vector<Point2d> facialFeatures;
+	list<std::vector<Point2d>> facialFeaturesBuffer;
+	bool facialFeaturesSet;
+
+	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
 	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;

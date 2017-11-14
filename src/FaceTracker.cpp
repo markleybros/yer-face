@@ -11,18 +11,19 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myMinFaceSizePercentage) {
+FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
+	facialFeaturesSet = false;
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	minFaceSizePercentage = myMinFaceSizePercentage;
-	if(minFaceSizePercentage <= 0.0 || minFaceSizePercentage > 1.0) {
-		throw invalid_argument("minFaceSizePercentage is out of range.");
+	featureBufferSize = myFeatureBufferSize;
+	if(featureBufferSize <= 0) {
+		throw invalid_argument("featureBufferSize cannot be less than or equal to zero.");
 	}
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
@@ -34,31 +35,16 @@ FaceTracker::~FaceTracker() {
 }
 
 TrackerState FaceTracker::processCurrentFrame(void) {
-	doClassifyFace();
-
 	Mat classificationFrame = frameDerivatives->getClassificationFrame();
 	dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame);
+
+	doClassifyFace();
 
 	if(!classificationBoxSet) {
 		return trackerState;
 	}
 
-	full_object_detection result = shapePredictor(dlibClassificationFrame, classificationBoxDlib);
-
-	Mat prevFrame = frameDerivatives->getPreviewFrame();
-	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-	for(unsigned long i = 0; i < result.num_parts(); i++) {
-		dlib::point part = result.part(i);
-		if(part == OBJECT_PART_NOT_PRESENT) {
-			continue;
-		}
-		Point2d partPoint = Point2d(part.x(), part.y());
-		fprintf(stderr, "part %lu <%ld, %ld>\n", i, part.x(), part.y());
-		partPoint.x /= classificationScaleFactor;
-		partPoint.y /= classificationScaleFactor;
-		fprintf(stderr, "after scaling... <%.02f, %.02f>\n", partPoint.x, partPoint.y);
-		Utilities::drawX(prevFrame, partPoint, Scalar(0, 0, 255), 10, 3);
-	}
+	doIdentifyFeatures();
 
 	return trackerState;
 }
@@ -93,6 +79,46 @@ void FaceTracker::doClassifyFace(void) {
 	}
 }
 
+void FaceTracker::doIdentifyFeatures(void) {
+	facialFeaturesSet = false;
+
+	full_object_detection result = shapePredictor(dlibClassificationFrame, classificationBoxDlib);
+
+	//Part 0, Outer corner of Left eye. (dlib index 0 -> YerFace::FaceTracker index 0)
+	//Part 1, Inner corner of Left eye. (dlib index 1 -> YerFace::FaceTracker index 1)
+	//Part 2, Outer corner of Right eye. (dlib index 2 -> YerFace::FaceTracker index 4)
+	//Part 3, Inner corner of Right eye. (dlib index 3 -> YerFace::FaceTracker index 3)
+	//Part 4, Bottom of nose. (dlib index 4 -> YerFace::FaceTracker index 2)
+	Mat prevFrame = frameDerivatives->getPreviewFrame();
+	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
+	std::vector<Point2d> tempFeatures(5);
+	int invalidPoints = 0;
+	for(unsigned long i = 0; i < result.num_parts(); i++) {
+		int j = i;
+		if(i == 2) {
+			j = 4;
+		} else if(i == 4) {
+			j = 2;
+		}
+
+		dlib::point part = result.part(i);
+		if(part == OBJECT_PART_NOT_PRESENT) {
+			invalidPoints++;
+			continue;
+		}
+		Point2d partPoint = Point2d(part.x(), part.y());
+		partPoint.x /= classificationScaleFactor;
+		partPoint.y /= classificationScaleFactor;
+		tempFeatures[j] = partPoint;
+	}
+	if(invalidPoints > 0) {
+		trackerState = LOST;
+		return;
+	}
+	facialFeatures = tempFeatures;
+	facialFeaturesSet = true;
+}
+
 void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
@@ -100,14 +126,16 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 			cv::rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
 		}
 	}
+	if(facialFeaturesSet) {
+		size_t lineCount = facialFeatures.size();
+		for(size_t i = 0; i < (lineCount - 1); i++) {
+			line(frame, facialFeatures[i], facialFeatures[i+1], Scalar(0, 255, 0));
+		}
+	}
 }
 
 TrackerState FaceTracker::getTrackerState(void) {
 	return trackerState;
-}
-
-tuple<Rect2d, bool> FaceTracker::getFaceRect(void) {
-	return make_tuple(faceRect, faceRectSet);
 }
 
 }; //namespace YerFace
