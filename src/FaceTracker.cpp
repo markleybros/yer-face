@@ -91,10 +91,11 @@ void FaceTracker::doIdentifyFeatures(void) {
 	//Part 4, Bottom of nose. (dlib index 4 -> YerFace::FaceTracker index 2)
 	Mat prevFrame = frameDerivatives->getPreviewFrame();
 	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-	std::vector<Point2d> tempFeatures(5);
+	std::vector<Point2d> tempFeatures(result.num_parts());
 	int invalidPoints = 0;
-	for(unsigned long i = 0; i < result.num_parts(); i++) {
-		int j = i;
+	unsigned long i, j;
+	for(i = 0; i < result.num_parts(); i++) {
+		j = i;
 		if(i == 2) {
 			j = 4;
 		} else if(i == 4) {
@@ -115,6 +116,29 @@ void FaceTracker::doIdentifyFeatures(void) {
 		trackerState = LOST;
 		return;
 	}
+
+	facialFeaturesBuffer.push_front(tempFeatures);
+	while(facialFeaturesBuffer.size() > (unsigned int)featureBufferSize) {
+		facialFeaturesBuffer.pop_back();
+	}
+
+	unsigned long numBufferEntries = facialFeaturesBuffer.size();
+	unsigned long numFeatures = tempFeatures.size();
+	for(i = 0; i < numFeatures; i++) {
+		tempFeatures[i].x = 0.0;
+		tempFeatures[i].y = 0.0;
+	}
+	for(std::vector<Point2d> featureSlot : facialFeaturesBuffer) {
+		for(i = 0; i < numFeatures; i++) {
+			tempFeatures[i].x += featureSlot[i].x;
+			tempFeatures[i].y += featureSlot[i].y;
+		}
+	}
+	for(i = 0; i < numFeatures; i++) {
+		tempFeatures[i].x /= numBufferEntries;
+		tempFeatures[i].y /= numBufferEntries;
+	}
+
 	facialFeatures = tempFeatures;
 	facialFeaturesSet = true;
 }
