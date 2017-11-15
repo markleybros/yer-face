@@ -11,7 +11,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize) {
+FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize, float myFeatureSmoothingExponent) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
@@ -23,6 +23,10 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	}
 	featureBufferSize = myFeatureBufferSize;
 	if(featureBufferSize <= 0) {
+		throw invalid_argument("featureBufferSize cannot be less than or equal to zero.");
+	}
+	featureSmoothingExponent = myFeatureSmoothingExponent;
+	if(featureSmoothingExponent <= 0.0) {
 		throw invalid_argument("featureBufferSize cannot be less than or equal to zero.");
 	}
 	frontalFaceDetector = get_frontal_face_detector();
@@ -117,9 +121,9 @@ void FaceTracker::doIdentifyFeatures(void) {
 		return;
 	}
 
-	facialFeaturesBuffer.push_front(tempFeatures);
+	facialFeaturesBuffer.push_back(tempFeatures);
 	while(facialFeaturesBuffer.size() > (unsigned int)featureBufferSize) {
-		facialFeaturesBuffer.pop_back();
+		facialFeaturesBuffer.pop_front();
 	}
 
 	unsigned long numBufferEntries = facialFeaturesBuffer.size();
@@ -128,15 +132,16 @@ void FaceTracker::doIdentifyFeatures(void) {
 		tempFeatures[i].x = 0.0;
 		tempFeatures[i].y = 0.0;
 	}
+	double combinedWeights = 0.0;
+	i = 0;
 	for(std::vector<Point2d> featureSlot : facialFeaturesBuffer) {
-		for(i = 0; i < numFeatures; i++) {
-			tempFeatures[i].x += featureSlot[i].x;
-			tempFeatures[i].y += featureSlot[i].y;
+		double weight = std::pow((double)(i + 1) / (double)numBufferEntries, (double)featureSmoothingExponent) - combinedWeights;
+		combinedWeights += weight;
+		for(j = 0; j < numFeatures; j++) {
+			tempFeatures[j].x += featureSlot[j].x * weight;
+			tempFeatures[j].y += featureSlot[j].y * weight;
 		}
-	}
-	for(i = 0; i < numFeatures; i++) {
-		tempFeatures[i].x /= numBufferEntries;
-		tempFeatures[i].y /= numBufferEntries;
+		i++;
 	}
 
 	facialFeatures = tempFeatures;

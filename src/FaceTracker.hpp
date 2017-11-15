@@ -20,7 +20,7 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 4);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 4, float myFeatureSmoothingExponent = 2.0);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -32,6 +32,7 @@ private:
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
 	int featureBufferSize;
+	float featureSmoothingExponent;
 
 	TrackerState trackerState;
 
