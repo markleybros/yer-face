@@ -28,6 +28,7 @@ public:
 private:
 	void doClassifyFace(void);
 	void doIdentifyFeatures(void);
+	void doCalculatePerspectiveTransformationMatrix(void);
 
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
@@ -43,6 +44,12 @@ private:
 	std::vector<Point2d> facialFeatures;
 	list<std::vector<Point2d>> facialFeaturesBuffer;
 	bool facialFeaturesSet;
+
+	std::vector<Point2d> facialFeaturesInitial;
+	bool facialFeaturesInitialSet;
+
+	Mat perspectiveTransformationMatrix;
+	bool perspectiveTransformationMatrixSet;
 
 	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;

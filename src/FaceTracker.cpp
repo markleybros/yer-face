@@ -1,6 +1,10 @@
 
 #include "FaceTracker.hpp"
 #include "Utilities.hpp"
+
+#include "opencv2/calib3d.hpp"
+#include "opencv2/highgui.hpp"
+
 #include <exception>
 #include <cmath>
 #include <cstdio>
@@ -16,6 +20,8 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	trackerState = DETECTING;
 	classificationBoxSet = false;
 	facialFeaturesSet = false;
+	facialFeaturesInitialSet = false;
+	perspectiveTransformationMatrixSet = false;
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -50,11 +56,14 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doIdentifyFeatures();
 
+	doCalculatePerspectiveTransformationMatrix();
+
 	return trackerState;
 }
 
 void FaceTracker::doClassifyFace(void) {
 	classificationBoxSet = false;
+	//FIXME -- is this the "new CNN method" mentioned in the dlib blog?
 	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
 
 	int largestFace = -1;
@@ -148,6 +157,33 @@ void FaceTracker::doIdentifyFeatures(void) {
 	facialFeaturesSet = true;
 }
 
+void FaceTracker::doCalculatePerspectiveTransformationMatrix(void) {
+	if(!facialFeaturesSet) {
+		return;
+	}
+	if(!facialFeaturesInitialSet) {
+		if(facialFeaturesBuffer.size() < (unsigned int)featureBufferSize) {
+			return;
+		}
+		facialFeaturesInitial = facialFeatures;
+		facialFeaturesInitialSet = true;
+		return;
+	}
+	Mat tempMatrix;
+	try {
+		tempMatrix = findHomography(facialFeaturesInitial, facialFeatures, 0);
+	} catch(exception &e) {
+		fprintf(stderr, "FaceTracker: WARNING: Failed perspective transformation generation. Got exception: %s", e.what());
+		return;
+	}
+	if(tempMatrix.rows != 3 || tempMatrix.cols != 3) {
+		fprintf(stderr, "FaceTracker: WARNING: Failed perspective transformation generation. Got empty result.");
+		return;
+	}
+	perspectiveTransformationMatrix = tempMatrix;
+	perspectiveTransformationMatrixSet = true;
+}
+
 void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
@@ -160,6 +196,12 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		for(size_t i = 0; i < (lineCount - 1); i++) {
 			line(frame, facialFeatures[i], facialFeatures[i+1], Scalar(0, 255, 0));
 		}
+	}
+	if(perspectiveTransformationMatrixSet) {
+		Mat warped;
+		warpPerspective(frame, warped, perspectiveTransformationMatrix, Size(1920, 1080), WARP_INVERSE_MAP);
+		imshow("othername", warped);
+		waitKey(1);
 	}
 }
 
