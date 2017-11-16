@@ -21,7 +21,9 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	classificationBoxSet = false;
 	facialFeaturesSet = false;
 	facialFeaturesInitialSet = false;
-	perspectiveTransformationMatrixSet = false;
+	facialTransformationSet = false;
+	facialRotation = Vec3d(0.0, 0.0, 0.0);
+	facialTranslation = Vec3d(0.0, 0.0, 0.0);
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -56,7 +58,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doIdentifyFeatures();
 
-	doCalculatePerspectiveTransformationMatrix();
+	doCalculateFacialTransformation();
 
 	return trackerState;
 }
@@ -157,7 +159,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 	facialFeaturesSet = true;
 }
 
-void FaceTracker::doCalculatePerspectiveTransformationMatrix(void) {
+void FaceTracker::doCalculateFacialTransformation(void) {
 	if(!facialFeaturesSet) {
 		return;
 	}
@@ -169,19 +171,44 @@ void FaceTracker::doCalculatePerspectiveTransformationMatrix(void) {
 		facialFeaturesInitialSet = true;
 		return;
 	}
-	Mat tempMatrix;
+	Size frameSize = frameDerivatives->getCurrentFrame().size();
+	Point2d principalPoint = Point2d(frameSize.width / 2.0, frameSize.height / 2.0);
+	Mat tempMatrix, tempMatrix2;
 	try {
-		tempMatrix = findHomography(facialFeaturesInitial, facialFeatures, 0);
+		tempMatrix = findEssentialMat(facialFeaturesInitial, facialFeatures, 1.0, principalPoint, RANSAC);
 	} catch(exception &e) {
-		fprintf(stderr, "FaceTracker: WARNING: Failed perspective transformation generation. Got exception: %s", e.what());
+		fprintf(stderr, "FaceTracker: WARNING: Failed findEssentialMat(). Got exception: %s", e.what());
 		return;
 	}
-	if(tempMatrix.rows != 3 || tempMatrix.cols != 3) {
-		fprintf(stderr, "FaceTracker: WARNING: Failed perspective transformation generation. Got empty result.");
-		return;
+	Vec3d vRotation, vTranslation, vRotationBest, vTranslationBest;
+	double smallestDelta = -1;
+	for(int i = 0; (i * 3) < tempMatrix.rows; i++) {
+		tempMatrix2 = Mat(tempMatrix, Rect(0, i * 3, 3, 3));
+		Mat rotation, translation;
+		try {
+			recoverPose(tempMatrix2, facialFeaturesInitial, facialFeatures, rotation, translation, 1.0, principalPoint);
+		} catch(exception &e) {
+			fprintf(stderr, "FaceTracker: WARNING: Failed recoverPose(). Got exception: %s", e.what());
+			continue;
+		}
+		vRotation = Utilities::rotationMatrixToEulerAngles(rotation);
+		vTranslation = Vec3d(translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
+		double delta = Utilities::degreesDelta(vRotation[0], facialRotation[0]) +
+				Utilities::degreesDelta(vRotation[1], facialRotation[1]) +
+				Utilities::degreesDelta(vRotation[2], facialRotation[2]);
+		if(smallestDelta < 0.0 || delta < smallestDelta) {
+			smallestDelta = delta;
+			vRotationBest = vRotation;
+			vTranslationBest = vTranslation;
+		}
+		// fprintf(stderr, "FaceTracker: INFO: pose recovered... rotation: <%.02f, %.02f, %.02f>, translation: <%.02f, %.02f, %.02f>, delta: %.02f\n", vRotation[0], vRotation[1], vRotation[2], vTranslation[0], vTranslation[1], vTranslation[2], delta);
 	}
-	perspectiveTransformationMatrix = tempMatrix;
-	perspectiveTransformationMatrixSet = true;
+	if(smallestDelta >= 0.0) {
+		facialRotation = vRotationBest;
+		facialTranslation = vTranslationBest;
+		fprintf(stderr, "FaceTracker: INFO: Best facial transformation... Rotation: <%.02f, %.02f, %.02f>, Translation: <%.02f, %.02f, %.02f>\n", facialRotation[0], facialRotation[1], facialRotation[2], facialTranslation[0], facialTranslation[1], facialTranslation[2]);
+		facialTransformationSet = true;
+	}
 }
 
 void FaceTracker::renderPreviewHUD(bool verbose) {
@@ -197,12 +224,12 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 			line(frame, facialFeatures[i], facialFeatures[i+1], Scalar(0, 255, 0));
 		}
 	}
-	if(perspectiveTransformationMatrixSet) {
-		Mat warped;
-		warpPerspective(frame, warped, perspectiveTransformationMatrix, Size(1920, 1080), WARP_INVERSE_MAP);
-		imshow("othername", warped);
-		waitKey(1);
-	}
+	// if(perspectiveTransformationMatrixSet) {
+	// 	Mat warped;
+	// 	warpPerspective(frame, warped, perspectiveTransformationMatrix, Size(1920, 1080), WARP_INVERSE_MAP);
+	// 	imshow("othername", warped);
+	// 	waitKey(1);
+	// }
 }
 
 TrackerState FaceTracker::getTrackerState(void) {

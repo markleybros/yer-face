@@ -20,7 +20,7 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 4, float myFeatureSmoothingExponent = 2.0);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 10, float myFeatureSmoothingExponent = 5.0);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -28,7 +28,7 @@ public:
 private:
 	void doClassifyFace(void);
 	void doIdentifyFeatures(void);
-	void doCalculatePerspectiveTransformationMatrix(void);
+	void doCalculateFacialTransformation(void);
 
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
@@ -48,8 +48,8 @@ private:
 	std::vector<Point2d> facialFeaturesInitial;
 	bool facialFeaturesInitialSet;
 
-	Mat perspectiveTransformationMatrix;
-	bool perspectiveTransformationMatrixSet;
+	Vec3d facialRotation, facialTranslation;
+	bool facialTransformationSet;
 
 	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;

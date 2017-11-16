@@ -58,7 +58,7 @@ double Utilities::lineAngleRadians(Point2d a, Point2d b) {
 	return atan2(delta.y, delta.x);
 }
 
-void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
+void Utilities::lineBestFit(std::vector<Point2d> points, double *m, double *b) {
 	Vec4d line;
 	fitLine(points, line, DIST_L2, 0, 0.01, 0.01);
 
@@ -86,6 +86,10 @@ double Utilities::radiansToDegrees(double radians, bool normalize) {
 		}
 	}
 	return degrees;
+}
+
+double Utilities::degreesDelta(double angleA, double angleB) {
+	return 180 - std::abs(std::abs(angleA - angleB) - 180);
 }
 
 Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R) {
