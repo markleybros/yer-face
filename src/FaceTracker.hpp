@@ -46,6 +46,7 @@ private:
 	bool facialFeaturesSet;
 
 	std::vector<Point2d> facialFeaturesInitial;
+	Point2d facialFeaturesOrigin;
 	bool facialFeaturesInitialSet;
 
 	Vec3d facialRotation, facialTranslation;

@@ -155,11 +155,18 @@ void FaceTracker::doIdentifyFeatures(void) {
 		i++;
 	}
 
+	if(facialFeaturesInitialSet) {
+		for(i = 0; i < numFeatures; i++) {
+			tempFeatures[i].x -= facialFeaturesOrigin.x;
+			tempFeatures[i].y -= facialFeaturesOrigin.y;
+		}
+	}
 	facialFeatures = tempFeatures;
 	facialFeaturesSet = true;
 }
 
 void FaceTracker::doCalculateFacialTransformation(void) {
+	int i;
 	if(!facialFeaturesSet) {
 		return;
 	}
@@ -168,6 +175,12 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 			return;
 		}
 		facialFeaturesInitial = facialFeatures;
+		facialFeaturesOrigin = facialFeatures[2]; //Set the origin to the bottom of the nose.
+		int numFacialFeatures = facialFeaturesInitial.size();
+		for(i = 0; i < numFacialFeatures; i++) {
+			facialFeaturesInitial[i].x -= facialFeaturesOrigin.x;
+			facialFeaturesInitial[i].y -= facialFeaturesOrigin.y;
+		}
 		facialFeaturesInitialSet = true;
 		return;
 	}
@@ -183,7 +196,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	Vec3d vRotation, vTranslation, vRotationBest, vTranslationBest;
 	Mat essentialMat, essentialMatBest;
 	double smallestDelta = -1;
-	for(int i = 0; (i * 3) < essentialMatCandidates.rows; i++) {
+	for(i = 0; (i * 3) < essentialMatCandidates.rows; i++) {
 		essentialMat = Mat(essentialMatCandidates, Rect(0, i * 3, 3, 3));
 		Mat rotation, translation;
 		try {
@@ -216,6 +229,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 void FaceTracker::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
+	Point2d a, b;
 	if(verbose) {
 		if(classificationBoxSet) {
 			cv::rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
@@ -224,9 +238,17 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 	if(facialFeaturesSet) {
 		size_t lineCount = facialFeatures.size();
 		for(size_t i = 0; i < (lineCount - 1); i++) {
-			line(frame, facialFeatures[i], facialFeatures[i+1], Scalar(0, 255, 0));
+			a = facialFeatures[i];
+			a.x += facialFeaturesOrigin.x;
+			a.y += facialFeaturesOrigin.y;
+			b = facialFeatures[i+1];
+			b.x += facialFeaturesOrigin.x;
+			b.y += facialFeaturesOrigin.y;
+			line(frame, a, b, Scalar(0, 255, 0));
 		}
 		if(facialTransformationSet) {
+			// Vec3d angles = Vec3d(0.0, 0.0, 15.0);
+			// Mat R33 = Utilities::eulerAnglesToRotationMatrix(angles);
 			Mat R33 = Utilities::eulerAnglesToRotationMatrix(facialRotation);
 			Mat R = (Mat_<double>(4, 4) <<
 				R33.at<double>(0, 0), R33.at<double>(1, 0), R33.at<double>(2, 0), 0.0,
@@ -246,13 +268,17 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 				Mat transformedMatrixPoint = R * tempMatrixPoint;
 				transformedFacialFeatures[i].x = transformedMatrixPoint.at<double>(0);
 				transformedFacialFeatures[i].y = transformedMatrixPoint.at<double>(1);
-				transformedFacialFeatures[i].z = transformedMatrixPoint.at<double>(3);
+				transformedFacialFeatures[i].z = transformedMatrixPoint.at<double>(2);
 				fprintf(stderr, "Transformed point %lu <%.02f, %.02f> -> <%.02f, %.02f, %.02f>\n", i, facialFeatures[i].x, facialFeatures[i].y, transformedFacialFeatures[i].x, transformedFacialFeatures[i].y, transformedFacialFeatures[i].z);
 			}
 			// transform(facialFeatures, transformed, R33);
 			for(i = 0; i < (lineCount - 1); i++) {
-				Point2d a = Point2d(transformedFacialFeatures[i].x, transformedFacialFeatures[i].y);
-				Point2d b = Point2d(transformedFacialFeatures[i+1].x, transformedFacialFeatures[i+1].y);
+				a = Point2d(transformedFacialFeatures[i].x, transformedFacialFeatures[i].y);
+				a.x += facialFeaturesOrigin.x;
+				a.y += facialFeaturesOrigin.y;
+				b = Point2d(transformedFacialFeatures[i+1].x, transformedFacialFeatures[i+1].y);
+				b.x += facialFeaturesOrigin.x;
+				b.y += facialFeaturesOrigin.y;
 				line(frame, a, b, Scalar(255, 0, 0));
 			}
 		}
