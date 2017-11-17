@@ -173,20 +173,21 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Point2d principalPoint = Point2d(frameSize.width / 2.0, frameSize.height / 2.0);
-	Mat tempMatrix, tempMatrix2;
+	Mat essentialMatCandidates;
 	try {
-		tempMatrix = findEssentialMat(facialFeaturesInitial, facialFeatures, 1.0, principalPoint, RANSAC);
+		essentialMatCandidates = findEssentialMat(facialFeaturesInitial, facialFeatures, 1.0, principalPoint, RANSAC);
 	} catch(exception &e) {
 		fprintf(stderr, "FaceTracker: WARNING: Failed findEssentialMat(). Got exception: %s", e.what());
 		return;
 	}
 	Vec3d vRotation, vTranslation, vRotationBest, vTranslationBest;
+	Mat essentialMat, essentialMatBest;
 	double smallestDelta = -1;
-	for(int i = 0; (i * 3) < tempMatrix.rows; i++) {
-		tempMatrix2 = Mat(tempMatrix, Rect(0, i * 3, 3, 3));
+	for(int i = 0; (i * 3) < essentialMatCandidates.rows; i++) {
+		essentialMat = Mat(essentialMatCandidates, Rect(0, i * 3, 3, 3));
 		Mat rotation, translation;
 		try {
-			recoverPose(tempMatrix2, facialFeaturesInitial, facialFeatures, rotation, translation, 1.0, principalPoint);
+			recoverPose(essentialMat, facialFeaturesInitial, facialFeatures, rotation, translation, 1.0, principalPoint);
 		} catch(exception &e) {
 			fprintf(stderr, "FaceTracker: WARNING: Failed recoverPose(). Got exception: %s", e.what());
 			continue;
@@ -200,12 +201,14 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 			smallestDelta = delta;
 			vRotationBest = vRotation;
 			vTranslationBest = vTranslation;
+			essentialMatBest = essentialMat;
 		}
 		// fprintf(stderr, "FaceTracker: INFO: pose recovered... rotation: <%.02f, %.02f, %.02f>, translation: <%.02f, %.02f, %.02f>, delta: %.02f\n", vRotation[0], vRotation[1], vRotation[2], vTranslation[0], vTranslation[1], vTranslation[2], delta);
 	}
 	if(smallestDelta >= 0.0) {
 		facialRotation = vRotationBest;
 		facialTranslation = vTranslationBest;
+		facialEssentialMat = essentialMatBest;
 		fprintf(stderr, "FaceTracker: INFO: Best facial transformation... Rotation: <%.02f, %.02f, %.02f>, Translation: <%.02f, %.02f, %.02f>\n", facialRotation[0], facialRotation[1], facialRotation[2], facialTranslation[0], facialTranslation[1], facialTranslation[2]);
 		facialTransformationSet = true;
 	}
@@ -223,13 +226,37 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		for(size_t i = 0; i < (lineCount - 1); i++) {
 			line(frame, facialFeatures[i], facialFeatures[i+1], Scalar(0, 255, 0));
 		}
+		if(facialTransformationSet) {
+			Mat R33 = Utilities::eulerAnglesToRotationMatrix(facialRotation);
+			Mat R = (Mat_<double>(4, 4) <<
+				R33.at<double>(0, 0), R33.at<double>(1, 0), R33.at<double>(2, 0), 0.0,
+				R33.at<double>(0, 1), R33.at<double>(1, 1), R33.at<double>(2, 1), 0.0,
+				R33.at<double>(0, 2), R33.at<double>(1, 2), R33.at<double>(2, 2), 0.0,
+				0.0,                  0.0,                  0.0,                  1.0);
+			// Mat otherFrame;
+			// warpPerspective(frame, otherFrame, perspectiveMatrix, frameSize, WARP_INVERSE_MAP);
+			// imshow("other window", otherFrame);
+
+			size_t i;
+			std::vector<Point3d> transformedFacialFeatures(lineCount);
+			for(i = 0; i < lineCount; i++) {
+				//Convert original point to a matrix.
+				Mat tempMatrixPoint = (Mat_<double>(4,1) <<
+					facialFeatures[i].x, facialFeatures[i].y, 0.0, 1.0);
+				Mat transformedMatrixPoint = R * tempMatrixPoint;
+				transformedFacialFeatures[i].x = transformedMatrixPoint.at<double>(0);
+				transformedFacialFeatures[i].y = transformedMatrixPoint.at<double>(1);
+				transformedFacialFeatures[i].z = transformedMatrixPoint.at<double>(3);
+				fprintf(stderr, "Transformed point %lu <%.02f, %.02f> -> <%.02f, %.02f, %.02f>\n", i, facialFeatures[i].x, facialFeatures[i].y, transformedFacialFeatures[i].x, transformedFacialFeatures[i].y, transformedFacialFeatures[i].z);
+			}
+			// transform(facialFeatures, transformed, R33);
+			for(i = 0; i < (lineCount - 1); i++) {
+				Point2d a = Point2d(transformedFacialFeatures[i].x, transformedFacialFeatures[i].y);
+				Point2d b = Point2d(transformedFacialFeatures[i+1].x, transformedFacialFeatures[i+1].y);
+				line(frame, a, b, Scalar(255, 0, 0));
+			}
+		}
 	}
-	// if(perspectiveTransformationMatrixSet) {
-	// 	Mat warped;
-	// 	warpPerspective(frame, warped, perspectiveTransformationMatrix, Size(1920, 1080), WARP_INVERSE_MAP);
-	// 	imshow("othername", warped);
-	// 	waitKey(1);
-	// }
 }
 
 TrackerState FaceTracker::getTrackerState(void) {

@@ -49,6 +49,7 @@ private:
 	bool facialFeaturesInitialSet;
 
 	Vec3d facialRotation, facialTranslation;
+	Mat facialEssentialMat;
 	bool facialTransformationSet;
 
 	dlib::rectangle classificationBoxDlib;

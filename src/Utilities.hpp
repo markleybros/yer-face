@@ -21,7 +21,8 @@ public:
 	static double degreesToRadians(double degrees);
 	static double radiansToDegrees(double radians, bool normalize = true);
 	static double degreesDelta(double angleA, double angleB);
-	static Vec3d rotationMatrixToEulerAngles(Mat &R);
+	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);
+	static Mat eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees = true);
 	static void drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color = Scalar(0, 0, 255), int thickness = 1);
 	static void drawX(Mat frame, Point2d markerPoint, Scalar color = Scalar(0, 0, 255), int lineLength = 5, int thickness = 1);
 };
