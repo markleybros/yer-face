@@ -122,23 +122,27 @@ Mat Utilities::eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees) {
 	Mat matrixX = (Mat_<double>(3,3) <<
 		1.0, 0.0,          0.0,
 		0.0, cos(rot[0]), -sin(rot[0]),
-		0.0, sin(rot[0]),  cos(rot[0])
-		);
+		0.0, sin(rot[0]),  cos(rot[0]));
 
 	Mat matrixY = (Mat_<double>(3,3) <<
 		 cos(rot[1]), 0.0, sin(rot[1]),
 		 0.0,         1.0, 0.0,
-		-sin(rot[1]), 0.0, cos(rot[1])
-		);
+		-sin(rot[1]), 0.0, cos(rot[1]));
 
 	Mat matrixZ = (Mat_<double>(3,3) <<
 		cos(rot[2]), -sin(rot[2]), 0.0,
 		sin(rot[2]),  cos(rot[2]), 0.0,
-		0.0,          0.0,         1.0
-		);
+		0.0,          0.0,         1.0);
 
 	Mat matrix = matrixZ * matrixY * matrixX;
 	return matrix;
+}
+
+Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoint) {
+	return (Mat_<double>(3,3) <<
+		focalLength, 0.0,         principalPoint.x,
+		0.0,         focalLength, principalPoint.y,
+		0.0,         0.0,         1.0);
 }
 
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {

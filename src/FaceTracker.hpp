@@ -20,7 +20,7 @@ namespace YerFace {
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 10, float myFeatureSmoothingExponent = 5.0);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 1, float myFeatureSmoothingExponent = 1.0);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -51,6 +51,7 @@ private:
 
 	Vec3d facialRotation, facialTranslation;
 	Mat facialEssentialMat;
+	Mat rvec, tvec;
 	bool facialTransformationSet;
 
 	dlib::rectangle classificationBoxDlib;

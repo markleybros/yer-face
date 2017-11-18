@@ -23,6 +23,7 @@ public:
 	static double degreesDelta(double angleA, double angleB);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);
 	static Mat eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees = true);
+	static Mat generateFakeCameraMatrix(double focalLength = 1.0, Point2d principalPoint = Point2d(0, 0));
 	static void drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color = Scalar(0, 0, 255), int thickness = 1);
 	static void drawX(Mat frame, Point2d markerPoint, Scalar color = Scalar(0, 0, 255), int lineLength = 5, int thickness = 1);
 };
