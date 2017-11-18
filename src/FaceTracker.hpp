@@ -18,9 +18,31 @@ using namespace cv;
 
 namespace YerFace {
 
+enum DlibFeatureIndexes {
+	IDX_CHIN = 8,
+	IDX_NOSE_BRIDGE = 27,
+	IDX_NOSE_TIP = 30,
+	IDX_EYE_RIGHT_OUTER_CORNER = 36,
+	IDX_EYE_RIGHT_INNER_CORNER = 39,
+	IDX_EYE_LEFT_INNER_CORNER = 42,
+	IDX_EYE_LEFT_OUTER_CORNER = 45,
+	IDX_MOUTH_RIGHT_OUTER_CORNER = 48,
+	IDX_MOUTH_LEFT_OUTER_CORNER = 54
+};
+
+//Centimeters, roughly derived from https://en.wikipedia.org/wiki/File:AvgHeadSizes.png
+#define VERTEX_NOSE_TIP Point3d(0.0, 0.0, 0.0)
+#define VERTEX_CHIN Point3d(0.0, -6.5, -1.4)
+#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-6.1, 3.7, -5.6)
+#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(6.1, 3.7, -5.6)
+#define VERTEX_MOUTH_RIGHT_OUTER_CORNER Point3d(-2.9, -2.8, -4.3)
+#define VERTEX_MOUTH_LEFT_OUTER_CORNER  Point3d(2.9, -2.8, -4.3)
+
+#define NUM_TRACKED_FEATURES 6
+
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, int myFeatureBufferSize = 1, float myFeatureSmoothingExponent = 1.0);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -32,8 +54,6 @@ private:
 
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
-	int featureBufferSize;
-	float featureSmoothingExponent;
 
 	TrackerState trackerState;
 
@@ -42,17 +62,7 @@ private:
 	bool classificationBoxSet;
 
 	std::vector<Point2d> facialFeatures;
-	list<std::vector<Point2d>> facialFeaturesBuffer;
 	bool facialFeaturesSet;
-
-	std::vector<Point2d> facialFeaturesInitial;
-	Point2d facialFeaturesOrigin;
-	bool facialFeaturesInitialSet;
-
-	Vec3d facialRotation, facialTranslation;
-	Mat facialEssentialMat;
-	Mat rvec, tvec;
-	bool facialTransformationSet;
 
 	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;
