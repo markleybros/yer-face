@@ -36,7 +36,7 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_5_face_landmarks.dat|Model for dlib's facial landmark detector.}"
+		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
 		"{capture_file|/dev/video0|Video file or video capture device file to open.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
