@@ -44,7 +44,7 @@ void Metrics::endFrame(void) {
 	}
 	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
 	snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
-	fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
+	// fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
 }
 
 double Metrics::getAverageTimeSeconds(void) {

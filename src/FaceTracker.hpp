@@ -48,12 +48,15 @@ enum DlibFeatureIndexes {
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
 private:
+	void performInitializationOfTracker(void);
+	bool performTracking(void);
+	bool trackerDriftingExcessively(void);
 	void doClassifyFace(void);
 	void doIdentifyFeatures(void);
 	void doInitializeCameraModel(void);
@@ -62,12 +65,18 @@ private:
 
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
+	float trackingBoxPercentage;
+	float maxTrackerDriftPercentage;
 
 	TrackerState trackerState;
 
 	Rect2d classificationBox;
 	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	bool classificationBoxSet;
+
+	Ptr<Tracker> tracker;
+	Rect2d trackingBox;
+	bool trackingBoxSet;
 
 	std::vector<Point2d> facialFeatures;
 	bool facialFeaturesSet;
