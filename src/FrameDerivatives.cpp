@@ -46,4 +46,8 @@ double FrameDerivatives::getClassificationScaleFactor(void) {
 	return classificationScaleFactor;
 }
 
+Size FrameDerivatives::getCurrentFrameSize(void) {
+	return currentFrame.size();
+}
+
 }; //namespace YerFace

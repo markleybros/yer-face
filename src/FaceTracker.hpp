@@ -19,26 +19,32 @@ using namespace cv;
 namespace YerFace {
 
 enum DlibFeatureIndexes {
-	IDX_CHIN = 8,
-	IDX_NOSE_BRIDGE = 27,
+	IDX_JAW_RIGHT_TOP = 0,
+	IDX_MENTON = 8, //Chin
+	IDX_JAW_LEFT_TOP = 16,
+	IDX_NOSE_SELLION = 27, //Bridge of the nose
 	IDX_NOSE_TIP = 30,
 	IDX_EYE_RIGHT_OUTER_CORNER = 36,
 	IDX_EYE_RIGHT_INNER_CORNER = 39,
 	IDX_EYE_LEFT_INNER_CORNER = 42,
 	IDX_EYE_LEFT_OUTER_CORNER = 45,
 	IDX_MOUTH_RIGHT_OUTER_CORNER = 48,
-	IDX_MOUTH_LEFT_OUTER_CORNER = 54
+	IDX_MOUTH_LEFT_OUTER_CORNER = 54,
+	IDX_MOUTH_CENTER_INNER_TOP=62,
+	IDX_MOUTH_CENTER_INNER_BOTTOM=66
 };
 
-//Centimeters, roughly derived from https://en.wikipedia.org/wiki/File:AvgHeadSizes.png
-#define VERTEX_NOSE_TIP Point3d(0.0, 0.0, 0.0)
-#define VERTEX_CHIN Point3d(0.0, -6.5, -1.4)
-#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-6.1, 3.7, -5.6)
-#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(6.1, 3.7, -5.6)
-#define VERTEX_MOUTH_RIGHT_OUTER_CORNER Point3d(-2.9, -2.8, -4.3)
-#define VERTEX_MOUTH_LEFT_OUTER_CORNER  Point3d(2.9, -2.8, -4.3)
-
-#define NUM_TRACKED_FEATURES 6
+//Unit centimeters. Values taken from https://en.wikipedia.org/wiki/Human_head
+//Coordinate system is: +X Points Right (relative to the viewer), +Y Points Into the Scene (relative to the camera), +Z Points Up (relative to the camera)
+//This was all chosen to match Blender. (Except for the tiny unit size, which was chosen to help stabilize solvePnP().)
+#define VERTEX_NOSE_SELLION Point3d(0.0, 0.0, 0.0)
+#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-65.5, 20.0, -5.0)
+#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(65.5, 20.0, -5.0)
+#define VERTEX_RIGHT_EAR Point3d(-77.5, 100.0, -6.0)
+#define VERTEX_LEFT_EAR Point3d(77.5, 100.0, -6.0)
+#define VERTEX_NOSE_TIP Point3d(0.0, -21.0, -48.0)
+#define VERTEX_STOMMION Point3d(0.0, -10.0, -75.0)
+#define VERTEX_MENTON Point3d(0.0, 0.0, -133.0)
 
 class FaceTracker {
 public:
@@ -50,7 +56,9 @@ public:
 private:
 	void doClassifyFace(void);
 	void doIdentifyFeatures(void);
+	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
+	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
 
 	string modelFileName;
 	FrameDerivatives *frameDerivatives;
@@ -63,6 +71,15 @@ private:
 
 	std::vector<Point2d> facialFeatures;
 	bool facialFeaturesSet;
+
+	std::vector<Point3d> facialFeatures3d;
+	bool facialFeatures3dSet;
+
+	Mat cameraMatrix, distortionCoefficients;
+	bool cameraModelSet;
+
+	Mat poseTranslationVector, poseRotationVector;
+	bool poseSet;
 
 	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;
