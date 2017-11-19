@@ -111,28 +111,43 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 }
 
 void FaceTracker::doClassifyFace(void) {
+	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	classificationBoxSet = false;
 	//Using dlib's built-in HOG face detector instead of a CNN-based detector because it trades off accuracy for speed.
 	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
 
-	int largestFace = -1;
-	int largestFaceArea = -1;
+	int bestFace = -1;
+	int bestFaceArea = -1;
+	Rect2d tempBox, tempBoxNormalSize, bestFaceBox, bestFaceBoxNormalSize;
 	size_t facesCount = faces.size();
 	for(size_t i = 0; i < facesCount; i++) {
-		if((int)faces[i].area() > largestFaceArea) {
-			largestFace = i;
-			largestFaceArea = faces[i].area();
+		tempBox.x = faces[i].left();
+		tempBox.y = faces[i].top();
+		tempBox.width = faces[i].right() - tempBox.x;
+		tempBox.height = faces[i].bottom() - tempBox.y;
+		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationScaleFactor);
+		if(trackingBoxSet) {
+			if((tempBoxNormalSize & trackingBox).area() <= 0) {
+				continue;
+			}
+		}
+		if((int)faces[i].area() > bestFaceArea) {
+			bestFace = i;
+			bestFaceArea = faces[i].area();
+			bestFaceBox = tempBox;
+			bestFaceBoxNormalSize = tempBoxNormalSize;
 		}
 	}
-	if(largestFace >= 0) {
+	if(bestFace >= 0) {
 		trackerState = TRACKING;
-		classificationBox.x = faces[largestFace].left();
-		classificationBox.y = faces[largestFace].top();
-		classificationBox.width = faces[largestFace].right() - classificationBox.x;
-		classificationBox.height = faces[largestFace].bottom() - classificationBox.y;
-		double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-		classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
-		classificationBoxDlib = faces[largestFace];
+		classificationBox = bestFaceBox;
+		classificationBoxNormalSize = bestFaceBoxNormalSize;
+		// classificationBox.x = faces[bestFace].left();
+		// classificationBox.y = faces[bestFace].top();
+		// classificationBox.width = faces[bestFace].right() - classificationBox.x;
+		// classificationBox.height = faces[bestFace].bottom() - classificationBox.y;
+		// classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
+		classificationBoxDlib = faces[bestFace]; //FIXME <-- this is condemned
 		classificationBoxSet = true;
 	}
 }
