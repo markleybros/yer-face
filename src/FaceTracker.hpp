@@ -48,13 +48,12 @@ enum DlibFeatureIndexes {
 
 class FacialPose {
 public:
-	Mat translationVector;
-	Vec3d rotationEulers;
+	Mat translationVector, rotationMatrix;
 };
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 2.0);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -74,6 +73,8 @@ private:
 	FrameDerivatives *frameDerivatives;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
+	int poseSmoothingBufferSize;
+	float poseSmoothingExponent;
 
 	TrackerState trackerState;
 

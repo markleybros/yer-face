@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
@@ -38,7 +38,14 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
 	}
-
+	poseSmoothingBufferSize = myPoseSmoothingBufferSize;
+	if(poseSmoothingBufferSize <= 0) {
+		throw invalid_argument("poseSmoothingBufferSize cannot be less than or equal to zero.");
+	}
+	poseSmoothingExponent = myPoseSmoothingExponent;
+	if(poseSmoothingExponent <= 0.0) {
+		throw invalid_argument("poseSmoothingExponent cannot be less than or equal to zero.");
+	}
 	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 
 	frontalFaceDetector = get_frontal_face_detector();
@@ -50,6 +57,9 @@ FaceTracker::~FaceTracker() {
 	fprintf(stderr, "FaceTracker object destructing...\n");
 }
 
+// Pose recovery approach largely informed by the following sources:
+//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+//  - https://github.com/severin-lemaignan/gazr/
 TrackerState FaceTracker::processCurrentFrame(void) {
 	performTracking();
 
@@ -269,9 +279,6 @@ void FaceTracker::doInitializeCameraModel(void) {
 	cameraModelSet = true;
 }
 
-// Pose recovery approach largely informed by the following sources:
-//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-//  - https://github.com/severin-lemaignan/gazr/
 void FaceTracker::doCalculateFacialTransformation(void) {
 	if(!facialFeaturesSet) {
 		return;
@@ -280,15 +287,11 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		doInitializeCameraModel();
 	}
 
-	int poseSmoothingBufferSize = 4; //FIXME - magic numbers
-	float poseSmoothingExponent = 1.0;
-
 	FacialPose tempPose;
-	Mat tempRotationVector, tempRotationMatrix;
+	Mat tempRotationVector;
 
 	solvePnP(facialFeatures3d, facialFeatures, cameraMatrix, distortionCoefficients, tempRotationVector, tempPose.translationVector);
-	Rodrigues(tempRotationVector, tempRotationMatrix);
-	tempPose.rotationEulers = Utilities::rotationMatrixToEulerAngles(tempRotationMatrix);
+	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
 	facialPoseSmoothingBuffer.push_back(tempPose);
 	while(facialPoseSmoothingBuffer.size() > (unsigned int)poseSmoothingBufferSize) {
@@ -296,7 +299,10 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 
 	tempPose.translationVector = (Mat_<double>(3,1) << 0.0, 0.0, 0.0);
-	tempPose.rotationEulers = Vec3d(0.0, 0.0, 0.0);
+	tempPose.rotationMatrix = (Mat_<double>(3,3) <<
+			0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0);
 
 	unsigned long numBufferEntries = facialPoseSmoothingBuffer.size();
 	double combinedWeights = 0.0;
@@ -306,7 +312,9 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		combinedWeights += weight;
 		for(int j = 0; j < 3; j++) {
 			tempPose.translationVector.at<double>(j) += pose.translationVector.at<double>(j) * weight;
-			tempPose.rotationEulers[j] += pose.rotationEulers[j] * weight;
+		}
+		for(int j = 0; j < 9; j++) {
+			tempPose.rotationMatrix.at<double>(j) += pose.rotationMatrix.at<double>(j) * weight;
 		}
 		i++;
 	}
@@ -314,7 +322,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	facialPose = tempPose;
 	poseSet = true;
 
-	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", facialPose.rotationEulers[0], facialPose.rotationEulers[1], facialPose.rotationEulers[2]);
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
+	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2]);
 }
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
@@ -356,13 +365,12 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		gizmo3d[4] = Point3d(0.0,0.0,-50);
 		gizmo3d[5] = Point3d(0.0,0.0,50);
 		
-		Mat tempRotationMatrix = Utilities::eulerAnglesToRotationMatrix(facialPose.rotationEulers);
 		Mat tempRotationVector;
-		Rodrigues(tempRotationMatrix, tempRotationVector);
+		Rodrigues(facialPose.rotationMatrix, tempRotationVector);
 		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, cameraMatrix, distortionCoefficients, gizmo2d);
-		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 1);
-		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 1);
-		line(frame, gizmo2d[4], gizmo2d[5], Scalar(255, 0, 0), 1);
+		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
+		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 2);
+		line(frame, gizmo2d[4], gizmo2d[5], Scalar(255, 0, 0), 2);
 	}
 }
 
