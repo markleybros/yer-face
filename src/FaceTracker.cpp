@@ -20,6 +20,7 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	trackerState = DETECTING;
 	classificationBoxSet = false;
 	trackingBoxSet = false;
+	faceRectSet = false;
 	facialFeaturesSet = false;
 	facialFeatures3dSet = false;
 	cameraModelSet = false;
@@ -37,6 +38,8 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
 	}
+
+	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
@@ -59,6 +62,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 			performInitializationOfTracker();
 		}
 	}
+
+	assignFaceRect();
 
 	doIdentifyFeatures();
 
@@ -111,7 +116,6 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 }
 
 void FaceTracker::doClassifyFace(void) {
-	double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	classificationBoxSet = false;
 	//Using dlib's built-in HOG face detector instead of a CNN-based detector because it trades off accuracy for speed.
 	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
@@ -142,20 +146,48 @@ void FaceTracker::doClassifyFace(void) {
 		trackerState = TRACKING;
 		classificationBox = bestFaceBox;
 		classificationBoxNormalSize = bestFaceBoxNormalSize;
-		// classificationBox.x = faces[bestFace].left();
-		// classificationBox.y = faces[bestFace].top();
-		// classificationBox.width = faces[bestFace].right() - classificationBox.x;
-		// classificationBox.height = faces[bestFace].bottom() - classificationBox.y;
-		// classificationBoxNormalSize = Utilities::scaleRect(classificationBox, 1.0 / classificationScaleFactor);
-		classificationBoxDlib = faces[bestFace]; //FIXME <-- this is condemned
 		classificationBoxSet = true;
+	}
+}
+
+void FaceTracker::assignFaceRect(void) {
+	faceRectSet = false;
+	Rect2d trackingBoxNormalSize;
+	if(trackingBoxSet) {
+		trackingBoxNormalSize = Utilities::insetBox(trackingBox, 1.0 / trackingBoxPercentage);
+	}
+	if(classificationBoxSet && trackingBoxSet) {
+		faceRect.x = (classificationBoxNormalSize.x + trackingBoxNormalSize.x) / 2.0;
+		faceRect.y = (classificationBoxNormalSize.y + trackingBoxNormalSize.y) / 2.0;
+		faceRect.width = (classificationBoxNormalSize.width + trackingBoxNormalSize.width) / 2.0;
+		faceRect.height = (classificationBoxNormalSize.height + trackingBoxNormalSize.height) / 2.0;
+		faceRectSet = true;
+	} else if(classificationBoxSet) {
+		faceRect = classificationBoxNormalSize;
+		faceRectSet = true;
+	} else if(trackingBoxSet) {
+		faceRect = trackingBoxNormalSize;
+		faceRectSet = true;
+	} else {
+		if(trackerState == TRACKING) {
+			trackerState = LOST;
+			fprintf(stderr, "FaceTracker: Lost face completely! Will keep searching...\n");
+		}
 	}
 }
 
 void FaceTracker::doIdentifyFeatures(void) {
 	facialFeaturesSet = false;
+	if(!faceRectSet) {
+		return;
+	}
+	dlib::rectangle dlibClassificationBox = dlib::rectangle(
+		faceRect.x * classificationScaleFactor,
+		faceRect.y * classificationScaleFactor,
+		(faceRect.width + faceRect.x) * classificationScaleFactor,
+		(faceRect.height + faceRect.y) * classificationScaleFactor);
 
-	full_object_detection result = shapePredictor(dlibClassificationFrame, classificationBoxDlib);
+	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
 
 	Mat prevFrame = frameDerivatives->getPreviewFrame();
 
@@ -258,7 +290,6 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 }
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
-	static double classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	if(*src == OBJECT_PART_NOT_PRESENT) {
 		return false;
 	}
@@ -276,6 +307,9 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		}
 		if(trackingBoxSet) {
 			cv::rectangle(frame, trackingBox, Scalar(255, 0, 0), 1);
+		}
+		if(faceRectSet) {
+			cv::rectangle(frame, faceRect, Scalar(255, 255, 0), 1);
 		}
 		if(facialFeaturesSet) {
 			size_t featuresCount = facialFeatures.size();

@@ -58,6 +58,7 @@ private:
 	bool performTracking(void);
 	bool trackerDriftingExcessively(void);
 	void doClassifyFace(void);
+	void assignFaceRect(void);
 	void doIdentifyFeatures(void);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
@@ -72,11 +73,15 @@ private:
 
 	Rect2d classificationBox;
 	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
+	double classificationScaleFactor;
 	bool classificationBoxSet;
 
 	Ptr<Tracker> tracker;
 	Rect2d trackingBox;
 	bool trackingBoxSet;
+
+	Rect2d faceRect;
+	bool faceRectSet;
 
 	std::vector<Point2d> facialFeatures;
 	bool facialFeaturesSet;
@@ -90,7 +95,6 @@ private:
 	Mat poseTranslationVector, poseRotationVector;
 	bool poseSet;
 
-	dlib::rectangle classificationBoxDlib;
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
 	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
