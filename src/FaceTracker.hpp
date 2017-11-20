@@ -46,6 +46,12 @@ enum DlibFeatureIndexes {
 #define VERTEX_STOMMION Point3d(0.0, -10.0, -75.0)
 #define VERTEX_MENTON Point3d(0.0, 0.0, -133.0)
 
+class FacialPose {
+public:
+	Mat translationVector;
+	Vec3d rotationEulers;
+};
+
 class FaceTracker {
 public:
 	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25);
@@ -92,7 +98,8 @@ private:
 	Mat cameraMatrix, distortionCoefficients;
 	bool cameraModelSet;
 
-	Mat poseTranslationVector, poseRotationVector;
+	list<FacialPose> facialPoseSmoothingBuffer;
+	FacialPose facialPose;
 	bool poseSet;
 
 	dlib::frontal_face_detector frontalFaceDetector;

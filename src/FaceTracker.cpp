@@ -280,13 +280,41 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		doInitializeCameraModel();
 	}
 
-	solvePnP(facialFeatures3d, facialFeatures, cameraMatrix, distortionCoefficients, poseRotationVector, poseTranslationVector);
+	int poseSmoothingBufferSize = 4; //FIXME - magic numbers
+	float poseSmoothingExponent = 1.0;
+
+	FacialPose tempPose;
+	Mat tempRotationVector, tempRotationMatrix;
+
+	solvePnP(facialFeatures3d, facialFeatures, cameraMatrix, distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	Rodrigues(tempRotationVector, tempRotationMatrix);
+	tempPose.rotationEulers = Utilities::rotationMatrixToEulerAngles(tempRotationMatrix);
+
+	facialPoseSmoothingBuffer.push_back(tempPose);
+	while(facialPoseSmoothingBuffer.size() > (unsigned int)poseSmoothingBufferSize) {
+		facialPoseSmoothingBuffer.pop_front();
+	}
+
+	tempPose.translationVector = (Mat_<double>(3,1) << 0.0, 0.0, 0.0);
+	tempPose.rotationEulers = Vec3d(0.0, 0.0, 0.0);
+
+	unsigned long numBufferEntries = facialPoseSmoothingBuffer.size();
+	double combinedWeights = 0.0;
+	int i = 0;
+	for(FacialPose pose : facialPoseSmoothingBuffer) {
+		double weight = std::pow((double)(i + 1) / (double)numBufferEntries, (double)poseSmoothingExponent) - combinedWeights;
+		combinedWeights += weight;
+		for(int j = 0; j < 3; j++) {
+			tempPose.translationVector.at<double>(j) += pose.translationVector.at<double>(j) * weight;
+			tempPose.rotationEulers[j] += pose.rotationEulers[j] * weight;
+		}
+		i++;
+	}
+
+	facialPose = tempPose;
 	poseSet = true;
 
-	// Mat rot_mat;
-	// Rodrigues(poseRotationVector, rot_mat);
-	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(rot_mat);
-	// fprintf(stderr, "pose angle: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2]);
+	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", facialPose.rotationEulers[0], facialPose.rotationEulers[1], facialPose.rotationEulers[2]);
 }
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
@@ -327,7 +355,11 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		gizmo3d[3] = Point3d(0.0,50,0.0);
 		gizmo3d[4] = Point3d(0.0,0.0,-50);
 		gizmo3d[5] = Point3d(0.0,0.0,50);
-		projectPoints(gizmo3d, poseRotationVector, poseTranslationVector, cameraMatrix, distortionCoefficients, gizmo2d);
+		
+		Mat tempRotationMatrix = Utilities::eulerAnglesToRotationMatrix(facialPose.rotationEulers);
+		Mat tempRotationVector;
+		Rodrigues(tempRotationMatrix, tempRotationVector);
+		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, cameraMatrix, distortionCoefficients, gizmo2d);
 		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 1);
 		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 1);
 		line(frame, gizmo2d[4], gizmo2d[5], Scalar(255, 0, 0), 1);
