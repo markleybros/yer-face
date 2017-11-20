@@ -369,8 +369,8 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		Rodrigues(facialPose.rotationMatrix, tempRotationVector);
 		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, cameraMatrix, distortionCoefficients, gizmo2d);
 		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 2);
 		line(frame, gizmo2d[4], gizmo2d[5], Scalar(255, 0, 0), 2);
+		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 2);
 	}
 }
 
