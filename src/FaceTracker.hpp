@@ -51,6 +51,12 @@ public:
 	Mat translationVector, rotationMatrix;
 };
 
+class FacialBoundingBox {
+public:
+	Rect2d rect;
+	bool set;
+};
+
 class FaceTracker {
 public:
 	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 2.0);
@@ -58,6 +64,7 @@ public:
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
+	FacialBoundingBox getFacialBoundingBox(void);
 private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);

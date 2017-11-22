@@ -11,7 +11,7 @@
 
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
-// #include "MarkerMapper.hpp"
+#include "FaceMapper.hpp"
 #include "Metrics.hpp"
 
 #include <iostream>
@@ -28,7 +28,7 @@ String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
-// MarkerMapper *markerMapper;
+FaceMapper *faceMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -59,7 +59,7 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
-	// markerMapper = new MarkerMapper(frameDerivatives, faceTracker, NULL, NULL);
+	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
 	metrics = new Metrics(30);
 
 	//Open the video stream.
@@ -81,10 +81,10 @@ int main(int argc, const char** argv) {
 
 		frameDerivatives->setCurrentFrame(frame);
 		faceTracker->processCurrentFrame();
-		// markerMapper->processCurrentFrame();
+		faceMapper->processCurrentFrame();
 
 		faceTracker->renderPreviewHUD();
-		// markerMapper->renderPreviewHUD(false);
+		faceMapper->renderPreviewHUD(false);
 
 		metrics->endFrame();
 
@@ -104,7 +104,7 @@ int main(int argc, const char** argv) {
 	}
 
 	delete metrics;
-	// delete markerMapper;
+	delete faceMapper;
 	delete faceTracker;
 	delete frameDerivatives;
 	return 0;

@@ -47,13 +47,11 @@ void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 
 void MarkerSeparator::processCurrentFrame(void) {
 	markerList.clear();
-	Rect2d faceRect;
-	bool faceRectSet;
-	std::tie(faceRect, faceRectSet) = faceTracker->getFaceRect();
-	if(!faceRectSet) {
+	FacialBoundingBox facialBoundingBox = faceTracker->getFacialBoundingBox();
+	if(!facialBoundingBox.set) {
 		return;
 	}
-	Rect2d searchBox = Rect(Utilities::insetBox(faceRect, faceSizePercentage));
+	Rect2d searchBox = Rect(Utilities::insetBox(facialBoundingBox.rect, faceSizePercentage));
 	try {
 		Mat frame = frameDerivatives->getCurrentFrame();
 		Size frameSize = frame.size();

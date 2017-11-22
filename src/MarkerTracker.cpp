@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -26,9 +26,9 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapp
 	}
 	markerTrackers.push_back(this);
 
-	markerMapper = myMarkerMapper;
-	if(markerMapper == NULL) {
-		throw invalid_argument("markerMapper cannot be NULL");
+	faceMapper = myFaceMapper;
+	if(faceMapper == NULL) {
+		throw invalid_argument("faceMapper cannot be NULL");
 	}
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -37,24 +37,6 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapp
 	markerSeparator = myMarkerSeparator;
 	if(markerSeparator == NULL) {
 		throw invalid_argument("markerSeparator cannot be NULL");
-	}
-	eyeTracker = myEyeTracker;
-	if(eyeTracker == NULL) {
-		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-			throw invalid_argument("eyeTracker cannot be NULL if markerType is one of the Eyelids");
-		}
-	} else {
-		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
-			if(eyeTracker->getWhichEye() != LeftEye) {
-				throw invalid_argument("eyeTracker must be a LeftEye if markerType is one of the Left Eyelids");
-			}
-		} else if(markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-			if(eyeTracker->getWhichEye() != RightEye) {
-				throw invalid_argument("eyeTracker must be a RightEye if markerType is one of the Right Eyelids");
-			}
-		} else {
-			throw invalid_argument("eyeTracker should be NULL if markerType is not one of the Eyelids");
-		}
 	}
 
 	trackingBoxPercentage = myTrackingBoxPercentage;
@@ -146,21 +128,21 @@ void MarkerTracker::performDetection(void) {
 	list<MarkerCandidate> markerCandidateList;
 	bool eyeLineSet;
 	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
-	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = markerMapper->getEyeLine();
+	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = faceMapper->getEyeLine();
 	bool midLineSet;
 	Point2d midLineLeft, midLineRight, midLineCenter;
-	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = markerMapper->getMidLine();
+	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = faceMapper->getMidLine();
 	bool centerLineSet, centerLineIsIntermediate;
 	Point2d centerLineTop, centerLineBottom;
 	double centerLineSlope, centerLineIntercept;
-	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = markerMapper->getCenterLine();
+	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = faceMapper->getCenterLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 		Rect2d eyeRect;
-		bool eyeRectSet;
-		std::tie(eyeRect, eyeRectSet) = eyeTracker->getEyeRect();
+		bool eyeRectSet = false; //FIXME < V
+		// std::tie(eyeRect, eyeRectSet) = eyeTracker->getEyeRect();
 		if(!eyeRectSet) {
 			return;
 		}
@@ -511,7 +493,6 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
 			markerCandidate.distanceFromPointOfInterest = Utilities::lineDistance(pointOfInterest, markerCandidate.marker.center);
-			//markerCandidate.angleFromPointOfInterest = Utilities::radiansToDegrees(Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center));
 			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 			markerCandidateList->push_back(markerCandidate);
 		}
@@ -520,14 +501,6 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 
 bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
 	return (a.distanceFromPointOfInterest < b.distanceFromPointOfInterest);
-}
-
-bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
-	return (a.angleFromPointOfInterest < b.angleFromPointOfInterest);
-}
-
-bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterestInverted(const MarkerCandidate a, const MarkerCandidate b) {
-	return (a.angleFromPointOfInterest > b.angleFromPointOfInterest);
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {

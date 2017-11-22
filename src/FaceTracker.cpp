@@ -379,4 +379,12 @@ TrackerState FaceTracker::getTrackerState(void) {
 	return trackerState;
 }
 
+FacialBoundingBox FaceTracker::getFacialBoundingBox(void) {
+	FacialBoundingBox box;
+	box.rect = faceRect;
+	box.set = faceRectSet;
+	return box;
+}
+
+
 }; //namespace YerFace

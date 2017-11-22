@@ -1,5 +1,5 @@
 
-#include "MarkerMapper.hpp"
+#include "FaceMapper.hpp"
 #include "Utilities.hpp"
 #include "opencv2/calib3d.hpp"
 #include "opencv2/highgui.hpp"
@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker, float myEyelidBottomPointWeight, float myEyeLineLengthPercentage, float myFaceAspectRatio, float myPercentageOfCenterLineAboveEyeLine) {
+FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight, float myEyeLineLengthPercentage, float myFaceAspectRatio, float myPercentageOfCenterLineAboveEyeLine) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -19,14 +19,6 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
-	}
-	leftEyeTracker = myLeftEyeTracker;
-	if(leftEyeTracker == NULL) {
-		throw invalid_argument("leftEyeTracker cannot be NULL");
-	}
-	rightEyeTracker = myRightEyeTracker;
-	if(rightEyeTracker == NULL) {
-		throw invalid_argument("rightEyeTracker cannot be NULL");
 	}
 	eyelidBottomPointWeight = myEyelidBottomPointWeight;
 	if(eyelidBottomPointWeight < 0.0 || eyelidBottomPointWeight > 1.0) {
@@ -55,10 +47,10 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, frameDerivatives, markerSeparator, leftEyeTracker);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, frameDerivatives, markerSeparator, rightEyeTracker);
-	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this, frameDerivatives, markerSeparator, leftEyeTracker);
-	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this, frameDerivatives, markerSeparator, rightEyeTracker);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, frameDerivatives, markerSeparator);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, frameDerivatives, markerSeparator);
+	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this, frameDerivatives, markerSeparator);
+	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this, frameDerivatives, markerSeparator);
 
 	markerEyebrowLeftInner = new MarkerTracker(EyebrowLeftInner, this, frameDerivatives, markerSeparator);
 	markerEyebrowRightInner = new MarkerTracker(EyebrowRightInner, this, frameDerivatives, markerSeparator);
@@ -81,11 +73,11 @@ MarkerMapper::MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this, frameDerivatives, markerSeparator);
 	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this, frameDerivatives, markerSeparator);
 	
-	fprintf(stderr, "MarkerMapper object constructed and ready to go!\n");
+	fprintf(stderr, "FaceMapper object constructed and ready to go!\n");
 }
 
-MarkerMapper::~MarkerMapper() {
-	fprintf(stderr, "MarkerMapper object destructing...\n");
+FaceMapper::~FaceMapper() {
+	fprintf(stderr, "FaceMapper object destructing...\n");
 	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
 	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*MarkerTracker::getMarkerTrackers());
 	size_t markerTrackersCount = markerTrackersSnapshot.size();
@@ -97,7 +89,7 @@ MarkerMapper::~MarkerMapper() {
 	delete markerSeparator;
 }
 
-void MarkerMapper::processCurrentFrame(void) {
+void FaceMapper::processCurrentFrame(void) {
 	markerSeparator->processCurrentFrame();
 
 	markerEyelidLeftTop->processCurrentFrame();
@@ -141,7 +133,7 @@ void MarkerMapper::processCurrentFrame(void) {
 	//calculateFaceTransformation();
 }
 
-void MarkerMapper::renderPreviewHUD(bool verbose) {
+void FaceMapper::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
 		markerSeparator->renderPreviewHUD(true);
@@ -169,27 +161,27 @@ void MarkerMapper::renderPreviewHUD(bool verbose) {
 	}
 }
 
-tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getEyeLine(void) {
+tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyeLine(void) {
 	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet);
 }
 
-tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getEyebrowLine(void) {
+tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyebrowLine(void) {
 	return std::make_tuple(eyebrowLineLeft, eyebrowLineRight, eyebrowLineCenter, eyebrowLineSet);
 }
 
-tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getMidLine(void) {
+tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getMidLine(void) {
 	return std::make_tuple(midLineLeft, midLineRight, midLineCenter, midLineSet);
 }
 
-tuple<Point2d, Point2d, Point2d, bool> MarkerMapper::getSmileLine(void) {
+tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getSmileLine(void) {
 	return std::make_tuple(smileLineLeft, smileLineRight, smileLineCenter, smileLineSet);
 }
 
-tuple<Point2d, Point2d, double, double, bool, bool> MarkerMapper::getCenterLine(void) {
+tuple<Point2d, Point2d, double, double, bool, bool> FaceMapper::getCenterLine(void) {
 	return std::make_tuple(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet);
 }
 
-void MarkerMapper::calculateEyeLine(void) {
+void FaceMapper::calculateEyeLine(void) {
 	eyeLineSet = false;
 	if(!calculateEyeCenter(markerEyelidLeftTop, markerEyelidLeftBottom, &eyeLineLeft)) {
 		return;
@@ -210,7 +202,7 @@ void MarkerMapper::calculateEyeLine(void) {
 	eyeLineSet = true;
 }
 
-bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center) {
+bool FaceMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center) {
 	Point2d topPoint;
 	bool topPointSet;
 	std::tie(topPoint, topPointSet) = top->getMarkerPoint();
@@ -232,7 +224,7 @@ bool MarkerMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom,
 	return true;
 }
 
-void MarkerMapper::calculateEyebrowLine(void) {
+void FaceMapper::calculateEyebrowLine(void) {
 	eyebrowLineSet = false;
 	vector<MarkerTracker *> eyebrows = {markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter};
 	vector<Point2d> points;
@@ -274,7 +266,7 @@ void MarkerMapper::calculateEyebrowLine(void) {
 	eyebrowLineSet = true;
 }
 
-void MarkerMapper::calculateMidLine(void) {
+void FaceMapper::calculateMidLine(void) {
 	midLineSet = false;
 	bool midLineLeftSet;
 	std::tie(midLineLeft, midLineLeftSet) = markerCheekLeft->getMarkerPoint();
@@ -293,7 +285,7 @@ void MarkerMapper::calculateMidLine(void) {
 	midLineSet = true;
 }
 
-void MarkerMapper::calculateSmileLine(void) {
+void FaceMapper::calculateSmileLine(void) {
 	smileLineSet = false;
 	vector<MarkerTracker *> lipMarkers = {markerLipsLeftCorner, markerLipsLeftTop, markerLipsRightTop, markerLipsRightCorner};
 	vector<Point2d> points;
@@ -324,7 +316,7 @@ void MarkerMapper::calculateSmileLine(void) {
 	smileLineSet = true;
 }
 
-void MarkerMapper::calculateCenterLine(bool intermediate) {
+void FaceMapper::calculateCenterLine(bool intermediate) {
 	centerLineSet = false;
 	bool jawPointSet;
 	Point2d jawPoint;
@@ -355,7 +347,7 @@ void MarkerMapper::calculateCenterLine(bool intermediate) {
 	centerLineSet = true;
 }
 
-void MarkerMapper::calculateFaceBox(void) {
+void FaceMapper::calculateFaceBox(void) {
 	vector<Point2d> anglesAlongCenter;
 	if(!eyebrowLineSet || !eyeLineSet || !midLineSet || !smileLineSet) {
 		return;
@@ -398,7 +390,7 @@ void MarkerMapper::calculateFaceBox(void) {
 	line(prevFrame, faceBoxBottomLeft, faceBoxBottomRight, Scalar(0, 0, 255), 2);
 }
 
-void MarkerMapper::calculateFaceTransformation(void) {
+void FaceMapper::calculateFaceTransformation(void) {
 	vector<Point2d> *points;
 	if(!faceTransformationBaselinePointsSet) {
 		points = &faceTransformationBaselinePoints;
@@ -427,7 +419,7 @@ void MarkerMapper::calculateFaceTransformation(void) {
 	Mat essentialMatrix = findEssentialMat(faceTransformationBaselinePoints, faceTransformationCurrentPoints);
 	int valid = recoverPose(essentialMatrix, faceTransformationBaselinePoints, faceTransformationCurrentPoints, rotation, translation);
 	Vec3d rotAngles = Utilities::rotationMatrixToEulerAngles(rotation);
-	fprintf(stderr, "MarkerMapper: Recovered facial transformation with %d valid points. Rotation: <%.02f, %.02f, %.02f> Translation: <%.02f, %.02f, %.02f>\n", valid, rotAngles[0], rotAngles[1], rotAngles[2], translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
+	fprintf(stderr, "FaceMapper: Recovered facial transformation with %d valid points. Rotation: <%.02f, %.02f, %.02f> Translation: <%.02f, %.02f, %.02f>\n", valid, rotAngles[0], rotAngles[1], rotAngles[2], translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
 }
 
 }; //namespace YerFace

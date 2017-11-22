@@ -2,7 +2,6 @@
 
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
-#include "EyeTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "MarkerSeparator.hpp"
 
@@ -15,10 +14,10 @@ namespace YerFace {
 
 class MarkerTracker;
 
-class MarkerMapper {
+class FaceMapper {
 public:
-	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25, float myFaceAspectRatio = 0.65, float myPercentageOfCenterLineAboveEyeLine = 0.25);
-	~MarkerMapper();
+	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25, float myFaceAspectRatio = 0.65, float myPercentageOfCenterLineAboveEyeLine = 0.25);
+	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
@@ -38,8 +37,6 @@ private:
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
-	EyeTracker *leftEyeTracker;
-	EyeTracker *rightEyeTracker;
 	float eyelidBottomPointWeight;
 	float eyeLineLengthPercentage;
 	float faceAspectRatio;

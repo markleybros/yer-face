@@ -9,11 +9,10 @@
 #include "opencv2/tracking.hpp"
 
 #include "MarkerType.hpp"
-#include "MarkerMapper.hpp"
+#include "FaceMapper.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "MarkerSeparator.hpp"
-#include "EyeTracker.hpp"
 
 using namespace std;
 using namespace cv;
@@ -25,15 +24,14 @@ public:
 	RotatedRect marker;
 	unsigned int markerListIndex;
 	double distanceFromPointOfInterest;
-	double angleFromPointOfInterest;
 	double sqrtArea;
 };
 
-class MarkerMapper;
+class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -59,10 +57,9 @@ private:
 	static vector<MarkerTracker *> markerTrackers;
 
 	MarkerType markerType;
-	MarkerMapper *markerMapper;
+	FaceMapper *faceMapper;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
-	EyeTracker *eyeTracker;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 
