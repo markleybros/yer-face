@@ -7,7 +7,11 @@ using namespace std;
 
 namespace YerFace {
 
-FrameDerivatives::FrameDerivatives(double myClassificationScaleFactor) {
+FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myClassificationScaleFactor) {
+	if(myClassificationBoundingBox < 0) {
+		throw invalid_argument("Classification Bounding Box is invalid.");
+	}
+	classificationBoundingBox = myClassificationBoundingBox;
 	if(myClassificationScaleFactor < 0.0 || myClassificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
@@ -22,7 +26,23 @@ FrameDerivatives::~FrameDerivatives() {
 void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	currentFrame = newFrame;
 
+	Size frameSize = currentFrame.size();
+
+	if(classificationBoundingBox > 0) {
+		if(frameSize.width >= frameSize.height) {
+			classificationScaleFactor = (double)classificationBoundingBox / (double)frameSize.width;
+		} else {
+			classificationScaleFactor = (double)classificationBoundingBox / (double)frameSize.height;
+		}
+	}
+
 	resize(currentFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
+
+	static bool reportedScale = false;
+	if(!reportedScale) {
+		fprintf(stderr, "Scaled current frame <%dx%d> down to <%dx%d> for classification\n", frameSize.width, frameSize.height, classificationFrame.size().width, classificationFrame.size().height);
+		reportedScale = true;
+	}
 
 	previewFrameCloned = false;
 }

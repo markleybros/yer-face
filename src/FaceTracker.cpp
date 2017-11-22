@@ -46,7 +46,6 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	if(poseSmoothingExponent <= 0.0) {
 		throw invalid_argument("poseSmoothingExponent cannot be less than or equal to zero.");
 	}
-	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
@@ -61,6 +60,8 @@ FaceTracker::~FaceTracker() {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 TrackerState FaceTracker::processCurrentFrame(void) {
+	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
+
 	performTracking();
 
 	dlibClassificationFrame = cv_image<bgr_pixel>(frameDerivatives->getClassificationFrame());
