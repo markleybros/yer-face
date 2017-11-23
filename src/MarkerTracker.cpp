@@ -121,6 +121,9 @@ void MarkerTracker::performDetection(void) {
 	}
 	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
+
+	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
+
 	bool eyeLineSet;
 	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
 	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = faceMapper->getEyeLine();
@@ -136,11 +139,23 @@ void MarkerTracker::performDetection(void) {
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
 		Rect2d eyeRect;
-		bool eyeRectSet = false; //FIXME < V
-		// std::tie(eyeRect, eyeRectSet) = eyeTracker->getEyeRect();
-		if(!eyeRectSet) {
-			return;
+		Point2d eyePointA, eyePointB;
+
+		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
+			eyePointA = facialFeatures.eyeLeftInnerCorner;
+			eyePointB = facialFeatures.eyeLeftOuterCorner;
+		} else {
+			eyePointA = facialFeatures.eyeRightOuterCorner;
+			eyePointB = facialFeatures.eyeRightInnerCorner;
 		}
+
+		double eyePointDist = Utilities::lineDistance(eyePointA, eyePointB);
+		eyeRect.x = eyePointA.x;
+		eyeRect.y = ((eyePointA.y + eyePointB.y) / 2.0) - (eyePointDist / 2.0);
+		eyeRect.width = eyePointDist;
+		eyeRect.height = eyePointDist;
+
+		eyeRect = Utilities::insetBox(eyeRect, 1.5); // FIXME - magic numbers
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
 
 		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);

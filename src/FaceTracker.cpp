@@ -22,7 +22,6 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	trackingBoxSet = false;
 	faceRectSet = false;
 	facialFeaturesSet = false;
-	facialFeatures3dSet = false;
 	cameraModelSet = false;
 	poseSet = false;
 
@@ -203,46 +202,58 @@ void FaceTracker::doIdentifyFeatures(void) {
 	Mat prevFrame = frameDerivatives->getPreviewFrame();
 
 	facialFeatures.clear();
-	if(!facialFeatures3dSet) {
-		facialFeatures3d.clear();
-	}
+	facialFeatures3d.clear();
 	dlib::point part;
-	std::vector<int> featureIndexes = {IDX_NOSE_SELLION, IDX_EYE_RIGHT_OUTER_CORNER, IDX_EYE_LEFT_OUTER_CORNER, IDX_JAW_RIGHT_TOP, IDX_JAW_LEFT_TOP, IDX_NOSE_TIP, IDX_MENTON};
+	Point2d partPoint;
+	std::vector<int> featureIndexes = {IDX_NOSE_SELLION, IDX_EYE_RIGHT_OUTER_CORNER, IDX_EYE_LEFT_OUTER_CORNER, IDX_EYE_RIGHT_INNER_CORNER, IDX_EYE_LEFT_INNER_CORNER, IDX_JAW_RIGHT_TOP, IDX_JAW_LEFT_TOP, IDX_NOSE_TIP, IDX_MENTON};
 	for(int featureIndex : featureIndexes) {
 		part = result.part(featureIndex);
-		Point2d partPoint;
 		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint)) {
 			trackerState = LOST;
 			return;
 		}
 
-		facialFeatures.push_back(partPoint);
-		if(!facialFeatures3dSet) {
-			switch(featureIndex) {
-				default:
-					throw logic_error("bad facial feature index");
-				case IDX_NOSE_SELLION:
-					facialFeatures3d.push_back(VERTEX_NOSE_SELLION);
-					break;
-				case IDX_EYE_RIGHT_OUTER_CORNER:
-					facialFeatures3d.push_back(VERTEX_EYE_RIGHT_OUTER_CORNER);
-					break;
-				case IDX_EYE_LEFT_OUTER_CORNER:
-					facialFeatures3d.push_back(VERTEX_EYE_LEFT_OUTER_CORNER);
-					break;
-				case IDX_JAW_RIGHT_TOP:
-					facialFeatures3d.push_back(VERTEX_RIGHT_EAR);
-					break;
-				case IDX_JAW_LEFT_TOP:
-					facialFeatures3d.push_back(VERTEX_LEFT_EAR);
-					break;
-				case IDX_NOSE_TIP:
-					facialFeatures3d.push_back(VERTEX_NOSE_TIP);
-					break;
-				case IDX_MENTON:
-					facialFeatures3d.push_back(VERTEX_MENTON);
-					break;
-			}
+		bool pushCorrelationPoint = true;
+		switch(featureIndex) {
+			default:
+				throw logic_error("bad facial feature index");
+			case IDX_NOSE_SELLION:
+				facialFeatures3d.push_back(VERTEX_NOSE_SELLION);
+				facialFeaturesExposed.noseSellion = partPoint;
+				break;
+			case IDX_EYE_RIGHT_OUTER_CORNER:
+				facialFeatures3d.push_back(VERTEX_EYE_RIGHT_OUTER_CORNER);
+				facialFeaturesExposed.eyeRightOuterCorner = partPoint;
+				break;
+			case IDX_EYE_LEFT_OUTER_CORNER:
+				facialFeatures3d.push_back(VERTEX_EYE_LEFT_OUTER_CORNER);
+				facialFeaturesExposed.eyeLeftOuterCorner = partPoint;
+				break;
+			case IDX_EYE_RIGHT_INNER_CORNER:
+				facialFeaturesExposed.eyeRightInnerCorner = partPoint;
+				pushCorrelationPoint = false;
+				break;
+			case IDX_EYE_LEFT_INNER_CORNER:
+				facialFeaturesExposed.eyeLeftInnerCorner = partPoint;
+				pushCorrelationPoint = false;
+				break;
+			case IDX_JAW_RIGHT_TOP:
+				facialFeatures3d.push_back(VERTEX_RIGHT_EAR);
+				break;
+			case IDX_JAW_LEFT_TOP:
+				facialFeatures3d.push_back(VERTEX_LEFT_EAR);
+				break;
+			case IDX_NOSE_TIP:
+				facialFeatures3d.push_back(VERTEX_NOSE_TIP);
+				facialFeaturesExposed.noseTip = partPoint;
+				break;
+			case IDX_MENTON:
+				facialFeatures3d.push_back(VERTEX_MENTON);
+				facialFeaturesExposed.menton = partPoint;
+				break;
+		}
+		if(pushCorrelationPoint) {
+			facialFeatures.push_back(partPoint);
 		}
 	}
 
@@ -259,11 +270,10 @@ void FaceTracker::doIdentifyFeatures(void) {
 		trackerState = LOST;
 		return;
 	}
-	facialFeatures.push_back((mouthTop + mouthBottom) * 0.5);
-	if(!facialFeatures3dSet) {
-		facialFeatures3d.push_back(VERTEX_STOMMION);
-		facialFeatures3dSet = true;
-	}
+	partPoint = (mouthTop + mouthBottom) * 0.5;
+	facialFeatures.push_back(partPoint);
+	facialFeaturesExposed.stommion = partPoint;
+	facialFeatures3d.push_back(VERTEX_STOMMION);
 	facialFeaturesSet = true;
 }
 
@@ -386,5 +396,8 @@ FacialBoundingBox FaceTracker::getFacialBoundingBox(void) {
 	return box;
 }
 
+FacialFeatures FaceTracker::getFacialFeatures(void) {
+	return facialFeaturesExposed;
+}
 
 }; //namespace YerFace

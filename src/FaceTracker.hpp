@@ -30,8 +30,8 @@ enum DlibFeatureIndexes {
 	IDX_EYE_LEFT_OUTER_CORNER = 45,
 	IDX_MOUTH_RIGHT_OUTER_CORNER = 48,
 	IDX_MOUTH_LEFT_OUTER_CORNER = 54,
-	IDX_MOUTH_CENTER_INNER_TOP=62,
-	IDX_MOUTH_CENTER_INNER_BOTTOM=66
+	IDX_MOUTH_CENTER_INNER_TOP = 62,
+	IDX_MOUTH_CENTER_INNER_BOTTOM = 66
 };
 
 //Unit centimeters. Values taken from https://en.wikipedia.org/wiki/Human_head
@@ -57,6 +57,11 @@ public:
 	bool set;
 };
 
+class FacialFeatures {
+public:
+	Point2d menton, noseSellion, noseTip, stommion, eyeRightOuterCorner, eyeLeftOuterCorner, eyeRightInnerCorner, eyeLeftInnerCorner;
+};
+
 class FaceTracker {
 public:
 	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 2.0);
@@ -65,6 +70,7 @@ public:
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
 	FacialBoundingBox getFacialBoundingBox(void);
+	FacialFeatures getFacialFeatures(void);
 private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);
@@ -98,10 +104,9 @@ private:
 	bool faceRectSet;
 
 	std::vector<Point2d> facialFeatures;
-	bool facialFeaturesSet;
-
+	FacialFeatures facialFeaturesExposed;
 	std::vector<Point3d> facialFeatures3d;
-	bool facialFeatures3dSet;
+	bool facialFeaturesSet;
 
 	Mat cameraMatrix, distortionCoefficients;
 	bool cameraModelSet;
