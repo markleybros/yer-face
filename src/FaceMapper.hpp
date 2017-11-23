@@ -44,7 +44,6 @@ private:
 	void calculateMidLine(void);
 	void calculateSmileLine(void);
 	void calculateCenterLine(bool intermediate);
-	void calculateFaceBox(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;

@@ -130,8 +130,6 @@ void FaceMapper::processCurrentFrame(void) {
 
 	markerLipsLeftBottom->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
-
-	calculateFaceBox();
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
@@ -404,49 +402,6 @@ void FaceMapper::calculateCenterLine(bool intermediate) {
 	centerLineBottom.y = eyeLineCenter.y + boxHeight - boxHeightAboveEyeLine;
 	centerLineBottom.x = (centerLineBottom.y - centerLineIntercept) / centerLineSlope;
 	centerLineSet = true;
-}
-
-void FaceMapper::calculateFaceBox(void) {
-	vector<Point2d> anglesAlongCenter;
-	if(!eyebrowLineSet || !eyeLineSet || !midLineSet || !smileLineSet) {
-		return;
-	}
-	double eyebrowLineAngle = Utilities::radiansToDegrees(Utilities::lineAngleRadians(eyebrowLineLeft, eyebrowLineRight));
-	double eyeLineAngle = Utilities::radiansToDegrees(Utilities::lineAngleRadians(eyeLineLeft, eyeLineRight));
-	double midLineAngle = Utilities::radiansToDegrees(Utilities::lineAngleRadians(midLineLeft, midLineRight));
-	double smileLineAngle = Utilities::radiansToDegrees(Utilities::lineAngleRadians(smileLineLeft, smileLineRight));
-	anglesAlongCenter.push_back(Point2d(eyebrowLineAngle, eyebrowLineCenter.y));
-	anglesAlongCenter.push_back(Point2d(eyeLineAngle, eyeLineCenter.y));
-	anglesAlongCenter.push_back(Point2d(midLineAngle, midLineCenter.y));
-	anglesAlongCenter.push_back(Point2d(smileLineAngle, smileLineCenter.y));
-
-	double slope, intercept;
-	Utilities::lineBestFit(anglesAlongCenter, &slope, &intercept);
-
-	double eyebrowLineDistance = Utilities::lineDistance(eyebrowLineLeft, eyebrowLineRight);
-	double boxWidthHalf = eyebrowLineDistance / 2.0;
-
-	double faceBoxTopAngle = (centerLineTop.y - intercept) / slope;
-	Point2d faceBoxTopLeft, faceBoxTopRight;
-
-	Vec2d faceBoxTopVector = Utilities::radiansToVector(Utilities::degreesToRadians(faceBoxTopAngle));
-	faceBoxTopLeft.x = centerLineTop.x + (faceBoxTopVector[0] * boxWidthHalf);
-	faceBoxTopLeft.y = centerLineTop.y + (faceBoxTopVector[1] * boxWidthHalf);
-	faceBoxTopRight.x = centerLineTop.x - (faceBoxTopVector[0] * boxWidthHalf);
-	faceBoxTopRight.y = centerLineTop.y - (faceBoxTopVector[1] * boxWidthHalf);
-
-	double faceBoxBottomAngle = (centerLineBottom.y - intercept) / slope;
-	Point2d faceBoxBottomLeft, faceBoxBottomRight;
-
-	Vec2d faceBoxBottomVector = Utilities::radiansToVector(Utilities::degreesToRadians(faceBoxBottomAngle));
-	faceBoxBottomLeft.x = centerLineBottom.x + (faceBoxBottomVector[0] * boxWidthHalf);
-	faceBoxBottomLeft.y = centerLineBottom.y + (faceBoxBottomVector[1] * boxWidthHalf);
-	faceBoxBottomRight.x = centerLineBottom.x - (faceBoxBottomVector[0] * boxWidthHalf);
-	faceBoxBottomRight.y = centerLineBottom.y - (faceBoxBottomVector[1] * boxWidthHalf);
-
-	Mat prevFrame = frameDerivatives->getPreviewFrame();
-	line(prevFrame, faceBoxTopLeft, faceBoxTopRight, Scalar(0, 0, 255), 2);
-	line(prevFrame, faceBoxBottomLeft, faceBoxBottomRight, Scalar(0, 0, 255), 2);
 }
 
 }; //namespace YerFace

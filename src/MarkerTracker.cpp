@@ -122,8 +122,6 @@ void MarkerTracker::performDetection(void) {
 	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
 
-	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
-
 	bool eyeLineSet;
 	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
 	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = faceMapper->getEyeLine();
