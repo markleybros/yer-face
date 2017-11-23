@@ -132,14 +132,19 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightBottom->processCurrentFrame();
 
 	calculateFaceBox();
-
-	//calculateFaceTransformation();
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	if(verbose) {
 		markerSeparator->renderPreviewHUD(true);
+
+		if(leftEyeRect.set) {
+			rectangle(frame, leftEyeRect.rect, Scalar(0, 0, 255));
+		}
+		if(rightEyeRect.set) {
+			rectangle(frame, rightEyeRect.rect, Scalar(0, 0, 255));
+		}
 	}
 	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
 	size_t markerTrackersCount = (*markerTrackers).size();
@@ -221,7 +226,7 @@ void FaceMapper::calculateEyeRects(void) {
 	leftEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
 	leftEyeRect.rect.width = dist;
 	leftEyeRect.rect.height = dist;
-	leftEyeRect.rect = Utilities::insetBox(leftEyeRect.rect, 1.5); // FIXME - magic numbers
+	leftEyeRect.rect = Utilities::insetBox(leftEyeRect.rect, 1.25); // FIXME - magic numbers
 	leftEyeRect.set = true;
 
 	pointA = facialFeatures.eyeRightOuterCorner;
@@ -231,7 +236,7 @@ void FaceMapper::calculateEyeRects(void) {
 	rightEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
 	rightEyeRect.rect.width = dist;
 	rightEyeRect.rect.height = dist;
-	rightEyeRect.rect = Utilities::insetBox(rightEyeRect.rect, 1.5); // FIXME - magic numbers
+	rightEyeRect.rect = Utilities::insetBox(rightEyeRect.rect, 1.25); // FIXME - magic numbers
 	rightEyeRect.set = true;
 }
 
