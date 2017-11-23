@@ -60,6 +60,7 @@ public:
 class FacialFeatures {
 public:
 	Point2d menton, noseSellion, noseTip, stommion, eyeRightOuterCorner, eyeLeftOuterCorner, eyeRightInnerCorner, eyeLeftInnerCorner;
+	bool set;
 };
 
 class FaceTracker {

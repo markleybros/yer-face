@@ -90,6 +90,9 @@ FaceMapper::~FaceMapper() {
 }
 
 void FaceMapper::processCurrentFrame(void) {
+	facialFeatures = faceTracker->getFacialFeatures();
+	calculateEyeRects();
+
 	markerSeparator->processCurrentFrame();
 
 	markerEyelidLeftTop->processCurrentFrame();
@@ -145,7 +148,6 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 	}
 	if(eyeLineSet) {
 		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
-		Utilities::drawX(frame, eyeLineLeft, Scalar(0, 0, 255), 10, 3);
 	}
 	if(eyebrowLineSet) {
 		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
@@ -173,6 +175,14 @@ MarkerSeparator *FaceMapper::getMarkerSeparator(void) {
 	return markerSeparator;
 }
 
+EyeRect FaceMapper::getLeftEyeRect(void) {
+	return leftEyeRect;
+}
+
+EyeRect FaceMapper::getRightEyeRect(void) {
+	return rightEyeRect;
+}
+
 tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyeLine(void) {
 	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet);
 }
@@ -191,6 +201,38 @@ tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getSmileLine(void) {
 
 tuple<Point2d, Point2d, double, double, bool, bool> FaceMapper::getCenterLine(void) {
 	return std::make_tuple(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet);
+}
+
+void FaceMapper::calculateEyeRects(void) {
+	Point2d pointA, pointB;
+	double dist;
+
+	leftEyeRect.set = false;
+	rightEyeRect.set = false;
+
+	if(!facialFeatures.set) {
+		return;
+	}
+
+	pointA = facialFeatures.eyeLeftInnerCorner;
+	pointB = facialFeatures.eyeLeftOuterCorner;
+	dist = Utilities::lineDistance(pointA, pointB);
+	leftEyeRect.rect.x = pointA.x;
+	leftEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
+	leftEyeRect.rect.width = dist;
+	leftEyeRect.rect.height = dist;
+	leftEyeRect.rect = Utilities::insetBox(leftEyeRect.rect, 1.5); // FIXME - magic numbers
+	leftEyeRect.set = true;
+
+	pointA = facialFeatures.eyeRightOuterCorner;
+	pointB = facialFeatures.eyeRightInnerCorner;
+	dist = Utilities::lineDistance(pointA, pointB);
+	rightEyeRect.rect.x = pointA.x;
+	rightEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
+	rightEyeRect.rect.width = dist;
+	rightEyeRect.rect.height = dist;
+	rightEyeRect.rect = Utilities::insetBox(rightEyeRect.rect, 1.5); // FIXME - magic numbers
+	rightEyeRect.set = true;
 }
 
 void FaceMapper::calculateEyeLine(void) {

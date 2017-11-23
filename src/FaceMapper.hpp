@@ -14,6 +14,12 @@ namespace YerFace {
 
 class MarkerTracker;
 
+class EyeRect {
+public:
+	Rect2d rect;
+	bool set;
+};
+
 class FaceMapper {
 public:
 	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25, float myFaceAspectRatio = 0.65, float myPercentageOfCenterLineAboveEyeLine = 0.25);
@@ -23,12 +29,15 @@ public:
 	FrameDerivatives *getFrameDerivatives(void);
 	FaceTracker *getFaceTracker(void);
 	MarkerSeparator *getMarkerSeparator(void);
+	EyeRect getLeftEyeRect(void);
+	EyeRect getRightEyeRect(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getSmileLine(void);
 	tuple<Point2d, Point2d, double, double, bool, bool> getCenterLine(void);
 private:
+	void calculateEyeRects(void);
 	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
@@ -71,6 +80,10 @@ private:
 	
 	MarkerTracker *markerLipsLeftBottom;
 	MarkerTracker *markerLipsRightBottom;
+
+	FacialFeatures facialFeatures;
+	EyeRect leftEyeRect;
+	EyeRect rightEyeRect;
 
 	Point2d eyeLineLeft;
 	Point2d eyeLineRight;

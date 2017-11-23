@@ -397,6 +397,7 @@ FacialBoundingBox FaceTracker::getFacialBoundingBox(void) {
 }
 
 FacialFeatures FaceTracker::getFacialFeatures(void) {
+	facialFeaturesExposed.set = facialFeaturesSet;
 	return facialFeaturesExposed;
 }
 

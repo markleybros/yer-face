@@ -138,27 +138,18 @@ void MarkerTracker::performDetection(void) {
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-		Rect2d eyeRect;
-		Point2d eyePointA, eyePointB;
-
+		EyeRect eyeRect;
 		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
-			eyePointA = facialFeatures.eyeLeftInnerCorner;
-			eyePointB = facialFeatures.eyeLeftOuterCorner;
+			eyeRect = faceMapper->getLeftEyeRect();
 		} else {
-			eyePointA = facialFeatures.eyeRightOuterCorner;
-			eyePointB = facialFeatures.eyeRightInnerCorner;
+			eyeRect = faceMapper->getRightEyeRect();
 		}
+		if(!eyeRect.set) {
+			return;
+		}
+		Point2d eyeRectCenter = Utilities::centerRect(eyeRect.rect);
 
-		double eyePointDist = Utilities::lineDistance(eyePointA, eyePointB);
-		eyeRect.x = eyePointA.x;
-		eyeRect.y = ((eyePointA.y + eyePointB.y) / 2.0) - (eyePointDist / 2.0);
-		eyeRect.width = eyePointDist;
-		eyeRect.height = eyePointDist;
-
-		eyeRect = Utilities::insetBox(eyeRect, 1.5); // FIXME - magic numbers
-		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
-
-		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);
+		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect.rect);
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		
 		if(markerCandidateList.size() == 1) {
