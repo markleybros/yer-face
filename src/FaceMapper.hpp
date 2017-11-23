@@ -20,6 +20,9 @@ public:
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
+	FrameDerivatives *getFrameDerivatives(void);
+	FaceTracker *getFaceTracker(void);
+	MarkerSeparator *getMarkerSeparator(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
@@ -33,7 +36,6 @@ private:
 	void calculateSmileLine(void);
 	void calculateCenterLine(bool intermediate);
 	void calculateFaceBox(void);
-	void calculateFaceTransformation(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;

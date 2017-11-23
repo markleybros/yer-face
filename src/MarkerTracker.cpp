@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -30,15 +30,6 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	if(faceMapper == NULL) {
 		throw invalid_argument("faceMapper cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
-	}
-	markerSeparator = myMarkerSeparator;
-	if(markerSeparator == NULL) {
-		throw invalid_argument("markerSeparator cannot be NULL");
-	}
-
 	trackingBoxPercentage = myTrackingBoxPercentage;
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
@@ -53,6 +44,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	markerPointSet = false;
 	trackingBoxSet = false;
 	markerList = NULL;
+
+	frameDerivatives = faceMapper->getFrameDerivatives();
+	faceTracker = faceMapper->getFaceTracker();
+	markerSeparator = faceMapper->getMarkerSeparator();
 
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
 }

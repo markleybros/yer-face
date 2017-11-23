@@ -47,31 +47,31 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, frameDerivatives, markerSeparator);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, frameDerivatives, markerSeparator);
-	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this, frameDerivatives, markerSeparator);
-	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this, frameDerivatives, markerSeparator);
+	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this);
+	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this);
+	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this);
+	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this);
 
-	markerEyebrowLeftInner = new MarkerTracker(EyebrowLeftInner, this, frameDerivatives, markerSeparator);
-	markerEyebrowRightInner = new MarkerTracker(EyebrowRightInner, this, frameDerivatives, markerSeparator);
-	markerEyebrowLeftMiddle = new MarkerTracker(EyebrowLeftMiddle, this, frameDerivatives, markerSeparator);
-	markerEyebrowRightMiddle = new MarkerTracker(EyebrowRightMiddle, this, frameDerivatives, markerSeparator);
-	markerEyebrowLeftOuter = new MarkerTracker(EyebrowLeftOuter, this, frameDerivatives, markerSeparator);
-	markerEyebrowRightOuter = new MarkerTracker(EyebrowRightOuter, this, frameDerivatives, markerSeparator);
+	markerEyebrowLeftInner = new MarkerTracker(EyebrowLeftInner, this);
+	markerEyebrowRightInner = new MarkerTracker(EyebrowRightInner, this);
+	markerEyebrowLeftMiddle = new MarkerTracker(EyebrowLeftMiddle, this);
+	markerEyebrowRightMiddle = new MarkerTracker(EyebrowRightMiddle, this);
+	markerEyebrowLeftOuter = new MarkerTracker(EyebrowLeftOuter, this);
+	markerEyebrowRightOuter = new MarkerTracker(EyebrowRightOuter, this);
 
-	markerCheekLeft = new MarkerTracker(CheekLeft, this, frameDerivatives, markerSeparator);
-	markerCheekRight = new MarkerTracker(CheekRight, this, frameDerivatives, markerSeparator);
+	markerCheekLeft = new MarkerTracker(CheekLeft, this);
+	markerCheekRight = new MarkerTracker(CheekRight, this);
 	
-	markerJaw = new MarkerTracker(Jaw, this, frameDerivatives, markerSeparator);
+	markerJaw = new MarkerTracker(Jaw, this);
 
-	markerLipsLeftCorner = new MarkerTracker(LipsLeftCorner, this, frameDerivatives, markerSeparator);
-	markerLipsRightCorner = new MarkerTracker(LipsRightCorner, this, frameDerivatives, markerSeparator);
+	markerLipsLeftCorner = new MarkerTracker(LipsLeftCorner, this);
+	markerLipsRightCorner = new MarkerTracker(LipsRightCorner, this);
 
-	markerLipsLeftTop = new MarkerTracker(LipsLeftTop, this, frameDerivatives, markerSeparator);
-	markerLipsRightTop = new MarkerTracker(LipsRightTop, this, frameDerivatives, markerSeparator);
+	markerLipsLeftTop = new MarkerTracker(LipsLeftTop, this);
+	markerLipsRightTop = new MarkerTracker(LipsRightTop, this);
 
-	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this, frameDerivatives, markerSeparator);
-	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this, frameDerivatives, markerSeparator);
+	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this);
+	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this);
 	
 	fprintf(stderr, "FaceMapper object constructed and ready to go!\n");
 }
@@ -159,6 +159,18 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 	if(centerLineSet) {
 		line(frame, centerLineTop, centerLineBottom, Scalar(0, 255, 255), 2);
 	}
+}
+
+FrameDerivatives *FaceMapper::getFrameDerivatives(void) {
+	return frameDerivatives;
+}
+
+FaceTracker *FaceMapper::getFaceTracker(void) {
+	return faceTracker;
+}
+
+MarkerSeparator *FaceMapper::getMarkerSeparator(void) {
+	return markerSeparator;
 }
 
 tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyeLine(void) {
@@ -388,38 +400,6 @@ void FaceMapper::calculateFaceBox(void) {
 	Mat prevFrame = frameDerivatives->getPreviewFrame();
 	line(prevFrame, faceBoxTopLeft, faceBoxTopRight, Scalar(0, 0, 255), 2);
 	line(prevFrame, faceBoxBottomLeft, faceBoxBottomRight, Scalar(0, 0, 255), 2);
-}
-
-void FaceMapper::calculateFaceTransformation(void) {
-	vector<Point2d> *points;
-	if(!faceTransformationBaselinePointsSet) {
-		points = &faceTransformationBaselinePoints;
-	} else {
-		points = &faceTransformationCurrentPoints;
-	}
-	points->clear();
-	//vector<MarkerTracker *> markers = {markerEyelidLeftTop, markerEyelidRightTop, markerEyelidLeftBottom, markerEyelidRightBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter, markerCheekLeft, markerCheekRight, markerJaw, markerLipsLeftCorner, markerLipsRightCorner, markerLipsLeftTop, markerLipsRightTop, markerLipsLeftBottom, markerLipsRightBottom };
-	vector<MarkerTracker *> markers = {markerEyelidLeftTop, markerEyelidRightTop, markerEyelidLeftBottom, markerEyelidRightBottom, markerEyebrowLeftInner, markerEyebrowLeftOuter, markerEyebrowRightInner, markerEyebrowRightOuter, markerCheekLeft, markerCheekRight };
-
-	size_t count = markers.size();
-	for(size_t i = 0; i < count; i++) {
-		bool pointSet;
-		Point2d point;
-		std::tie(point, pointSet) = markers[i]->getMarkerPoint();
-		if(!pointSet) {
-			return;
-		}
-		points->push_back(point);
-	}
-	if(!faceTransformationBaselinePointsSet) {
-		faceTransformationBaselinePointsSet = true;
-		return;
-	}
-	Mat rotation, translation;
-	Mat essentialMatrix = findEssentialMat(faceTransformationBaselinePoints, faceTransformationCurrentPoints);
-	int valid = recoverPose(essentialMatrix, faceTransformationBaselinePoints, faceTransformationCurrentPoints, rotation, translation);
-	Vec3d rotAngles = Utilities::rotationMatrixToEulerAngles(rotation);
-	fprintf(stderr, "FaceMapper: Recovered facial transformation with %d valid points. Rotation: <%.02f, %.02f, %.02f> Translation: <%.02f, %.02f, %.02f>\n", valid, rotAngles[0], rotAngles[1], rotAngles[2], translation.at<double>(0), translation.at<double>(1), translation.at<double>(2));
 }
 
 }; //namespace YerFace

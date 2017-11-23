@@ -10,6 +10,7 @@
 
 #include "MarkerType.hpp"
 #include "FaceMapper.hpp"
+#include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "MarkerSeparator.hpp"
@@ -31,7 +32,7 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -58,10 +59,12 @@ private:
 
 	MarkerType markerType;
 	FaceMapper *faceMapper;
-	FrameDerivatives *frameDerivatives;
-	MarkerSeparator *markerSeparator;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
+
+	FrameDerivatives *frameDerivatives;
+	MarkerSeparator *markerSeparator;
+	FaceTracker *faceTracker;
 
 	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;
