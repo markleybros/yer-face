@@ -58,7 +58,7 @@ double Utilities::lineAngleRadians(Point2d a, Point2d b) {
 	return atan2(delta.y, delta.x);
 }
 
-void Utilities::lineBestFit(vector<Point2d> points, double *m, double *b) {
+void Utilities::lineBestFit(std::vector<Point2d> points, double *m, double *b) {
 	Vec4d line;
 	fitLine(points, line, DIST_L2, 0, 0.01, 0.01);
 
@@ -88,20 +88,61 @@ double Utilities::radiansToDegrees(double radians, bool normalize) {
 	return degrees;
 }
 
-Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R) {
+double Utilities::degreesDelta(double angleA, double angleB) {
+	return 180 - std::abs(std::abs(angleA - angleB) - 180);
+}
+
+Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R, bool returnDegrees) {
 	double sy = std::sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0));
 
 	double x, y, z;
 	if(sy > 0.0) {
-		x = Utilities::radiansToDegrees(atan2(R.at<double>(2,1) , R.at<double>(2,2)));
-		y = Utilities::radiansToDegrees(atan2(-R.at<double>(2,0), sy));
-		z = Utilities::radiansToDegrees(atan2(R.at<double>(1,0), R.at<double>(0,0)));
+		x = atan2(R.at<double>(2,1) , R.at<double>(2,2));
+		y = atan2(-R.at<double>(2,0), sy);
+		z = atan2(R.at<double>(1,0), R.at<double>(0,0));
 	} else {
-		x = Utilities::radiansToDegrees(atan2(-R.at<double>(1,2), R.at<double>(1,1)));
-		y = Utilities::radiansToDegrees(atan2(-R.at<double>(2,0), sy));
+		x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
+		y = atan2(-R.at<double>(2,0), sy);
 		z = 0;
 	}
+	if(returnDegrees) {
+		return Vec3d(Utilities::radiansToDegrees(x), Utilities::radiansToDegrees(y), Utilities::radiansToDegrees(z));
+	}
 	return Vec3d(x, y, z);
+}
+
+Mat Utilities::eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees) {
+	Vec3d rot;
+	if(expectDegrees) {
+		rot = Vec3d(Utilities::degreesToRadians(R[0]), Utilities::degreesToRadians(R[1]), Utilities::degreesToRadians(R[2]));
+	} else {
+		rot = Vec3d(R);
+	}
+
+	Mat matrixX = (Mat_<double>(3,3) <<
+		1.0, 0.0,          0.0,
+		0.0, cos(rot[0]), -sin(rot[0]),
+		0.0, sin(rot[0]),  cos(rot[0]));
+
+	Mat matrixY = (Mat_<double>(3,3) <<
+		 cos(rot[1]), 0.0, sin(rot[1]),
+		 0.0,         1.0, 0.0,
+		-sin(rot[1]), 0.0, cos(rot[1]));
+
+	Mat matrixZ = (Mat_<double>(3,3) <<
+		cos(rot[2]), -sin(rot[2]), 0.0,
+		sin(rot[2]),  cos(rot[2]), 0.0,
+		0.0,          0.0,         1.0);
+
+	Mat matrix = matrixZ * matrixY * matrixX;
+	return matrix;
+}
+
+Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoint) {
+	return (Mat_<double>(3,3) <<
+		focalLength, 0.0,         principalPoint.x,
+		0.0,         focalLength, principalPoint.y,
+		0.0,         0.0,         1.0);
 }
 
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {

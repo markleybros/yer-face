@@ -36,15 +36,15 @@ void Metrics::endFrame(void) {
 	}
 	averageTimeSeconds = averageTimeSeconds / (double)numTimes;
 	fps = 1.0 / (((now - frameTickStartTimes.back()) / getTickFrequency()) / frameTickStartTimes.size());
-	while(frameProcessTimes.size() >= frameBufferSize) {
+	while(frameProcessTimes.size() > frameBufferSize) {
 		frameProcessTimes.pop_back();
 	}
-	while(frameTickStartTimes.size() >= frameBufferSize) {
+	while(frameTickStartTimes.size() > frameBufferSize) {
 		frameTickStartTimes.pop_back();
 	}
 	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
 	snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
-	fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
+	// fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
 }
 
 double Metrics::getAverageTimeSeconds(void) {

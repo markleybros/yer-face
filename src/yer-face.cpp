@@ -10,28 +10,25 @@
 // alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
 
 #include "FaceTracker.hpp"
-#include "EyeTracker.hpp"
 #include "FrameDerivatives.hpp"
-#include "MarkerMapper.hpp"
+#include "FaceMapper.hpp"
 #include "Metrics.hpp"
 
 #include <iostream>
 #include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 using namespace cv;
 using namespace YerFace;
 
-String face_cascade_name;
-String eyes_cascade_name;
 String capture_file;
+String dlib_shape_predictor;
 String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
-EyeTracker *eyeTrackerLeft;
-EyeTracker *eyeTrackerRight;
-MarkerMapper *markerMapper;
+FaceMapper *faceMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
 
@@ -39,8 +36,7 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{face_cascade|data/haarcascades/haarcascade_frontalface_default.xml|Model for detecting the face within the frame.}"
-		"{eyes_cascade|data/haarcascades/haarcascade_eye.xml|Model for detecting eyes within the face.}"
+		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
 		"{capture_file|/dev/video0|Video file or video capture device file to open.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -53,20 +49,17 @@ int main(int argc, const char** argv) {
 		parser.printErrors();
 		return 1;
 	}
+	capture_file = parser.get<string>("capture_file");
+	dlib_shape_predictor = parser.get<string>("dlib_shape_predictor");
 
 	//A couple of OpenCV classes.
-	face_cascade_name = parser.get<string>("face_cascade");
-	eyes_cascade_name = parser.get<string>("eyes_cascade");
-	capture_file = parser.get<string>("capture_file");
 	VideoCapture capture;
 	Mat frame;
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
-	faceTracker = new FaceTracker(face_cascade_name, frameDerivatives);
-	eyeTrackerLeft = new EyeTracker(LeftEye, eyes_cascade_name, frameDerivatives, faceTracker);
-	eyeTrackerRight = new EyeTracker(RightEye, eyes_cascade_name, frameDerivatives, faceTracker);
-	markerMapper = new MarkerMapper(frameDerivatives, faceTracker, eyeTrackerLeft, eyeTrackerRight);
+	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
+	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
 	metrics = new Metrics(30);
 
 	//Open the video stream.
@@ -88,14 +81,10 @@ int main(int argc, const char** argv) {
 
 		frameDerivatives->setCurrentFrame(frame);
 		faceTracker->processCurrentFrame();
-		eyeTrackerLeft->processCurrentFrame();
-		eyeTrackerRight->processCurrentFrame();
-		markerMapper->processCurrentFrame();
+		faceMapper->processCurrentFrame();
 
-		faceTracker->renderPreviewHUD();
-		eyeTrackerLeft->renderPreviewHUD();
-		eyeTrackerRight->renderPreviewHUD();
-		markerMapper->renderPreviewHUD(false);
+		faceTracker->renderPreviewHUD(false);
+		faceMapper->renderPreviewHUD(false);
 
 		metrics->endFrame();
 
@@ -115,9 +104,7 @@ int main(int argc, const char** argv) {
 	}
 
 	delete metrics;
-	delete markerMapper;
-	delete eyeTrackerRight;
-	delete eyeTrackerLeft;
+	delete faceMapper;
 	delete faceTracker;
 	delete frameDerivatives;
 	return 0;

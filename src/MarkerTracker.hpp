@@ -9,11 +9,11 @@
 #include "opencv2/tracking.hpp"
 
 #include "MarkerType.hpp"
-#include "MarkerMapper.hpp"
+#include "FaceMapper.hpp"
+#include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "MarkerSeparator.hpp"
-#include "EyeTracker.hpp"
 
 using namespace std;
 using namespace cv;
@@ -25,15 +25,14 @@ public:
 	RotatedRect marker;
 	unsigned int markerListIndex;
 	double distanceFromPointOfInterest;
-	double angleFromPointOfInterest;
 	double sqrtArea;
 };
 
-class MarkerMapper;
+class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker = NULL, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -54,17 +53,18 @@ private:
 	bool claimMarkerCandidate(MarkerCandidate markerCandidate);
 	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList);
 	void assignMarkerPoint(void);
-	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL);
+	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;
 
 	MarkerType markerType;
-	MarkerMapper *markerMapper;
-	FrameDerivatives *frameDerivatives;
-	MarkerSeparator *markerSeparator;
-	EyeTracker *eyeTracker;
+	FaceMapper *faceMapper;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
+
+	FrameDerivatives *frameDerivatives;
+	MarkerSeparator *markerSeparator;
+	FaceTracker *faceTracker;
 
 	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;

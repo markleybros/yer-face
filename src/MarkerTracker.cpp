@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapper, FrameDerivatives *myFrameDerivatives, MarkerSeparator *myMarkerSeparator, EyeTracker *myEyeTracker, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -26,37 +26,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapp
 	}
 	markerTrackers.push_back(this);
 
-	markerMapper = myMarkerMapper;
-	if(markerMapper == NULL) {
-		throw invalid_argument("markerMapper cannot be NULL");
+	faceMapper = myFaceMapper;
+	if(faceMapper == NULL) {
+		throw invalid_argument("faceMapper cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
-	}
-	markerSeparator = myMarkerSeparator;
-	if(markerSeparator == NULL) {
-		throw invalid_argument("markerSeparator cannot be NULL");
-	}
-	eyeTracker = myEyeTracker;
-	if(eyeTracker == NULL) {
-		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-			throw invalid_argument("eyeTracker cannot be NULL if markerType is one of the Eyelids");
-		}
-	} else {
-		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
-			if(eyeTracker->getWhichEye() != LeftEye) {
-				throw invalid_argument("eyeTracker must be a LeftEye if markerType is one of the Left Eyelids");
-			}
-		} else if(markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-			if(eyeTracker->getWhichEye() != RightEye) {
-				throw invalid_argument("eyeTracker must be a RightEye if markerType is one of the Right Eyelids");
-			}
-		} else {
-			throw invalid_argument("eyeTracker should be NULL if markerType is not one of the Eyelids");
-		}
-	}
-
 	trackingBoxPercentage = myTrackingBoxPercentage;
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
@@ -71,6 +44,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, MarkerMapper *myMarkerMapp
 	markerPointSet = false;
 	trackingBoxSet = false;
 	markerList = NULL;
+
+	frameDerivatives = faceMapper->getFrameDerivatives();
+	faceTracker = faceMapper->getFaceTracker();
+	markerSeparator = faceMapper->getMarkerSeparator();
 
 	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
 }
@@ -95,7 +72,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	markerDetectedSet = false;
 	markerList = markerSeparator->getMarkerList();
 	
-	performTrackToSeparatedCorrelation();
+	// performTrackToSeparatedCorrelation(); // FIXME
 
 	if(!markerDetectedSet) {
 		performDetection();
@@ -144,29 +121,32 @@ void MarkerTracker::performDetection(void) {
 	}
 	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
-	bool eyeLineSet;
-	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
-	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = markerMapper->getEyeLine();
+
+	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
+
 	bool midLineSet;
 	Point2d midLineLeft, midLineRight, midLineCenter;
-	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = markerMapper->getMidLine();
+	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = faceMapper->getMidLine();
 	bool centerLineSet, centerLineIsIntermediate;
 	Point2d centerLineTop, centerLineBottom;
 	double centerLineSlope, centerLineIntercept;
-	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = markerMapper->getCenterLine();
+	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = faceMapper->getCenterLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-		Rect2d eyeRect;
-		bool eyeRectSet;
-		std::tie(eyeRect, eyeRectSet) = eyeTracker->getEyeRect();
-		if(!eyeRectSet) {
+		EyeRect eyeRect;
+		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
+			eyeRect = faceMapper->getLeftEyeRect();
+		} else {
+			eyeRect = faceMapper->getRightEyeRect();
+		}
+		if(!eyeRect.set) {
 			return;
 		}
-		Point2d eyeRectCenter = Utilities::centerRect(eyeRect);
+		Point2d eyeRectCenter = Utilities::centerRect(eyeRect.rect);
 
-		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect);
+		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect.rect);
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		
 		if(markerCandidateList.size() == 1) {
@@ -205,7 +185,7 @@ void MarkerTracker::performDetection(void) {
 		}
 		return;
 	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
-		if(!eyeLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 		xDirection = -1;
@@ -214,17 +194,17 @@ void MarkerTracker::performDetection(void) {
 		}
 
 		boundingRect.y = 0;
-		boundingRect.height = eyeLineCenter.y;
+		boundingRect.height = facialFeatures.noseSellion.y;
 		if(xDirection < 0) {
 			boundingRect.x = 0;
-			boundingRect.width = eyeLineCenter.x;
+			boundingRect.width = facialFeatures.noseSellion.x;
 		} else {
-			boundingRect.x = eyeLineCenter.x;
-			boundingRect.width = frameSize.width - eyeLineCenter.x;
+			boundingRect.x = facialFeatures.noseSellion.x;
+			boundingRect.width = frameSize.width - facialFeatures.noseSellion.x;
 		}
 
 		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowRightInner) {
-			generateMarkerCandidateList(&markerCandidateList, eyeLineCenter, &boundingRect);
+			generateMarkerCandidateList(&markerCandidateList, facialFeatures.noseSellion, &boundingRect);
 			if(markerCandidateList.size() < 1) {
 				return;
 			}
@@ -269,7 +249,7 @@ void MarkerTracker::performDetection(void) {
 			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		}
 	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
-		if(!eyeLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 
@@ -296,40 +276,36 @@ void MarkerTracker::performDetection(void) {
 		}
 
 		boundingRect.y = eyelidPoint.y;
-		boundingRect.height = frameSize.height - eyelidPoint.y;
+		boundingRect.height = facialFeatures.stommion.y - eyelidPoint.y;
 		if(xDirection < 0) {
-			boundingRect.x = eyeLineRight.x;
-			boundingRect.width = eyeLineCenter.x - eyeLineRight.x;
+			boundingRect.x = facialFeatures.jawRightTop.x;
+			boundingRect.width = facialFeatures.noseSellion.x - facialFeatures.jawRightTop.x;
 		} else {
-			boundingRect.x = eyeLineCenter.x;
-			boundingRect.width = eyeLineLeft.x - eyeLineCenter.x;
+			boundingRect.x = facialFeatures.noseSellion.x;
+			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
-
 		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect);
+
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == Jaw) {
-		if(!centerLineSet || !midLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
-		Point2d jawCloseTo;
-		jawCloseTo.y = frameSize.height;
-		jawCloseTo.x = (jawCloseTo.y - centerLineIntercept) / centerLineSlope;
+		boundingRect.x = facialFeatures.eyeRightOuterCorner.x;
+		boundingRect.width = facialFeatures.eyeLeftOuterCorner.x - boundingRect.x;
+		boundingRect.y = facialFeatures.noseTip.y;
+		boundingRect.height = frameSize.height - boundingRect.y;
 
-		boundingRect.x = midLineRight.x;
-		boundingRect.width = midLineLeft.x - midLineRight.x;
-		boundingRect.y = midLineRight.y;
-		boundingRect.height = jawCloseTo.y - midLineRight.y;
-
-		generateMarkerCandidateList(&markerCandidateList, jawCloseTo, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, facialFeatures.menton, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner || markerType.type == LipsLeftTop || markerType.type == LipsRightTop || markerType.type == LipsLeftBottom || markerType.type == LipsRightBottom) {
-		if(!midLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 
@@ -346,17 +322,41 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 
+		MarkerTracker *cheekTracker;
+		Point2d cheekPoint;
+		bool cheekPointSet;
+
+		double avgX = (facialFeatures.menton.x + facialFeatures.stommion.x + facialFeatures.noseTip.x) / 3.0;
+
 		Point2d lipPointOfInterest;
 		if(markerType.type == LipsLeftCorner || markerType.type == LipsLeftTop || markerType.type == LipsLeftBottom) {
-			boundingRect.y = midLineLeft.y;
+			cheekTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(CheekLeft));
+			if(cheekTracker == NULL) {
+				return;
+			}
+			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
+			if(!cheekPointSet) {
+				return;
+			}
+
+			boundingRect.y = cheekPoint.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
-			boundingRect.x = jawPoint.x;
-			boundingRect.width = midLineLeft.x - boundingRect.x;
+			boundingRect.x = avgX;
+			boundingRect.width = cheekPoint.x - boundingRect.x;
 		} else {
-			boundingRect.y = midLineRight.y;
+			cheekTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(CheekRight));
+			if(cheekTracker == NULL) {
+				return;
+			}
+			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
+			if(!cheekPointSet) {
+				return;
+			}
+
+			boundingRect.y = cheekPoint.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
-			boundingRect.x = midLineRight.x;
-			boundingRect.width = jawPoint.x - boundingRect.x;
+			boundingRect.x = cheekPoint.x;
+			boundingRect.width = avgX - boundingRect.x;
 		}
 
 		if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
@@ -368,7 +368,7 @@ void MarkerTracker::performDetection(void) {
 			lipPointOfInterest.x = lipPointOfInterest.x / 2.0;
 			lipPointOfInterest.y = lipPointOfInterest.y / 2.0;
 		} else if(markerType.type == LipsLeftTop || markerType.type == LipsRightTop) {
-			lipPointOfInterest = midLineCenter;
+			lipPointOfInterest = facialFeatures.noseTip;
 		} else {
 			lipPointOfInterest = jawPoint;
 		}
@@ -491,12 +491,19 @@ void MarkerTracker::assignMarkerPoint(void) {
 	}	
 }
 
-void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect) {
+void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {
 	if(markerList == NULL) {
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called while markerList is NULL");
 	}
 	if(markerCandidateList == NULL) {
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called with NULL markerCandidateList");
+	}
+	if(debug) {
+		Mat prevFrame = frameDerivatives->getPreviewFrame();
+		Utilities::drawX(prevFrame, pointOfInterest, Scalar(255, 0, 255), 10, 2);
+		if(boundingRect != NULL) {
+			rectangle(prevFrame, *boundingRect, Scalar(255, 0, 255), 2);
+		}
 	}
 	MarkerCandidate markerCandidate;
 	size_t markerListCount = (*markerList).size();
@@ -511,7 +518,6 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
 			markerCandidate.distanceFromPointOfInterest = Utilities::lineDistance(pointOfInterest, markerCandidate.marker.center);
-			//markerCandidate.angleFromPointOfInterest = Utilities::radiansToDegrees(Utilities::lineAngle(pointOfInterest, markerCandidate.marker.center));
 			markerCandidate.sqrtArea = std::sqrt((double)(markerCandidate.marker.size.width * markerCandidate.marker.size.height));
 			markerCandidateList->push_back(markerCandidate);
 		}
@@ -520,14 +526,6 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 
 bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
 	return (a.distanceFromPointOfInterest < b.distanceFromPointOfInterest);
-}
-
-bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b) {
-	return (a.angleFromPointOfInterest < b.angleFromPointOfInterest);
-}
-
-bool MarkerTracker::sortMarkerCandidatesByAngleFromPointOfInterestInverted(const MarkerCandidate a, const MarkerCandidate b) {
-	return (a.angleFromPointOfInterest > b.angleFromPointOfInterest);
 }
 
 void MarkerTracker::renderPreviewHUD(bool verbose) {

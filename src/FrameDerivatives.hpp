@@ -9,15 +9,17 @@ namespace YerFace {
 
 class FrameDerivatives {
 public:
-	FrameDerivatives(double myClassificationScaleFactor = 0.5);
+	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);
 	~FrameDerivatives();
 	void setCurrentFrame(Mat newFrame); //Expected to be in BGR format, at the native resolution of the input.
 	Mat getCurrentFrame(void);
 	Mat getClassificationFrame(void);
 	Mat getPreviewFrame(void);
 	double getClassificationScaleFactor(void);
+	Size getCurrentFrameSize(void);
 
 private:
+	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Mat currentFrame; //BGR format, at the native resolution of the input.
 	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.

@@ -2,7 +2,6 @@
 
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
-#include "EyeTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "MarkerSeparator.hpp"
 
@@ -15,35 +14,39 @@ namespace YerFace {
 
 class MarkerTracker;
 
-class MarkerMapper {
+class EyeRect {
 public:
-	MarkerMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, EyeTracker *myLeftEyeTracker, EyeTracker *myRightEyeTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25, float myFaceAspectRatio = 0.65, float myPercentageOfCenterLineAboveEyeLine = 0.25);
-	~MarkerMapper();
+	Rect2d rect;
+	bool set;
+};
+
+class FaceMapper {
+public:
+	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myFaceAspectRatio = 0.65);
+	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
-	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
+	FrameDerivatives *getFrameDerivatives(void);
+	FaceTracker *getFaceTracker(void);
+	MarkerSeparator *getMarkerSeparator(void);
+	EyeRect getLeftEyeRect(void);
+	EyeRect getRightEyeRect(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getSmileLine(void);
 	tuple<Point2d, Point2d, double, double, bool, bool> getCenterLine(void);
 private:
-	void calculateEyeLine(void);
+	void calculateEyeRects(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
 	void calculateMidLine(void);
 	void calculateSmileLine(void);
 	void calculateCenterLine(bool intermediate);
-	void calculateFaceBox(void);
-	void calculateFaceTransformation(void);
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
-	EyeTracker *leftEyeTracker;
-	EyeTracker *rightEyeTracker;
 	float eyelidBottomPointWeight;
-	float eyeLineLengthPercentage;
 	float faceAspectRatio;
-	float percentageOfCenterLineAboveEyeLine;
 
 	MarkerSeparator *markerSeparator;
 
@@ -73,11 +76,10 @@ private:
 	MarkerTracker *markerLipsLeftBottom;
 	MarkerTracker *markerLipsRightBottom;
 
-	Point2d eyeLineLeft;
-	Point2d eyeLineRight;
-	Point2d eyeLineCenter;
-	double eyeLineSlope, eyeLineIntercept;
-	bool eyeLineSet;
+	FacialFeatures facialFeatures;
+	EyeRect leftEyeRect;
+	EyeRect rightEyeRect;
+
 	Point2d eyebrowLineLeft;
 	Point2d eyebrowLineRight;
 	Point2d eyebrowLineCenter;
