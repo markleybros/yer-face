@@ -284,7 +284,7 @@ void MarkerTracker::performDetection(void) {
 			boundingRect.x = facialFeatures.noseSellion.x;
 			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
-		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect, true);
+		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect);
 
 		if(markerCandidateList.size() < 1) {
 			return;

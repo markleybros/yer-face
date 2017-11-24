@@ -83,7 +83,7 @@ int main(int argc, const char** argv) {
 		faceTracker->processCurrentFrame();
 		faceMapper->processCurrentFrame();
 
-		faceTracker->renderPreviewHUD();
+		faceTracker->renderPreviewHUD(false);
 		faceMapper->renderPreviewHUD(false);
 
 		metrics->endFrame();

@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage) {
+MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage, float myMarkerBoxInflatePixels) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -32,6 +32,10 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 	if(faceSizePercentage <= 0.0 || faceSizePercentage > 2.0) {
 		throw invalid_argument("faceSizePercentage is out of range.");
 	}
+	markerBoxInflatePixels = myMarkerBoxInflatePixels;
+	if(markerBoxInflatePixels < 0.0) {
+		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
+	}
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
 }
@@ -41,11 +45,11 @@ MarkerSeparator::~MarkerSeparator() {
 }
 
 void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
-	HSVRangeMin = Scalar(myHSVRangeMin);
-	HSVRangeMax = Scalar(myHSVRangeMax);
+	HSVRangeMin = myHSVRangeMin;
+	HSVRangeMax = myHSVRangeMax;
 }
 
-void MarkerSeparator::processCurrentFrame(void) {
+void MarkerSeparator::processCurrentFrame(bool debug) {
 	markerList.clear();
 	FacialBoundingBox facialBoundingBox = faceTracker->getFacialBoundingBox();
 	if(!facialBoundingBox.set) {
@@ -70,6 +74,11 @@ void MarkerSeparator::processCurrentFrame(void) {
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
+	Mat debugFrame;
+	if(debug) {
+		cvtColor(searchFrameThreshold, debugFrame, COLOR_GRAY2BGR);
+	}
+
 	vector<vector<Point>> contours;
 	vector<Vec4i> heirarchy;
 	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
@@ -82,7 +91,7 @@ void MarkerSeparator::processCurrentFrame(void) {
 		RotatedRect markerCandidate = minAreaRect(contours[i]);
 		int area = markerCandidate.size.area();
 		if(area >= minTargetMarkerArea && area <= maxTargetMarkerArea) {
-			markerCandidate.center = markerCandidate.center + Point2f(markerBoundaryRect.tl());
+			markerCandidate.center = markerCandidate.center;
 			MarkerSeparated markerSeparated;
 			markerSeparated.active = true;
 			markerSeparated.marker = markerCandidate;
@@ -100,16 +109,25 @@ void MarkerSeparator::processCurrentFrame(void) {
 		markerList[i].marker.points(vertices);
 		bool didRemoveDuplicate;
 		unsigned int iterations = 0;
+		Rect2d primaryRect;
 		do {
 			iterations++;
 			didRemoveDuplicate = false;
-			Rect2d primaryRect = Rect(markerList[i].marker.boundingRect2f());
+			primaryRect = Rect2d(markerList[i].marker.boundingRect2f());
+			primaryRect.x -= markerBoxInflatePixels;
+			primaryRect.y -= markerBoxInflatePixels;
+			primaryRect.width += markerBoxInflatePixels * 2;
+			primaryRect.height += markerBoxInflatePixels * 2;
 			for(size_t j = 0; j < count; j++) {
 				if(i == j || !markerList[j].active) {
 					continue;
 				}
 				// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, comparing secondary marker %lu with base marker %lu\n", j, i);
-				Rect2d secondaryRect = Rect(markerList[j].marker.boundingRect2f());
+				Rect2d secondaryRect = Rect2d(markerList[j].marker.boundingRect2f());
+				secondaryRect.x -= markerBoxInflatePixels;
+				secondaryRect.y -= markerBoxInflatePixels;
+				secondaryRect.width += markerBoxInflatePixels * 2;
+				secondaryRect.height += markerBoxInflatePixels * 2;
 				if((primaryRect & secondaryRect).area() > 0) {
 					// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, folding secondary marker %lu into base marker %lu\n", j, i);
 					markerList[i].marker.points(&vertices[0]);
@@ -120,18 +138,31 @@ void MarkerSeparator::processCurrentFrame(void) {
 					didRemoveDuplicate = true;
 				}
 			}
-			if(didRemoveDuplicate && iterations > 1) {
-				fprintf(stderr, "MarkerSeparator WARNING: Deduplicating, altering base marker %lu in a loop; this was iteration %u and more iterations are still required. Looping over it again...\n", i, iterations);
-			}
+			// if(didRemoveDuplicate && iterations > 1) {
+			// 	fprintf(stderr, "MarkerSeparator WARNING: Deduplicating, altering base marker %lu in a loop; this was iteration %u and more iterations are still required. Looping over it again...\n", i, iterations);
+			// }
 		} while(didRemoveDuplicate);
+		if(debug) {
+			rectangle(debugFrame, primaryRect, Scalar(0, 0, 255));
+		}
 	}
 
-	// imshow("Trackers Separated", searchFrameThreshold);
-	// char c = (char)waitKey(1);
-	// if(c == ' ') {
-	// 	doPickColor();
-	// 	fprintf(stderr, "MarkerSeparator User asked for a color picker...\n");
-	// }
+	if(debug) {
+		imshow("Trackers Separated", debugFrame);
+		char c = (char)waitKey(1);
+		if(c == ' ') {
+			doPickColor();
+			fprintf(stderr, "MarkerSeparator User asked for a color picker...\n");
+		}
+	}
+
+	count = markerList.size();
+	for(i = 0; i < count; i++) {
+		if(!markerList[i].active) {
+			continue;
+		}
+		markerList[i].marker.center += Point2f(markerBoundaryRect.tl());
+	}
 }
 
 void MarkerSeparator::renderPreviewHUD(bool verbose) {
