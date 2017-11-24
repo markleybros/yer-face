@@ -305,7 +305,7 @@ void MarkerTracker::performDetection(void) {
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner || markerType.type == LipsLeftTop || markerType.type == LipsRightTop || markerType.type == LipsLeftBottom || markerType.type == LipsRightBottom) {
-		if(!midLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 
@@ -322,17 +322,41 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 
+		MarkerTracker *cheekTracker;
+		Point2d cheekPoint;
+		bool cheekPointSet;
+
+		double avgX = (facialFeatures.menton.x + facialFeatures.stommion.x + facialFeatures.noseTip.x) / 3.0;
+
 		Point2d lipPointOfInterest;
 		if(markerType.type == LipsLeftCorner || markerType.type == LipsLeftTop || markerType.type == LipsLeftBottom) {
-			boundingRect.y = midLineLeft.y;
+			cheekTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(CheekLeft));
+			if(cheekTracker == NULL) {
+				return;
+			}
+			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
+			if(!cheekPointSet) {
+				return;
+			}
+
+			boundingRect.y = cheekPoint.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
-			boundingRect.x = jawPoint.x;
-			boundingRect.width = midLineLeft.x - boundingRect.x;
+			boundingRect.x = avgX;
+			boundingRect.width = cheekPoint.x - boundingRect.x;
 		} else {
-			boundingRect.y = midLineRight.y;
+			cheekTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(CheekRight));
+			if(cheekTracker == NULL) {
+				return;
+			}
+			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
+			if(!cheekPointSet) {
+				return;
+			}
+
+			boundingRect.y = cheekPoint.y;
 			boundingRect.height = jawPoint.y - boundingRect.y;
-			boundingRect.x = midLineRight.x;
-			boundingRect.width = jawPoint.x - boundingRect.x;
+			boundingRect.x = cheekPoint.x;
+			boundingRect.width = avgX - boundingRect.x;
 		}
 
 		if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner) {
@@ -344,7 +368,7 @@ void MarkerTracker::performDetection(void) {
 			lipPointOfInterest.x = lipPointOfInterest.x / 2.0;
 			lipPointOfInterest.y = lipPointOfInterest.y / 2.0;
 		} else if(markerType.type == LipsLeftTop || markerType.type == LipsRightTop) {
-			lipPointOfInterest = midLineCenter;
+			lipPointOfInterest = facialFeatures.noseTip;
 		} else {
 			lipPointOfInterest = jawPoint;
 		}

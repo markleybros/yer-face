@@ -108,17 +108,17 @@ void FaceMapper::processCurrentFrame(void) {
 
 	markerJaw->processCurrentFrame();
 
-	// markerLipsLeftCorner->processCurrentFrame();
-	// markerLipsRightCorner->processCurrentFrame();
+	markerLipsLeftCorner->processCurrentFrame();
+	markerLipsRightCorner->processCurrentFrame();
 
-	// markerLipsLeftTop->processCurrentFrame();
-	// markerLipsRightTop->processCurrentFrame();
+	markerLipsLeftTop->processCurrentFrame();
+	markerLipsRightTop->processCurrentFrame();
 
 	// calculateSmileLine();
 	// calculateCenterLine(false);
 
-	// markerLipsLeftBottom->processCurrentFrame();
-	// markerLipsRightBottom->processCurrentFrame();
+	markerLipsLeftBottom->processCurrentFrame();
+	markerLipsRightBottom->processCurrentFrame();
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
