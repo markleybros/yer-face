@@ -106,7 +106,7 @@ void FaceMapper::processCurrentFrame(void) {
 	// calculateMidLine();
 	// calculateCenterLine(true);
 
-	// markerJaw->processCurrentFrame();
+	markerJaw->processCurrentFrame();
 
 	// markerLipsLeftCorner->processCurrentFrame();
 	// markerLipsRightCorner->processCurrentFrame();

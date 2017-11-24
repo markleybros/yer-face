@@ -291,19 +291,15 @@ void MarkerTracker::performDetection(void) {
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == Jaw) {
-		if(!centerLineSet || !midLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
-		Point2d jawCloseTo;
-		jawCloseTo.y = frameSize.height;
-		jawCloseTo.x = (jawCloseTo.y - centerLineIntercept) / centerLineSlope;
+		boundingRect.x = facialFeatures.eyeRightOuterCorner.x;
+		boundingRect.width = facialFeatures.eyeLeftOuterCorner.x - boundingRect.x;
+		boundingRect.y = facialFeatures.noseTip.y;
+		boundingRect.height = frameSize.height - boundingRect.y;
 
-		boundingRect.x = midLineRight.x;
-		boundingRect.width = midLineLeft.x - midLineRight.x;
-		boundingRect.y = midLineRight.y;
-		boundingRect.height = jawCloseTo.y - midLineRight.y;
-
-		generateMarkerCandidateList(&markerCandidateList, jawCloseTo, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, facialFeatures.menton, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
