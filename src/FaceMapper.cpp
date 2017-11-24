@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight, float myEyeLineLengthPercentage, float myFaceAspectRatio, float myPercentageOfCenterLineAboveEyeLine) {
+FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight, float myFaceAspectRatio) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -24,20 +24,11 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	if(eyelidBottomPointWeight < 0.0 || eyelidBottomPointWeight > 1.0) {
 		throw invalid_argument("eyelidBottomPointWeight cannot be less than 0.0 or greater than 1.0");
 	}
-	eyeLineLengthPercentage = myEyeLineLengthPercentage;
-	if(eyeLineLengthPercentage <= 0.0) {
-		throw invalid_argument("eyeLineLengthPercentage cannot be less than or equal to 0.0");
-	}
 	faceAspectRatio = myFaceAspectRatio;
 	if(faceAspectRatio <= 0.0) {
 		throw invalid_argument("faceAspectRatio cannot be less than or equal to 0.0");
 	}
-	percentageOfCenterLineAboveEyeLine = myPercentageOfCenterLineAboveEyeLine;
-	if(percentageOfCenterLineAboveEyeLine < 0.0 || percentageOfCenterLineAboveEyeLine > 1.0) {
-		throw invalid_argument("percentageOfCenterLineAboveEyeLine cannot be less than 0.0 or greater than 1.0");
-	}
 
-	eyeLineSet = false;
 	eyebrowLineSet = false;
 	midLineSet = false;
 	smileLineSet = false;
@@ -100,8 +91,6 @@ void FaceMapper::processCurrentFrame(void) {
 	markerEyelidLeftBottom->processCurrentFrame();
 	markerEyelidRightBottom->processCurrentFrame();
 
-	calculateEyeLine();
-
 	markerEyebrowLeftInner->processCurrentFrame();
 	markerEyebrowRightInner->processCurrentFrame();
 	markerEyebrowLeftMiddle->processCurrentFrame();
@@ -109,27 +98,27 @@ void FaceMapper::processCurrentFrame(void) {
 	markerEyebrowLeftOuter->processCurrentFrame();
 	markerEyebrowRightOuter->processCurrentFrame();
 
-	calculateEyebrowLine();
+	// calculateEyebrowLine();
 
 	markerCheekLeft->processCurrentFrame();
 	markerCheekRight->processCurrentFrame();
 
-	calculateMidLine();
-	calculateCenterLine(true);
+	// calculateMidLine();
+	// calculateCenterLine(true);
 
-	markerJaw->processCurrentFrame();
+	// markerJaw->processCurrentFrame();
 
-	markerLipsLeftCorner->processCurrentFrame();
-	markerLipsRightCorner->processCurrentFrame();
+	// markerLipsLeftCorner->processCurrentFrame();
+	// markerLipsRightCorner->processCurrentFrame();
 
-	markerLipsLeftTop->processCurrentFrame();
-	markerLipsRightTop->processCurrentFrame();
+	// markerLipsLeftTop->processCurrentFrame();
+	// markerLipsRightTop->processCurrentFrame();
 
-	calculateSmileLine();
-	calculateCenterLine(false);
+	// calculateSmileLine();
+	// calculateCenterLine(false);
 
-	markerLipsLeftBottom->processCurrentFrame();
-	markerLipsRightBottom->processCurrentFrame();
+	// markerLipsLeftBottom->processCurrentFrame();
+	// markerLipsRightBottom->processCurrentFrame();
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
@@ -148,9 +137,6 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 	size_t markerTrackersCount = (*markerTrackers).size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
 		(*markerTrackers)[i]->renderPreviewHUD(verbose);
-	}
-	if(eyeLineSet) {
-		line(frame, eyeLineLeft, eyeLineRight, Scalar(0, 255, 0), 2);
 	}
 	if(eyebrowLineSet) {
 		line(frame, eyebrowLineLeft, eyebrowLineRight, Scalar(0, 255, 0), 2);
@@ -184,10 +170,6 @@ EyeRect FaceMapper::getLeftEyeRect(void) {
 
 EyeRect FaceMapper::getRightEyeRect(void) {
 	return rightEyeRect;
-}
-
-tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyeLine(void) {
-	return std::make_tuple(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet);
 }
 
 tuple<Point2d, Point2d, Point2d, bool> FaceMapper::getEyebrowLine(void) {
@@ -238,26 +220,6 @@ void FaceMapper::calculateEyeRects(void) {
 	rightEyeRect.set = true;
 }
 
-void FaceMapper::calculateEyeLine(void) {
-	eyeLineSet = false;
-	if(!calculateEyeCenter(markerEyelidLeftTop, markerEyelidLeftBottom, &eyeLineLeft)) {
-		return;
-	}
-	if(!calculateEyeCenter(markerEyelidRightTop, markerEyelidRightBottom, &eyeLineRight)) {
-		return;
-	}
-
-	double originalEyeLineLength = Utilities::lineDistance(eyeLineLeft, eyeLineRight);
-	double desiredEyeLineLength = originalEyeLineLength * eyeLineLengthPercentage;
-	eyeLineCenter = (eyeLineLeft + eyeLineRight);
-	eyeLineCenter.x = eyeLineCenter.x / 2.0;
-	eyeLineCenter.y = eyeLineCenter.y / 2.0;
-
-	eyeLineLeft = Utilities::lineAdjustDistance(eyeLineCenter, eyeLineLeft, (desiredEyeLineLength / 2.0));
-	eyeLineRight = Utilities::lineAdjustDistance(eyeLineCenter, eyeLineRight, (desiredEyeLineLength / 2.0));
-	Utilities::lineSlopeIntercept(eyeLineLeft, eyeLineRight, &eyeLineSlope, &eyeLineIntercept);
-	eyeLineSet = true;
-}
 
 bool FaceMapper::calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center) {
 	Point2d topPoint;
@@ -373,35 +335,35 @@ void FaceMapper::calculateSmileLine(void) {
 	smileLineSet = true;
 }
 
-void FaceMapper::calculateCenterLine(bool intermediate) {
-	centerLineSet = false;
-	bool jawPointSet;
-	Point2d jawPoint;
-	if(!eyebrowLineSet || !eyeLineSet || !midLineSet) {
-		return;
-	}
-	centerLineIsIntermediate = intermediate;
+// void FaceMapper::calculateCenterLine(bool intermediate) {
+// 	centerLineSet = false;
+// 	bool jawPointSet;
+// 	Point2d jawPoint;
+// 	if(!eyebrowLineSet || !midLineSet) {
+// 		return;
+// 	}
+// 	centerLineIsIntermediate = intermediate;
 
-	vector<Point2d> points = {eyebrowLineCenter, eyeLineCenter, midLineCenter};
-	if(!intermediate) {
-		std::tie(jawPoint, jawPointSet) = markerJaw->getMarkerPoint();
-		if(!jawPointSet || !smileLineSet) {
-			return;
-		}
-		points.push_back(jawPoint);
-		points.push_back(smileLineCenter);
-	}
-	Utilities::lineBestFit(points, &centerLineSlope, &centerLineIntercept);
+// 	vector<Point2d> points = {eyebrowLineCenter, midLineCenter};
+// 	if(!intermediate) {
+// 		std::tie(jawPoint, jawPointSet) = markerJaw->getMarkerPoint();
+// 		if(!jawPointSet || !smileLineSet) {
+// 			return;
+// 		}
+// 		points.push_back(jawPoint);
+// 		points.push_back(smileLineCenter);
+// 	}
+// 	Utilities::lineBestFit(points, &centerLineSlope, &centerLineIntercept);
 
-	double boxWidth = Utilities::lineDistance(eyebrowLineLeft, eyebrowLineRight);
-	double boxHeight = boxWidth / faceAspectRatio;
-	double boxHeightAboveEyeLine = boxHeight * percentageOfCenterLineAboveEyeLine;
+// 	double boxWidth = Utilities::lineDistance(eyebrowLineLeft, eyebrowLineRight);
+// 	double boxHeight = boxWidth / faceAspectRatio;
+// 	double boxHeightAboveEyeLine = boxHeight * percentageOfCenterLineAboveEyeLine;
 
-	centerLineTop.y = eyeLineCenter.y - boxHeightAboveEyeLine;
-	centerLineTop.x = (centerLineTop.y - centerLineIntercept) / centerLineSlope;
-	centerLineBottom.y = eyeLineCenter.y + boxHeight - boxHeightAboveEyeLine;
-	centerLineBottom.x = (centerLineBottom.y - centerLineIntercept) / centerLineSlope;
-	centerLineSet = true;
-}
+// 	centerLineTop.y = eyeLineCenter.y - boxHeightAboveEyeLine;
+// 	centerLineTop.x = (centerLineTop.y - centerLineIntercept) / centerLineSlope;
+// 	centerLineBottom.y = eyeLineCenter.y + boxHeight - boxHeightAboveEyeLine;
+// 	centerLineBottom.x = (centerLineBottom.y - centerLineIntercept) / centerLineSlope;
+// 	centerLineSet = true;
+// }
 
 }; //namespace YerFace

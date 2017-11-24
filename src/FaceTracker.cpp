@@ -239,9 +239,11 @@ void FaceTracker::doIdentifyFeatures(void) {
 				break;
 			case IDX_JAW_RIGHT_TOP:
 				facialFeatures3d.push_back(VERTEX_RIGHT_EAR);
+				facialFeaturesExposed.jawRightTop = partPoint;
 				break;
 			case IDX_JAW_LEFT_TOP:
 				facialFeatures3d.push_back(VERTEX_LEFT_EAR);
+				facialFeaturesExposed.jawLeftTop = partPoint;
 				break;
 			case IDX_NOSE_TIP:
 				facialFeatures3d.push_back(VERTEX_NOSE_TIP);

@@ -22,7 +22,7 @@ public:
 
 class FaceMapper {
 public:
-	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myEyeLineLengthPercentage = 2.25, float myFaceAspectRatio = 0.65, float myPercentageOfCenterLineAboveEyeLine = 0.25);
+	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myFaceAspectRatio = 0.65);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -31,14 +31,12 @@ public:
 	MarkerSeparator *getMarkerSeparator(void);
 	EyeRect getLeftEyeRect(void);
 	EyeRect getRightEyeRect(void);
-	tuple<Point2d, Point2d, Point2d, bool> getEyeLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getEyebrowLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getMidLine(void);
 	tuple<Point2d, Point2d, Point2d, bool> getSmileLine(void);
 	tuple<Point2d, Point2d, double, double, bool, bool> getCenterLine(void);
 private:
 	void calculateEyeRects(void);
-	void calculateEyeLine(void);
 	bool calculateEyeCenter(MarkerTracker *top, MarkerTracker *bottom, Point2d *center);
 	void calculateEyebrowLine(void);
 	void calculateMidLine(void);
@@ -48,9 +46,7 @@ private:
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	float eyelidBottomPointWeight;
-	float eyeLineLengthPercentage;
 	float faceAspectRatio;
-	float percentageOfCenterLineAboveEyeLine;
 
 	MarkerSeparator *markerSeparator;
 
@@ -84,11 +80,6 @@ private:
 	EyeRect leftEyeRect;
 	EyeRect rightEyeRect;
 
-	Point2d eyeLineLeft;
-	Point2d eyeLineRight;
-	Point2d eyeLineCenter;
-	double eyeLineSlope, eyeLineIntercept;
-	bool eyeLineSet;
 	Point2d eyebrowLineLeft;
 	Point2d eyebrowLineRight;
 	Point2d eyebrowLineCenter;

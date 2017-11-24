@@ -72,7 +72,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	markerDetectedSet = false;
 	markerList = markerSeparator->getMarkerList();
 	
-	performTrackToSeparatedCorrelation();
+	// performTrackToSeparatedCorrelation(); // FIXME
 
 	if(!markerDetectedSet) {
 		performDetection();
@@ -122,9 +122,8 @@ void MarkerTracker::performDetection(void) {
 	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
 
-	bool eyeLineSet;
-	Point2d eyeLineLeft, eyeLineRight, eyeLineCenter;
-	std::tie(eyeLineLeft, eyeLineRight, eyeLineCenter, eyeLineSet) = faceMapper->getEyeLine();
+	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
+
 	bool midLineSet;
 	Point2d midLineLeft, midLineRight, midLineCenter;
 	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = faceMapper->getMidLine();
@@ -186,7 +185,7 @@ void MarkerTracker::performDetection(void) {
 		}
 		return;
 	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
-		if(!eyeLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 		xDirection = -1;
@@ -195,17 +194,17 @@ void MarkerTracker::performDetection(void) {
 		}
 
 		boundingRect.y = 0;
-		boundingRect.height = eyeLineCenter.y;
+		boundingRect.height = facialFeatures.noseSellion.y;
 		if(xDirection < 0) {
 			boundingRect.x = 0;
-			boundingRect.width = eyeLineCenter.x;
+			boundingRect.width = facialFeatures.noseSellion.x;
 		} else {
-			boundingRect.x = eyeLineCenter.x;
-			boundingRect.width = frameSize.width - eyeLineCenter.x;
+			boundingRect.x = facialFeatures.noseSellion.x;
+			boundingRect.width = frameSize.width - facialFeatures.noseSellion.x;
 		}
 
 		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowRightInner) {
-			generateMarkerCandidateList(&markerCandidateList, eyeLineCenter, &boundingRect);
+			generateMarkerCandidateList(&markerCandidateList, facialFeatures.noseSellion, &boundingRect);
 			if(markerCandidateList.size() < 1) {
 				return;
 			}
@@ -250,7 +249,7 @@ void MarkerTracker::performDetection(void) {
 			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		}
 	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
-		if(!eyeLineSet) {
+		if(!facialFeatures.set) {
 			return;
 		}
 
@@ -277,16 +276,16 @@ void MarkerTracker::performDetection(void) {
 		}
 
 		boundingRect.y = eyelidPoint.y;
-		boundingRect.height = frameSize.height - eyelidPoint.y;
+		boundingRect.height = facialFeatures.stommion.y - eyelidPoint.y;
 		if(xDirection < 0) {
-			boundingRect.x = eyeLineRight.x;
-			boundingRect.width = eyeLineCenter.x - eyeLineRight.x;
+			boundingRect.x = facialFeatures.jawRightTop.x;
+			boundingRect.width = facialFeatures.noseSellion.x - facialFeatures.jawRightTop.x;
 		} else {
-			boundingRect.x = eyeLineCenter.x;
-			boundingRect.width = eyeLineLeft.x - eyeLineCenter.x;
+			boundingRect.x = facialFeatures.noseSellion.x;
+			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
+		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect, true);
 
-		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect);
 		if(markerCandidateList.size() < 1) {
 			return;
 		}
@@ -472,12 +471,19 @@ void MarkerTracker::assignMarkerPoint(void) {
 	}	
 }
 
-void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect) {
+void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {
 	if(markerList == NULL) {
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called while markerList is NULL");
 	}
 	if(markerCandidateList == NULL) {
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called with NULL markerCandidateList");
+	}
+	if(debug) {
+		Mat prevFrame = frameDerivatives->getPreviewFrame();
+		Utilities::drawX(prevFrame, pointOfInterest, Scalar(255, 0, 255), 10, 2);
+		if(boundingRect != NULL) {
+			rectangle(prevFrame, *boundingRect, Scalar(255, 0, 255), 2);
+		}
 	}
 	MarkerCandidate markerCandidate;
 	size_t markerListCount = (*markerList).size();

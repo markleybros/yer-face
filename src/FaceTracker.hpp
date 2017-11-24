@@ -59,7 +59,7 @@ public:
 
 class FacialFeatures {
 public:
-	Point2d menton, noseSellion, noseTip, stommion, eyeRightOuterCorner, eyeLeftOuterCorner, eyeRightInnerCorner, eyeLeftInnerCorner;
+	Point2d menton, noseSellion, noseTip, stommion, eyeRightOuterCorner, eyeLeftOuterCorner, eyeRightInnerCorner, eyeLeftInnerCorner, jawRightTop, jawLeftTop;
 	bool set;
 };
 
