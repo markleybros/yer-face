@@ -20,7 +20,7 @@ public:
 
 class FaceMapper {
 public:
-	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight = 0.6, float myFaceAspectRatio = 0.65);
+	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -34,8 +34,6 @@ private:
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
-	float eyelidBottomPointWeight;
-	float faceAspectRatio;
 
 	MarkerSeparator *markerSeparator;
 

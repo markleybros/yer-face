@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, float myEyelidBottomPointWeight, float myFaceAspectRatio) {
+FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -19,14 +19,6 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
-	}
-	eyelidBottomPointWeight = myEyelidBottomPointWeight;
-	if(eyelidBottomPointWeight < 0.0 || eyelidBottomPointWeight > 1.0) {
-		throw invalid_argument("eyelidBottomPointWeight cannot be less than 0.0 or greater than 1.0");
-	}
-	faceAspectRatio = myFaceAspectRatio;
-	if(faceAspectRatio <= 0.0) {
-		throw invalid_argument("faceAspectRatio cannot be less than or equal to 0.0");
 	}
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);

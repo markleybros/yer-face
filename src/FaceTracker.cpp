@@ -284,10 +284,7 @@ void FaceTracker::doInitializeCameraModel(void) {
 	Size frameSize = frameDerivatives->getCurrentFrameSize();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
-	cameraMatrix = (Mat_<double>(3, 3) <<
-			focalLength, 0.0, center.x,
-			0.0, focalLength, center.y,
-			0.0, 0.0, 1.0);
+	cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
 	distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
 	cameraModelSet = true;
 }

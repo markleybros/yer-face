@@ -12,15 +12,9 @@ public:
 	static Rect2d scaleRect(Rect2d rect, double scale);
 	static Rect2d insetBox(Rect2d originalBox, double scale);
 	static Point2d centerRect(Rect2d rect);
-	static void lineSlopeIntercept(Point2d pointA, Point2d pointB, double *m, double *b);
 	static double lineDistance(Point2d a, Point2d b);
-	static Point2d lineAdjustDistance(Point2d a, Point2d b, double newDistance);
-	static double lineAngleRadians(Point2d a, Point2d b);
-	static void lineBestFit(std::vector<Point2d> points, double *m, double *b);
-	static Vec2d radiansToVector(double radians);
 	static double degreesToRadians(double degrees);
 	static double radiansToDegrees(double radians, bool normalize = true);
-	static double degreesDelta(double angleA, double angleB);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);
 	static Mat eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees = true);
 	static Mat generateFakeCameraMatrix(double focalLength = 1.0, Point2d principalPoint = Point2d(0, 0));
