@@ -66,35 +66,31 @@ FaceMapper::~FaceMapper() {
 }
 
 void FaceMapper::processCurrentFrame(void) {
+
 	facialFeatures = faceTracker->getFacialFeatures();
 	calculateEyeRects();
-
 	markerSeparator->processCurrentFrame();
-
-	markerEyelidLeftTop->processCurrentFrame();
-	markerEyelidRightTop->processCurrentFrame();
-	markerEyelidLeftBottom->processCurrentFrame();
-	markerEyelidRightBottom->processCurrentFrame();
-
-	markerEyebrowLeftInner->processCurrentFrame();
-	markerEyebrowRightInner->processCurrentFrame();
-	markerEyebrowLeftMiddle->processCurrentFrame();
-	markerEyebrowRightMiddle->processCurrentFrame();
-	markerEyebrowLeftOuter->processCurrentFrame();
-	markerEyebrowRightOuter->processCurrentFrame();
-
-	markerCheekLeft->processCurrentFrame();
-	markerCheekRight->processCurrentFrame();
-
+	
 	markerJaw->processCurrentFrame();
 
+	markerEyelidLeftTop->processCurrentFrame();
+	markerEyelidLeftBottom->processCurrentFrame();
+	markerEyebrowLeftInner->processCurrentFrame();
+	markerEyebrowLeftMiddle->processCurrentFrame();
+	markerEyebrowLeftOuter->processCurrentFrame();
+	markerCheekLeft->processCurrentFrame();
 	markerLipsLeftCorner->processCurrentFrame();
-	markerLipsRightCorner->processCurrentFrame();
-
 	markerLipsLeftTop->processCurrentFrame();
-	markerLipsRightTop->processCurrentFrame();
-
 	markerLipsLeftBottom->processCurrentFrame();
+
+	markerEyelidRightTop->processCurrentFrame();
+	markerEyelidRightBottom->processCurrentFrame();
+	markerEyebrowRightInner->processCurrentFrame();
+	markerEyebrowRightMiddle->processCurrentFrame();
+	markerEyebrowRightOuter->processCurrentFrame();
+	markerCheekRight->processCurrentFrame();
+	markerLipsRightCorner->processCurrentFrame();
+	markerLipsRightTop->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
 }
 
