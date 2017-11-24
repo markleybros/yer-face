@@ -72,7 +72,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	markerDetectedSet = false;
 	markerList = markerSeparator->getMarkerList();
 	
-	// performTrackToSeparatedCorrelation(); // FIXME
+	performTrackToSeparatedCorrelation();
 
 	if(!markerDetectedSet) {
 		performDetection();
@@ -123,14 +123,6 @@ void MarkerTracker::performDetection(void) {
 	list<MarkerCandidate> markerCandidateList;
 
 	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
-
-	bool midLineSet;
-	Point2d midLineLeft, midLineRight, midLineCenter;
-	std::tie(midLineLeft, midLineRight, midLineCenter, midLineSet) = faceMapper->getMidLine();
-	bool centerLineSet, centerLineIsIntermediate;
-	Point2d centerLineTop, centerLineBottom;
-	double centerLineSlope, centerLineIntercept;
-	std::tie(centerLineTop, centerLineBottom, centerLineSlope, centerLineIntercept, centerLineIsIntermediate, centerLineSet) = faceMapper->getCenterLine();
 	Size frameSize = frameDerivatives->getCurrentFrame().size();
 	Rect2d boundingRect;
 
