@@ -103,6 +103,27 @@ Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoi
 		0.0,         0.0,         1.0);
 }
 
+bool Utilities::rayPlaneIntersection(Point3d &intersection, Point3d rayOrigin, Vec3d rayVector, Point3d planePoint, Vec3d planeNormal) {
+	Mat rayOriginMat, rayVectorMat, planeNormalMat, planePointMat;
+	rayOriginMat = (Mat_<double>(3, 1) << rayOrigin.x, rayOrigin.y, rayOrigin.z);
+	rayVectorMat = (Mat_<double>(3, 1) << rayVector[0], rayVector[1], rayVector[2]);
+	planePointMat = (Mat_<double>(3, 1) << planePoint.x, planePoint.y, planePoint.z);
+	planeNormalMat = (Mat_<double>(3, 1) << planeNormal[0], planeNormal[1], planeNormal[2]);
+
+	if(planeNormalMat.dot(rayVectorMat) == 0) {
+		return false;
+	}
+
+	double d = planeNormalMat.dot(planePointMat);
+	double x = (d - planeNormalMat.dot(rayOriginMat)) / planeNormalMat.dot(rayVectorMat);
+
+	Vec3d temp = normalize(rayVector);
+	intersection.x = rayOrigin.x + (temp[0] * x);
+	intersection.y = rayOrigin.y + (temp[1] * x);
+	intersection.z = rayOrigin.z + (temp[2] * x);
+	return true;
+}
+
 void Utilities::drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color, int thickness) {
 	Point2f vertices[4];
 	rrect.points(vertices);

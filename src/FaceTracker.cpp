@@ -22,8 +22,8 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	trackingBoxSet = false;
 	faceRectSet = false;
 	facialFeaturesSet = false;
-	cameraModelSet = false;
-	poseSet = false;
+	facialCameraModel.set = false;
+	facialPose.set = false;
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -284,23 +284,24 @@ void FaceTracker::doInitializeCameraModel(void) {
 	Size frameSize = frameDerivatives->getCurrentFrameSize();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
-	cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
-	distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
-	cameraModelSet = true;
+	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
+	facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
+	facialCameraModel.set = true;
 }
 
 void FaceTracker::doCalculateFacialTransformation(void) {
 	if(!facialFeaturesSet) {
 		return;
 	}
-	if(!cameraModelSet) {
+	if(!facialCameraModel.set) {
 		doInitializeCameraModel();
 	}
 
 	FacialPose tempPose;
+	tempPose.set = false;
 	Mat tempRotationVector;
 
-	solvePnP(facialFeatures3d, facialFeatures, cameraMatrix, distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	solvePnP(facialFeatures3d, facialFeatures, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
 	facialPoseSmoothingBuffer.push_back(tempPose);
@@ -330,7 +331,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 
 	facialPose = tempPose;
-	poseSet = true;
+	facialPose.set = true;
 
 	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
 	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2]);
@@ -365,7 +366,7 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 			}
 		}
 	}
-	if(poseSet) {
+	if(facialPose.set) {
 		std::vector<Point3d> gizmo3d(6);
 		std::vector<Point2d> gizmo2d;
 		gizmo3d[0] = Point3d(-50,0.0,0.0);
@@ -377,10 +378,13 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		
 		Mat tempRotationVector;
 		Rodrigues(facialPose.rotationMatrix, tempRotationVector);
-		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, cameraMatrix, distortionCoefficients, gizmo2d);
+		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
 		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-		line(frame, gizmo2d[4], gizmo2d[5], Scalar(255, 0, 0), 2);
-		line(frame, gizmo2d[2], gizmo2d[3], Scalar(0, 255, 0), 2);
+		Utilities::drawX(frame, gizmo2d[1], Scalar(0, 0, 255), 5, 2);
+		line(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
+		Utilities::drawX(frame, gizmo2d[3], Scalar(255, 0, 0), 5, 2);
+		line(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
+		Utilities::drawX(frame, gizmo2d[5], Scalar(0, 255, 0), 5, 2);
 	}
 }
 
@@ -398,6 +402,14 @@ FacialBoundingBox FaceTracker::getFacialBoundingBox(void) {
 FacialFeatures FaceTracker::getFacialFeatures(void) {
 	facialFeaturesExposed.set = facialFeaturesSet;
 	return facialFeaturesExposed;
+}
+
+FacialCameraModel FaceTracker::getFacialCameraModel(void) {
+	return facialCameraModel;
+}
+
+FacialPose FaceTracker::getFacialPose(void) {
+	return facialPose;
 }
 
 }; //namespace YerFace

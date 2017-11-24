@@ -34,20 +34,22 @@ enum DlibFeatureIndexes {
 };
 
 //Unit centimeters. Values taken from https://en.wikipedia.org/wiki/Human_head
-//Coordinate system is: +X Points Right (relative to the viewer), +Y Points Into the Scene (relative to the camera), +Z Points Up (relative to the camera)
+//Coordinate system is: +X Points Right (relative to the viewer), +Y Points Down (relative to the viewer), +Z Points Into the Scene
 //This was all chosen to match Blender. (Except for the tiny unit size, which was chosen to help stabilize solvePnP().)
 #define VERTEX_NOSE_SELLION Point3d(0.0, 0.0, 0.0)
-#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-65.5, 20.0, -5.0)
-#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(65.5, 20.0, -5.0)
-#define VERTEX_RIGHT_EAR Point3d(-77.5, 100.0, -6.0)
-#define VERTEX_LEFT_EAR Point3d(77.5, 100.0, -6.0)
-#define VERTEX_NOSE_TIP Point3d(0.0, -21.0, -48.0)
-#define VERTEX_STOMMION Point3d(0.0, -10.0, -75.0)
-#define VERTEX_MENTON Point3d(0.0, 0.0, -133.0)
+#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-65.5, 5.0, 20.0)
+#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(65.5, 5.0, 20.0)
+#define VERTEX_RIGHT_EAR Point3d(-77.5, 6.0, 100.0)
+#define VERTEX_LEFT_EAR Point3d(77.5, 6.0, 100.0)
+#define VERTEX_NOSE_TIP Point3d(0.0, 48.0, -21.0)
+#define VERTEX_STOMMION Point3d(0.0, 75.0, -10.0)
+#define VERTEX_MENTON Point3d(0.0, 133.0, 0.0)
+
 
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
+	bool set;
 };
 
 class FacialBoundingBox {
@@ -62,6 +64,12 @@ public:
 	bool set;
 };
 
+class FacialCameraModel {
+public:
+	Mat cameraMatrix, distortionCoefficients;
+	bool set;
+};
+
 class FaceTracker {
 public:
 	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 2.0);
@@ -71,6 +79,8 @@ public:
 	TrackerState getTrackerState(void);
 	FacialBoundingBox getFacialBoundingBox(void);
 	FacialFeatures getFacialFeatures(void);
+	FacialCameraModel getFacialCameraModel(void);
+	FacialPose getFacialPose(void);
 private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);
@@ -108,12 +118,10 @@ private:
 	std::vector<Point3d> facialFeatures3d;
 	bool facialFeaturesSet;
 
-	Mat cameraMatrix, distortionCoefficients;
-	bool cameraModelSet;
+	FacialCameraModel facialCameraModel;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
 	FacialPose facialPose;
-	bool poseSet;
 
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
