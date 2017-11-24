@@ -41,7 +41,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 
 	trackerState = DETECTING;
 	markerDetectedSet = false;
-	markerPointSet = false;
+	markerPoint.set = false;
 	trackingBoxSet = false;
 	markerList = NULL;
 
@@ -220,21 +220,19 @@ void MarkerTracker::performDetection(void) {
 				return;
 			}
 
-			Point2d eyeBrowPoint;
-			bool eyeBrowPointSet;
-			std::tie(eyeBrowPoint, eyeBrowPointSet) = eyebrowTracker->getMarkerPoint();
-			if(!eyeBrowPointSet) {
+			MarkerPoint eyeBrowPoint = eyebrowTracker->getMarkerPoint();
+			if(!eyeBrowPoint.set) {
 				return;
 			}
 
 			if(xDirection < 0) {
-				boundingRect.width = eyeBrowPoint.x;
+				boundingRect.width = eyeBrowPoint.point.x;
 			} else {
-				boundingRect.x = eyeBrowPoint.x;
-				boundingRect.width = frameSize.width - eyeBrowPoint.x;
+				boundingRect.x = eyeBrowPoint.point.x;
+				boundingRect.width = frameSize.width - eyeBrowPoint.point.x;
 			}
 
-			generateMarkerCandidateList(&markerCandidateList, eyeBrowPoint, &boundingRect);
+			generateMarkerCandidateList(&markerCandidateList, eyeBrowPoint.point, &boundingRect);
 			if(markerCandidateList.size() < 1) {
 				return;
 			}
@@ -260,15 +258,13 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 
-		Point2d eyelidPoint;
-		bool eyelidPointSet;
-		std::tie(eyelidPoint, eyelidPointSet) = eyelidTracker->getMarkerPoint();
-		if(!eyelidPointSet) {
+		MarkerPoint eyelidPoint = eyelidTracker->getMarkerPoint();
+		if(!eyelidPoint.set) {
 			return;
 		}
 
-		boundingRect.y = eyelidPoint.y;
-		boundingRect.height = facialFeatures.stommion.y - eyelidPoint.y;
+		boundingRect.y = eyelidPoint.point.y;
+		boundingRect.height = facialFeatures.stommion.y - eyelidPoint.point.y;
 		if(xDirection < 0) {
 			boundingRect.x = facialFeatures.jawRightTop.x;
 			boundingRect.width = facialFeatures.noseSellion.x - facialFeatures.jawRightTop.x;
@@ -276,7 +272,7 @@ void MarkerTracker::performDetection(void) {
 			boundingRect.x = facialFeatures.noseSellion.x;
 			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
-		generateMarkerCandidateList(&markerCandidateList, eyelidPoint, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, eyelidPoint.point, &boundingRect);
 
 		if(markerCandidateList.size() < 1) {
 			return;
@@ -307,16 +303,13 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 		
-		Point2d jawPoint;
-		bool jawPointSet;
-		std::tie(jawPoint, jawPointSet) = jawTracker->getMarkerPoint();
-		if(!jawPointSet) {
+		MarkerPoint jawPoint = jawTracker->getMarkerPoint();
+		if(!jawPoint.set) {
 			return;
 		}
 
 		MarkerTracker *cheekTracker;
-		Point2d cheekPoint;
-		bool cheekPointSet;
+		MarkerPoint cheekPoint;
 
 		double avgX = (facialFeatures.menton.x + facialFeatures.stommion.x + facialFeatures.noseTip.x) / 3.0;
 
@@ -326,28 +319,28 @@ void MarkerTracker::performDetection(void) {
 			if(cheekTracker == NULL) {
 				return;
 			}
-			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
-			if(!cheekPointSet) {
+			cheekPoint = cheekTracker->getMarkerPoint();
+			if(!cheekPoint.set) {
 				return;
 			}
 
-			boundingRect.y = cheekPoint.y;
-			boundingRect.height = jawPoint.y - boundingRect.y;
+			boundingRect.y = cheekPoint.point.y;
+			boundingRect.height = jawPoint.point.y - boundingRect.y;
 			boundingRect.x = avgX;
-			boundingRect.width = cheekPoint.x - boundingRect.x;
+			boundingRect.width = cheekPoint.point.x - boundingRect.x;
 		} else {
 			cheekTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(CheekRight));
 			if(cheekTracker == NULL) {
 				return;
 			}
-			std::tie(cheekPoint, cheekPointSet) = cheekTracker->getMarkerPoint();
-			if(!cheekPointSet) {
+			cheekPoint = cheekTracker->getMarkerPoint();
+			if(!cheekPoint.set) {
 				return;
 			}
 
-			boundingRect.y = cheekPoint.y;
-			boundingRect.height = jawPoint.y - boundingRect.y;
-			boundingRect.x = cheekPoint.x;
+			boundingRect.y = cheekPoint.point.y;
+			boundingRect.height = jawPoint.point.y - boundingRect.y;
+			boundingRect.x = cheekPoint.point.x;
 			boundingRect.width = avgX - boundingRect.x;
 		}
 
@@ -362,7 +355,7 @@ void MarkerTracker::performDetection(void) {
 		} else if(markerType.type == LipsLeftTop || markerType.type == LipsRightTop) {
 			lipPointOfInterest = facialFeatures.noseTip;
 		} else {
-			lipPointOfInterest = jawPoint;
+			lipPointOfInterest = jawPoint.point;
 		}
 
 		generateMarkerCandidateList(&markerCandidateList, lipPointOfInterest, &boundingRect);
@@ -450,7 +443,7 @@ bool MarkerTracker::claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *ma
 }
 
 void MarkerTracker::assignMarkerPoint(void) {
-	markerPointSet = false;
+	markerPoint.set = false;
 	if(markerDetectedSet && trackingBoxSet) {
 		Point2d detectedPoint = Point(markerDetected.marker.center);
 		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
@@ -467,14 +460,14 @@ void MarkerTracker::assignMarkerPoint(void) {
 		detectedPoint.y = detectedPoint.y * detectedPointWeight;
 		trackingPoint.x = trackingPoint.x * trackingPointWeight;
 		trackingPoint.y = trackingPoint.y * trackingPointWeight;
-		markerPoint = detectedPoint + trackingPoint;
-		markerPointSet = true;
+		markerPoint.point = detectedPoint + trackingPoint;
+		markerPoint.set = true;
 	} else if(markerDetectedSet) {
-		markerPoint = markerDetected.marker.center;
-		markerPointSet = true;
+		markerPoint.point = markerDetected.marker.center;
+		markerPoint.set = true;
 	} else if(trackingBoxSet) {
-		markerPoint = Utilities::centerRect(trackingBox);
-		markerPointSet = true;
+		markerPoint.point = Utilities::centerRect(trackingBox);
+		markerPoint.set = true;
 	} else {
 		if(trackerState == TRACKING) {
 			trackerState = LOST;
@@ -558,8 +551,8 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
 		}
 	}
-	if(markerPointSet) {
-		Utilities::drawX(frame, markerPoint, color, 10, 2);
+	if(markerPoint.set) {
+		Utilities::drawX(frame, markerPoint.point, color, 10, 2);
 	}
 }
 
@@ -567,8 +560,8 @@ TrackerState MarkerTracker::getTrackerState(void) {
 	return trackerState;
 }
 
-tuple<Point2d, bool> MarkerTracker::getMarkerPoint(void) {
-	return make_tuple(markerPoint, markerPointSet);
+MarkerPoint MarkerTracker::getMarkerPoint(void) {
+	return markerPoint;
 }
 
 vector<MarkerTracker *> MarkerTracker::markerTrackers;

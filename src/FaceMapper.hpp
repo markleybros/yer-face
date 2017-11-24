@@ -5,8 +5,6 @@
 #include "MarkerTracker.hpp"
 #include "MarkerSeparator.hpp"
 
-#include <tuple>
-
 using namespace std;
 using namespace cv;
 

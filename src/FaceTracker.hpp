@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <tuple>
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 

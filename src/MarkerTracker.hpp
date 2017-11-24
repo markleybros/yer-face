@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <tuple>
 #include <cstdlib>
 #include <list>
 
@@ -28,6 +27,12 @@ public:
 	double sqrtArea;
 };
 
+class MarkerPoint {
+public:
+	Point2d point;
+	bool set;
+};
+
 class FaceMapper;
 
 class MarkerTracker {
@@ -38,7 +43,7 @@ public:
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
 	TrackerState getTrackerState(void);
-	tuple<Point2d, bool> getMarkerPoint(void);
+	MarkerPoint getMarkerPoint(void);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
@@ -71,8 +76,7 @@ private:
 	bool markerDetectedSet;
 	Rect2d trackingBox;
 	bool trackingBoxSet;
-	Point2d markerPoint;
-	bool markerPointSet;
+	MarkerPoint markerPoint;
 };
 
 }; //namespace YerFace
