@@ -70,7 +70,7 @@ void FaceMapper::processCurrentFrame(void) {
 	facialFeatures = faceTracker->getFacialFeatures();
 	calculateEyeRects();
 	markerSeparator->processCurrentFrame();
-	
+
 	markerJaw->processCurrentFrame();
 
 	markerEyelidLeftTop->processCurrentFrame();
@@ -92,7 +92,7 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightCorner->processCurrentFrame();
 	markerLipsRightTop->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
-
+/*
 	//// FIXME FIXME FIXME ////
 	FacialCameraModel cameraModel = faceTracker->getFacialCameraModel();
 	Mat frame = frameDerivatives->getPreviewFrame();
@@ -132,6 +132,7 @@ void FaceMapper::processCurrentFrame(void) {
 		}
 	}
 	//// END FIXME ////
+*/
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
@@ -146,10 +147,27 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 			rectangle(frame, rightEyeRect.rect, Scalar(0, 0, 255));
 		}
 	}
+	Size frameSize = frame.size();
+	double previewRatio = 1.25, previewWidthPercentage = 0.2, previewCenterHeightPercentage = 0.2; // FIXME - magic numbers
+	Rect2d previewRect;
+	previewRect.width = frameSize.width * previewWidthPercentage;
+	previewRect.height = previewRect.width * previewRatio;
+	previewRect.x = frameSize.width - previewRect.width;
+	previewRect.y = frameSize.height - previewRect.height;
+	Point2d previewCenter = Utilities::centerRect(previewRect);
+	previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
+	double previewPointScale = previewRect.width / 200;
+	rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
 	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
 	size_t markerTrackersCount = (*markerTrackers).size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
 		(*markerTrackers)[i]->renderPreviewHUD(verbose);
+
+		MarkerPoint markerPoint = (*markerTrackers)[i]->getMarkerPoint();
+		Point2d previewPoint = Point2d(
+				(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
+				(markerPoint.point3d.y * previewPointScale) + previewCenter.y);
+		Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
 	}
 }
 

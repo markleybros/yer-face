@@ -30,6 +30,7 @@ public:
 class MarkerPoint {
 public:
 	Point2d point;
+	Point3d point3d;
 	bool set;
 };
 
@@ -56,6 +57,7 @@ private:
 	bool claimMarkerCandidate(MarkerCandidate markerCandidate);
 	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList);
 	void assignMarkerPoint(void);
+	void calculate3dMarkerPoint(void);
 	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;

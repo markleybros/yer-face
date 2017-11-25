@@ -79,6 +79,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doCalculateFacialTransformation();
 
+	doCalculateFacialPlane();
+
 	return trackerState;
 }
 
@@ -337,6 +339,13 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2]);
 }
 
+void FaceTracker::doCalculateFacialPlane(void) {
+	facialPose.planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
+	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, 1.0);
+	planeNormalMat = facialPose.rotationMatrix * planeNormalMat;
+	facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+}
+
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
 	if(*src == OBJECT_PART_NOT_PRESENT) {
 		return false;
@@ -379,12 +388,9 @@ void FaceTracker::renderPreviewHUD(bool verbose) {
 		Mat tempRotationVector;
 		Rodrigues(facialPose.rotationMatrix, tempRotationVector);
 		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
-		line(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-		Utilities::drawX(frame, gizmo2d[1], Scalar(0, 0, 255), 5, 2);
-		line(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
-		Utilities::drawX(frame, gizmo2d[3], Scalar(255, 0, 0), 5, 2);
-		line(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
-		Utilities::drawX(frame, gizmo2d[5], Scalar(0, 255, 0), 5, 2);
+		arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
+		arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
+		arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
 	}
 }
 

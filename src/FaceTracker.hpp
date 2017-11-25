@@ -49,6 +49,8 @@ enum DlibFeatureIndexes {
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
+	Point3d planePoint;
+	Vec3d planeNormal;
 	bool set;
 };
 
@@ -72,7 +74,7 @@ public:
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 2.0);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.85);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -90,6 +92,7 @@ private:
 	void doIdentifyFeatures(void);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
+	void doCalculateFacialPlane(void);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
 
 	string modelFileName;
