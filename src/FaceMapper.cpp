@@ -92,47 +92,6 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightCorner->processCurrentFrame();
 	markerLipsRightTop->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
-/*
-	//// FIXME FIXME FIXME ////
-	FacialCameraModel cameraModel = faceTracker->getFacialCameraModel();
-	Mat frame = frameDerivatives->getPreviewFrame();
-	FacialPose facialPose = faceTracker->getFacialPose();
-	Point3d planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
-	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, 1.0);
-	planeNormalMat = facialPose.rotationMatrix * planeNormalMat;
-	Vec3d planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
-
-	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
-	size_t markerTrackersCount = (*markerTrackers).size();
-	for(size_t i = 0; i < markerTrackersCount; i++) {
-		MarkerPoint tempPoint = (*markerTrackers)[i]->getMarkerPoint();
-		Mat homogeneousPoint = (Mat_<double>(3,1) << tempPoint.point.x, tempPoint.point.y, 1.0);
-		Mat worldPoint = cameraModel.cameraMatrix.inv() * homogeneousPoint;
-
-		Point3d intersection;
-		Point3d rayOrigin = Point3d(0,0,0);
-		Vec3d rayVector = Vec3d(worldPoint.at<double>(0), worldPoint.at<double>(1), worldPoint.at<double>(2));
-		if(!Utilities::rayPlaneIntersection(intersection, rayOrigin, rayVector, planePoint, planeNormal)) {
-			fprintf(stderr, "INTERSECTION FAILED!!!\n");
-		} else {
-			Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
-			markerMat = markerMat - facialPose.translationVector;
-			markerMat = facialPose.rotationMatrix.inv() * markerMat;
-
-			cout << "****************RECOVERED MARKER POSITION::: " << markerMat << "\n";
-
-			std::vector<Point3d> rayViz3d(2);
-			std::vector<Point2d> rayViz2d;
-			rayViz3d[0] = intersection;
-			rayViz3d[1] = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2) + 500);
-			Mat tempRotationVector = (Mat_<double>(3, 1) << 0, 0, 0);
-			Mat tempTranslationVector = (Mat_<double>(3, 1) << 0, 0, 0);
-			projectPoints(rayViz3d, tempRotationVector, tempTranslationVector, cameraModel.cameraMatrix, cameraModel.distortionCoefficients, rayViz2d);
-			line(frame, rayViz2d[0], rayViz2d[1], Scalar(0, 0, 255), 1);
-		}
-	}
-	//// END FIXME ////
-*/
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {
