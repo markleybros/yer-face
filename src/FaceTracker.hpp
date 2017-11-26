@@ -33,7 +33,7 @@ enum DlibFeatureIndexes {
 	IDX_MOUTH_CENTER_INNER_BOTTOM = 66
 };
 
-//Unit millimeters. Values taken from https://en.wikipedia.org/wiki/Human_head
+//Unit millimeters. Values roughly taken from https://en.wikipedia.org/wiki/Human_head
 //Coordinate system is: +X Points Right (relative to the viewer), +Y Points Down (relative to the viewer), +Z Points toward the camera
 //This was all chosen to match Blender. (Except for the tiny unit size, which was chosen to help stabilize solvePnP().)
 #define VERTEX_NOSE_SELLION Point3d(0.0, 0.0, 0.0)
@@ -74,7 +74,7 @@ public:
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.5);
+	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 4, float myPoseSmoothingExponent = 1.5);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);

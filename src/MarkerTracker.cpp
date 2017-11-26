@@ -500,6 +500,7 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	markerMat = markerMat - facialPose.translationVector;
 	markerMat = facialPose.rotationMatrix.inv() * markerMat;
 	markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
+	fprintf(stderr, "MarkerTracker <%s> Recovered approximate 3D position: <%.02f, %.02f, %.02f>\n", markerType.toString(), markerPoint.point3d.x, markerPoint.point3d.y, markerPoint.point3d.z);
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {

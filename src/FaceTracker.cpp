@@ -340,8 +340,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
-	Point3d planarOffset = VERTEX_RIGHT_EAR;
-	facialPose.planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2) + (planarOffset.z * 0.5));
+	facialPose.planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, 1.0);
 	planeNormalMat = facialPose.rotationMatrix * planeNormalMat;
 	facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
