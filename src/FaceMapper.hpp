@@ -4,6 +4,7 @@
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "MarkerSeparator.hpp"
+#include "Metrics.hpp"
 
 using namespace std;
 using namespace cv;
@@ -34,6 +35,8 @@ private:
 	
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
+
+	Metrics *metrics;
 
 	MarkerSeparator *markerSeparator;
 

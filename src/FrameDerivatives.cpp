@@ -16,14 +16,17 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
 	classificationScaleFactor = myClassificationScaleFactor;
+	metrics = new Metrics();
 	fprintf(stderr, "FrameDerivatives constructed and ready to go!\n");
 }
 
 FrameDerivatives::~FrameDerivatives() {
+	delete metrics;
 	fprintf(stderr, "FrameDerivatives object destructing...\n");
 }
 
 void FrameDerivatives::setCurrentFrame(Mat newFrame) {
+	metrics->startClock();
 	currentFrame = newFrame;
 
 	Size frameSize = currentFrame.size();
@@ -45,6 +48,8 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	}
 
 	previewFrameCloned = false;
+	metrics->endClock();
+	fprintf(stderr, "FrameDerivatives %s\n", metrics->getTimesString());
 }
 Mat FrameDerivatives::getCurrentFrame(void) {
 	return currentFrame;

@@ -5,6 +5,7 @@
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerType.hpp"
+#include "Metrics.hpp"
 
 using namespace std;
 using namespace cv;
@@ -34,6 +35,7 @@ private:
 	float minTargetMarkerAreaPercentage;
 	float maxTargetMarkerAreaPercentage;
 	double markerBoxInflatePixels;
+	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;
 	Mat searchFrameBGR;

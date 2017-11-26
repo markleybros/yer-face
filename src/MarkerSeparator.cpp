@@ -37,10 +37,12 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
+	metrics = new Metrics();
 	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
 }
 
 MarkerSeparator::~MarkerSeparator() {
+	delete metrics;
 	fprintf(stderr, "MarkerSeparator object destructing...\n");
 }
 
@@ -50,6 +52,8 @@ void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 }
 
 void MarkerSeparator::processCurrentFrame(bool debug) {
+	metrics->startClock();
+	
 	markerList.clear();
 	FacialBoundingBox facialBoundingBox = faceTracker->getFacialBoundingBox();
 	if(!facialBoundingBox.set) {
@@ -163,6 +167,9 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		}
 		markerList[i].marker.center += Point2f(markerBoundaryRect.tl());
 	}
+
+	metrics->endClock();
+	fprintf(stderr, "MarkerSeparator %s\n", metrics->getTimesString());
 }
 
 void MarkerSeparator::renderPreviewHUD(bool verbose) {

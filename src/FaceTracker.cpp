@@ -48,10 +48,12 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
+	metrics = new Metrics();
 	fprintf(stderr, "FaceTracker object constructed and ready to go!\n");
 }
 
 FaceTracker::~FaceTracker() {
+	delete metrics;
 	fprintf(stderr, "FaceTracker object destructing...\n");
 }
 
@@ -59,6 +61,7 @@ FaceTracker::~FaceTracker() {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 TrackerState FaceTracker::processCurrentFrame(void) {
+	metrics->startClock();
 	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 
 	performTracking();
@@ -81,6 +84,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doCalculateFacialPlane();
 
+	metrics->endClock();
+	fprintf(stderr, "FaceTracker %s\n", metrics->getTimesString());
 	return trackerState;
 }
 
@@ -306,7 +311,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	solvePnP(facialFeatures3d, facialFeatures, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
-	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -50.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
+	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -30.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
 	translationOffset = tempPose.rotationMatrix * translationOffset;
 	tempPose.translationVector = tempPose.translationVector + translationOffset;
 
@@ -339,8 +344,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	facialPose = tempPose;
 	facialPose.set = true;
 
-	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
-	fprintf(stderr, "FaceTracker Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
+	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
+	// fprintf(stderr, "FaceTracker Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {

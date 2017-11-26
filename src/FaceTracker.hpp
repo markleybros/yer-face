@@ -11,6 +11,7 @@
 
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
+#include "Metrics.hpp"
 
 using namespace std;
 using namespace cv;
@@ -102,6 +103,7 @@ private:
 	int poseSmoothingBufferSize;
 	float poseSmoothingExponent;
 
+	Metrics *metrics;
 	TrackerState trackerState;
 
 	Rect2d classificationBox;

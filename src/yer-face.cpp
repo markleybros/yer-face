@@ -60,7 +60,7 @@ int main(int argc, const char** argv) {
 	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
 	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
-	metrics = new Metrics(30);
+	metrics = new Metrics(true);
 
 	//Open the video stream.
 	capture.open(capture_file);
@@ -71,7 +71,7 @@ int main(int argc, const char** argv) {
 
 	while(capture.read(frame)) {
 		// Start timer
-		metrics->startFrame();
+		metrics->startClock();
 		frameNum++;
 
 		if(frame.empty()) {
@@ -86,11 +86,11 @@ int main(int argc, const char** argv) {
 		faceTracker->renderPreviewHUD(false);
 		faceMapper->renderPreviewHUD(false);
 
-		metrics->endFrame();
+		metrics->endClock();
 
 		Mat previewFrame = frameDerivatives->getPreviewFrame();
 
-		//fprintf(stderr, "Frame %lu %s, %s\n", frameNum, metricsStringA, metricsStringB);
+		fprintf(stderr, "YerFace Frame %lu %s, %s\n", frameNum, metrics->getTimesString(), metrics->getFPSString());
 		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 

@@ -11,20 +11,21 @@ namespace YerFace {
 
 class Metrics {
 public:
-	Metrics(unsigned int myFrameBufferSize);
+	Metrics(bool myMetricIsFrames = false, unsigned int mySampleBufferSize = 30);
 	~Metrics();
-	void startFrame(void);
-	void endFrame(void);
+	void startClock(void);
+	void endClock(void);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
 	char *getTimesString(void);
 	double getFPS(void);
 	char *getFPSString(void);
 private:
-	unsigned int frameBufferSize;
+	bool metricIsFrames;
+	unsigned int sampleBufferSize;
 	double timer;
-	list<double> frameProcessTimes;
-	list<double> frameTickStartTimes;
+	list<double> processRunTimes;
+	list<double> tickStartTimes;
 	double averageTimeSeconds;
 	double worstTimeSeconds;
 	double fps;

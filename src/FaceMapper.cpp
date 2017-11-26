@@ -21,6 +21,8 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
 
+	metrics = new Metrics();
+
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this);
@@ -63,13 +65,17 @@ FaceMapper::~FaceMapper() {
 		}
 	}
 	delete markerSeparator;
+	delete metrics;
 }
 
 void FaceMapper::processCurrentFrame(void) {
 
+	markerSeparator->processCurrentFrame();
+
+	metrics->startClock();
+
 	facialFeatures = faceTracker->getFacialFeatures();
 	calculateEyeRects();
-	markerSeparator->processCurrentFrame();
 
 	markerJaw->processCurrentFrame();
 
@@ -92,6 +98,9 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightCorner->processCurrentFrame();
 	markerLipsRightTop->processCurrentFrame();
 	markerLipsRightBottom->processCurrentFrame();
+
+	metrics->endClock();
+	fprintf(stderr, "FaceMapper %s\n", metrics->getTimesString());
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {

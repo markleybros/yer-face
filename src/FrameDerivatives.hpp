@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Metrics.hpp"
+
 #include "opencv2/imgproc.hpp"
 
 using namespace std;
@@ -21,6 +23,7 @@ public:
 private:
 	int classificationBoundingBox;
 	double classificationScaleFactor;
+	Metrics *metrics;
 	Mat currentFrame; //BGR format, at the native resolution of the input.
 	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.
 	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
