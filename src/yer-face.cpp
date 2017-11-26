@@ -24,6 +24,7 @@ using namespace YerFace;
 
 String capture_file;
 String dlib_shape_predictor;
+String prev_imgseq;
 String window_name = "Performance Capture Tests";
 
 FrameDerivatives *frameDerivatives;
@@ -37,7 +38,8 @@ int main(int argc, const char** argv) {
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
 		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
-		"{capture_file|/dev/video0|Video file or video capture device file to open.}");
+		"{capture_file|/dev/video0|Video file or video capture device file to open.}"
+		"{prev_imgseq||If set, is presumed to be the file name prefix of the output preview image sequence.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -51,6 +53,7 @@ int main(int argc, const char** argv) {
 	}
 	capture_file = parser.get<string>("capture_file");
 	dlib_shape_predictor = parser.get<string>("dlib_shape_predictor");
+	prev_imgseq = parser.get<string>("prev_imgseq");
 
 	//A couple of OpenCV classes.
 	VideoCapture capture;
@@ -100,6 +103,15 @@ int main(int argc, const char** argv) {
 		if(c == 27) {
 			fprintf(stderr, "Breaking on user escape...\n");
 			break;
+		}
+
+		//If requested, write image sequence.
+		if(prev_imgseq.length() > 0) {
+			int filenameLength = prev_imgseq.length() + 32;
+			char filename[filenameLength];
+			snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), frameNum);
+			fprintf(stderr, "YerFace writing preview frame to %s ...\n", filename);
+			imwrite(filename, previewFrame);
 		}
 	}
 
