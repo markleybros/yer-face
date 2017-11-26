@@ -104,23 +104,25 @@ Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoi
 }
 
 bool Utilities::rayPlaneIntersection(Point3d &intersection, Point3d rayOrigin, Vec3d rayVector, Point3d planePoint, Vec3d planeNormal) {
+	Vec3d rayVectorNormalized = normalize(rayVector);
+
 	Mat rayOriginMat, rayVectorMat, planeNormalMat, planePointMat;
 	rayOriginMat = (Mat_<double>(3, 1) << rayOrigin.x, rayOrigin.y, rayOrigin.z);
-	rayVectorMat = (Mat_<double>(3, 1) << rayVector[0], rayVector[1], rayVector[2]);
+	rayVectorMat = (Mat_<double>(3, 1) << rayVectorNormalized[0], rayVectorNormalized[1], rayVectorNormalized[2]);
 	planePointMat = (Mat_<double>(3, 1) << planePoint.x, planePoint.y, planePoint.z);
 	planeNormalMat = (Mat_<double>(3, 1) << planeNormal[0], planeNormal[1], planeNormal[2]);
+
 
 	if(planeNormalMat.dot(rayVectorMat) == 0) {
 		return false;
 	}
 
 	double d = planeNormalMat.dot(planePointMat);
-	double x = (d - planeNormalMat.dot(rayOriginMat)) / planeNormalMat.dot(rayVectorMat);
+	double t = (d - planeNormalMat.dot(rayOriginMat)) / planeNormalMat.dot(rayVectorMat);
 
-	Vec3d temp = normalize(rayVector);
-	intersection.x = rayOrigin.x + (temp[0] * x);
-	intersection.y = rayOrigin.y + (temp[1] * x);
-	intersection.z = rayOrigin.z + (temp[2] * x);
+	intersection.x = rayOrigin.x + (rayVectorNormalized[0] * t);
+	intersection.y = rayOrigin.y + (rayVectorNormalized[1] * t);
+	intersection.z = rayOrigin.z + (rayVectorNormalized[2] * t);
 	return true;
 }
 

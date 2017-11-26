@@ -306,6 +306,10 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	solvePnP(facialFeatures3d, facialFeatures, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
+	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -50.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
+	translationOffset = tempPose.rotationMatrix * translationOffset;
+	tempPose.translationVector = tempPose.translationVector + translationOffset;
+
 	facialPoseSmoothingBuffer.push_back(tempPose);
 	while(facialPoseSmoothingBuffer.size() > (unsigned int)poseSmoothingBufferSize) {
 		facialPoseSmoothingBuffer.pop_front();
@@ -336,12 +340,12 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	facialPose.set = true;
 
 	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
-	fprintf(stderr, "smoothed pose angle: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2]);
+	fprintf(stderr, "FaceTracker Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
 	facialPose.planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
-	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, 1.0);
+	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
 	planeNormalMat = facialPose.rotationMatrix * planeNormalMat;
 	facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
