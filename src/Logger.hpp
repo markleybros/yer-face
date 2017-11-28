@@ -3,6 +3,7 @@
 #include "SDL.h"
 
 #include <cstdarg>
+#include <string>
 
 namespace YerFace {
 
@@ -17,7 +18,7 @@ public:
 	void critical(const char* fmt, ...);
 	static void setLoggingFilter(SDL_LogPriority priority, int category = -1);
 private:
-	const char *name;
+	std::string name;
 	int category;
 };
 

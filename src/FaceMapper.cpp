@@ -21,7 +21,7 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
 
-	metrics = new Metrics();
+	metrics = new Metrics("FaceMapper");
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
 
@@ -100,7 +100,6 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightBottom->processCurrentFrame();
 
 	metrics->endClock();
-	fprintf(stderr, "FaceMapper %s\n", metrics->getTimesString());
 }
 
 void FaceMapper::renderPreviewHUD(bool verbose) {

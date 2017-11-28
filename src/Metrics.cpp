@@ -6,7 +6,8 @@ using namespace cv;
 
 namespace YerFace {
 
-Metrics::Metrics(bool myMetricIsFrames, unsigned int mySampleBufferSize) {
+Metrics::Metrics(const char *myName, bool myMetricIsFrames, unsigned int mySampleBufferSize) {
+	name = (string)myName;
 	metricIsFrames = myMetricIsFrames;
 	sampleBufferSize = mySampleBufferSize;
 	averageTimeSeconds = 0.0;
@@ -14,11 +15,14 @@ Metrics::Metrics(bool myMetricIsFrames, unsigned int mySampleBufferSize) {
 	fps = 0.0;
 	snprintf(timesString, METRICS_STRING_LENGTH, "N/A");
 	snprintf(fpsString, METRICS_STRING_LENGTH, "N/A");
-	fprintf(stderr, "Metrics object constructed and ready to go!\n");
+	string loggerName = name + "-Metrics";
+	logger = new Logger(loggerName.c_str());
+	logger->debug("Metrics object constructed and ready to go!");
 }
 
 Metrics::~Metrics() {
-	fprintf(stderr, "Metrics object destructing...\n");
+	logger->debug("Metrics object destructing...");
+	delete logger;
 }
 
 void Metrics::startClock(void) {
@@ -52,7 +56,12 @@ void Metrics::endClock(void) {
 	while(tickStartTimes.size() > sampleBufferSize) {
 		tickStartTimes.pop_back();
 	}
-	// fprintf(stderr, "Metrics... %s %s\n", fpsString, timesString);
+
+	if(metricIsFrames) {
+		logger->verbose("%s %s", fpsString, timesString);
+	} else {
+		logger->verbose("%s", timesString);
+	}
 }
 
 double Metrics::getAverageTimeSeconds(void) {

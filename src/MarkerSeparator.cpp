@@ -37,7 +37,7 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
-	metrics = new Metrics();
+	metrics = new Metrics("MarkerSeparator");
 	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
 }
 
@@ -169,7 +169,6 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 
 	metrics->endClock();
-	fprintf(stderr, "MarkerSeparator %s\n", metrics->getTimesString());
 }
 
 void MarkerSeparator::renderPreviewHUD(bool verbose) {

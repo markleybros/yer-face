@@ -48,7 +48,7 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
-	metrics = new Metrics();
+	metrics = new Metrics("FaceTracker");
 	fprintf(stderr, "FaceTracker object constructed and ready to go!\n");
 }
 
@@ -85,7 +85,6 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	doCalculateFacialPlane();
 
 	metrics->endClock();
-	fprintf(stderr, "FaceTracker %s\n", metrics->getTimesString());
 	return trackerState;
 }
 

@@ -8,6 +8,7 @@ using namespace std;
 namespace YerFace {
 
 FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myClassificationScaleFactor) {
+	logger = new Logger("FrameDerivatives");
 	if(myClassificationBoundingBox < 0) {
 		throw invalid_argument("Classification Bounding Box is invalid.");
 	}
@@ -16,13 +17,14 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
 	classificationScaleFactor = myClassificationScaleFactor;
-	metrics = new Metrics();
-	fprintf(stderr, "FrameDerivatives constructed and ready to go!\n");
+	metrics = new Metrics("FrameDerivatives");
+	logger->debug("FrameDerivatives constructed and ready to go!");
 }
 
 FrameDerivatives::~FrameDerivatives() {
+	logger->debug("FrameDerivatives object destructing...");
 	delete metrics;
-	fprintf(stderr, "FrameDerivatives object destructing...\n");
+	delete logger;
 }
 
 void FrameDerivatives::setCurrentFrame(Mat newFrame) {
@@ -43,13 +45,13 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 
 	static bool reportedScale = false;
 	if(!reportedScale) {
-		fprintf(stderr, "Scaled current frame <%dx%d> down to <%dx%d> for classification\n", frameSize.width, frameSize.height, classificationFrame.size().width, classificationFrame.size().height);
+		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, classificationFrame.size().width, classificationFrame.size().height);
 		reportedScale = true;
 	}
 
 	previewFrameCloned = false;
 	metrics->endClock();
-	fprintf(stderr, "FrameDerivatives %s\n", metrics->getTimesString());
+	logger->verbose("FrameDerivatives %s", metrics->getTimesString());
 }
 Mat FrameDerivatives::getCurrentFrame(void) {
 	return currentFrame;

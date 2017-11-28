@@ -8,14 +8,14 @@ using namespace std;
 namespace YerFace {
 
 Logger::Logger(const char *myName, int myCategory) {
-	name = myName;
+	name = (string)myName;
 	category = myCategory;
 }
 
 void Logger::verbose(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_VERBOSE, extraFormat.c_str(), args);
 	va_end(args);
 }
@@ -23,7 +23,7 @@ void Logger::verbose(const char* fmt, ...) {
 void Logger::debug(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_DEBUG, extraFormat.c_str(), args);
 	va_end(args);
 }
@@ -31,7 +31,7 @@ void Logger::debug(const char* fmt, ...) {
 void Logger::info(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_INFO, extraFormat.c_str(), args);
 	va_end(args);
 }
@@ -39,7 +39,7 @@ void Logger::info(const char* fmt, ...) {
 void Logger::warn(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_WARN, extraFormat.c_str(), args);
 	va_end(args);
 }
@@ -47,7 +47,7 @@ void Logger::warn(const char* fmt, ...) {
 void Logger::error(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_ERROR, extraFormat.c_str(), args);
 	va_end(args);
 }
@@ -55,7 +55,7 @@ void Logger::error(const char* fmt, ...) {
 void Logger::critical(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	string extraFormat = (string)name + ": " + (string)fmt;
+	string extraFormat = name + ": " + (string)fmt;
 	SDL_LogMessageV(category, SDL_LOG_PRIORITY_CRITICAL, extraFormat.c_str(), args);
 	va_end(args);
 }

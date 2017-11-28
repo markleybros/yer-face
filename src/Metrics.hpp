@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Logger.hpp"
+
 #include "opencv2/core/utility.hpp"
 #include <list>
 
@@ -11,7 +13,7 @@ namespace YerFace {
 
 class Metrics {
 public:
-	Metrics(bool myMetricIsFrames = false, unsigned int mySampleBufferSize = 30);
+	Metrics(const char *myName, bool myMetricIsFrames = false, unsigned int mySampleBufferSize = 30);
 	~Metrics();
 	void startClock(void);
 	void endClock(void);
@@ -21,8 +23,11 @@ public:
 	double getFPS(void);
 	char *getFPSString(void);
 private:
+	string name;
 	bool metricIsFrames;
 	unsigned int sampleBufferSize;
+
+	Logger *logger;
 	double timer;
 	list<double> processRunTimes;
 	list<double> tickStartTimes;
