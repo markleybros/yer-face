@@ -20,7 +20,6 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	size_t markerTrackersCount = markerTrackers.size();
 	for(size_t i = 0; i < markerTrackersCount; i++) {
 		if(markerTrackers[i]->getMarkerType().type == markerType.type) {
-			fprintf(stderr, "Trying to construct MarkerTracker <%s> object, but one already exists!\n", markerType.toString());
 			throw invalid_argument("MarkerType collision trying to construct MarkerTracker");
 		}
 	}
@@ -49,17 +48,21 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	faceTracker = faceMapper->getFaceTracker();
 	markerSeparator = faceMapper->getMarkerSeparator();
 
-	fprintf(stderr, "MarkerTracker <%s> object constructed and ready to go!\n", markerType.toString());
+	string loggerName = "MarkerTracker<" + (string)markerType.toString() + ">";
+	logger = new Logger(loggerName.c_str());
+
+	logger->debug("MarkerTracker object constructed and ready to go!");
 }
 
 MarkerTracker::~MarkerTracker() {
-	fprintf(stderr, "MarkerTracker <%s> object destructing...\n", markerType.toString());
+	logger->debug("MarkerTracker object destructing...");
 	for(vector<MarkerTracker *>::iterator iterator = markerTrackers.begin(); iterator != markerTrackers.end(); ++iterator) {
 		if(*iterator == this) {
 			markerTrackers.erase(iterator);
 			return;
 		}
 	}
+	delete logger;
 }
 
 MarkerType MarkerTracker::getMarkerType(void) {
@@ -407,7 +410,7 @@ bool MarkerTracker::trackerDriftingExcessively(void) {
 	double actualDistance = Utilities::lineDistance(markerDetected.marker.center, Utilities::centerRect(trackingBox));
 	double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
-		fprintf(stderr, "MarkerTracker <%s>: WARNING: Optical tracker drifting excessively! Resetting it.\n", markerType.toString());
+		logger->warn("Optical tracker drifting excessively! Resetting it.");
 		return true;
 	}
 	return false;
@@ -423,7 +426,6 @@ bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate) {
 	}
 	MarkerSeparated *markerSeparatedCandidate = &(*markerList)[markerCandidate.markerListIndex];
 	if(markerSeparatedCandidate->assignedType.type != NoMarkerAssigned) {
-		// fprintf(stderr, "MarkerTracker <%s>: WARNING: Attempted to claim marker %u but it was already assigned type <%s>.\n", markerType.toString(), markerCandidate.markerListIndex, markerSeparatedCandidate->assignedType.toString());
 		return false;
 	}
 	markerSeparatedCandidate->assignedType.type = markerType.type;
@@ -473,7 +475,7 @@ void MarkerTracker::assignMarkerPoint(void) {
 	} else {
 		if(trackerState == TRACKING) {
 			trackerState = LOST;
-			fprintf(stderr, "MarkerTracker <%s> Lost marker completely! Will keep searching...\n", markerType.toString());
+			logger->warn("Lost marker completely! Will keep searching...");
 		}
 	}	
 }
@@ -493,14 +495,14 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	Point3d rayOrigin = Point3d(0,0,0);
 	Vec3d rayVector = Vec3d(worldPoint.at<double>(0), worldPoint.at<double>(1), worldPoint.at<double>(2));
 	if(!Utilities::rayPlaneIntersection(intersection, rayOrigin, rayVector, facialPose.planePoint, facialPose.planeNormal)) {
-		fprintf(stderr, "MarkerTracker <%s> Failed 3d ray/plane intersection with face plane! No update to 3d marker point.\n", markerType.toString());
+		logger->warn("Failed 3d ray/plane intersection with face plane! No update to 3d marker point.");
 		return;
 	}
 	Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
 	markerMat = markerMat - facialPose.translationVector;
 	markerMat = facialPose.rotationMatrix.inv() * markerMat;
 	markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
-	// fprintf(stderr, "MarkerTracker <%s> Recovered approximate 3D position: <%.03f, %.03f, %.03f>\n", markerType.toString(), markerPoint.point3d.x, markerPoint.point3d.y, markerPoint.point3d.z);
+	logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", markerPoint.point3d.x, markerPoint.point3d.y, markerPoint.point3d.z);
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {

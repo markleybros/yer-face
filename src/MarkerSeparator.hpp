@@ -2,6 +2,8 @@
 
 #include "opencv2/objdetect.hpp"
 #include "opencv2/imgproc.hpp"
+
+#include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerType.hpp"
@@ -35,6 +37,8 @@ private:
 	float minTargetMarkerAreaPercentage;
 	float maxTargetMarkerAreaPercentage;
 	double markerBoxInflatePixels;
+
+	Logger *logger;
 	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;

@@ -51,7 +51,6 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 
 	previewFrameCloned = false;
 	metrics->endClock();
-	logger->verbose("FrameDerivatives %s", metrics->getTimesString());
 }
 Mat FrameDerivatives::getCurrentFrame(void) {
 	return currentFrame;

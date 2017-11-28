@@ -1,6 +1,7 @@
 
 #include "MarkerSeparator.hpp"
 #include "Utilities.hpp"
+
 #include "opencv2/highgui.hpp"
 
 #include <cstdlib>
@@ -37,13 +38,15 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
+	logger = new Logger("MarkerSeparator");
 	metrics = new Metrics("MarkerSeparator");
-	fprintf(stderr, "MarkerSeparator object constructed and ready to go!\n");
+	logger->debug("MarkerSeparator object constructed and ready to go!");
 }
 
 MarkerSeparator::~MarkerSeparator() {
+	logger->debug("MarkerSeparator object destructing...");
 	delete metrics;
-	fprintf(stderr, "MarkerSeparator object destructing...\n");
+	delete logger;
 }
 
 void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
@@ -67,7 +70,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		markerBoundaryRect = Rect(searchBox & imageRect);
 		searchFrameBGR = frame(markerBoundaryRect);
 	} catch(exception &e) {
-		fprintf(stderr, "MarkerSeparator: WARNING: Failed search box cropping. Got exception: %s", e.what());
+		logger->warn("Failed search box cropping. Got exception: %s", e.what());
 		return;
 	}
 	cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
@@ -108,14 +111,11 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		if(!markerList[i].active) {
 			continue;
 		}
-		// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, considering base marker %lu\n", i);
 		Point2f vertices[8];
 		markerList[i].marker.points(vertices);
-		bool didRemoveDuplicate;
-		unsigned int iterations = 0;
 		Rect2d primaryRect;
+		bool didRemoveDuplicate;
 		do {
-			iterations++;
 			didRemoveDuplicate = false;
 			primaryRect = Rect2d(markerList[i].marker.boundingRect2f());
 			primaryRect.x -= markerBoxInflatePixels;
@@ -126,14 +126,12 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 				if(i == j || !markerList[j].active) {
 					continue;
 				}
-				// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, comparing secondary marker %lu with base marker %lu\n", j, i);
 				Rect2d secondaryRect = Rect2d(markerList[j].marker.boundingRect2f());
 				secondaryRect.x -= markerBoxInflatePixels;
 				secondaryRect.y -= markerBoxInflatePixels;
 				secondaryRect.width += markerBoxInflatePixels * 2;
 				secondaryRect.height += markerBoxInflatePixels * 2;
 				if((primaryRect & secondaryRect).area() > 0) {
-					// fprintf(stderr, "MarkerSeparator INFO: Deduplicating, folding secondary marker %lu into base marker %lu\n", j, i);
 					markerList[i].marker.points(&vertices[0]);
 					markerList[j].marker.points(&vertices[4]);
 					vector<Point2f> verticesVector(std::begin(vertices), std::end(vertices));
@@ -142,9 +140,6 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 					didRemoveDuplicate = true;
 				}
 			}
-			// if(didRemoveDuplicate && iterations > 1) {
-			// 	fprintf(stderr, "MarkerSeparator WARNING: Deduplicating, altering base marker %lu in a loop; this was iteration %u and more iterations are still required. Looping over it again...\n", i, iterations);
-			// }
 		} while(didRemoveDuplicate);
 		if(debug) {
 			rectangle(debugFrame, primaryRect, Scalar(0, 0, 255));
@@ -156,7 +151,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		char c = (char)waitKey(1);
 		if(c == ' ') {
 			doPickColor();
-			fprintf(stderr, "MarkerSeparator User asked for a color picker...\n");
+			logger->info("User asked for a color picker...");
 		}
 	}
 
@@ -189,7 +184,7 @@ vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {
 
 void MarkerSeparator::doPickColor(void) {
 	Rect2d rect = selectROI(searchFrameBGR);
-	fprintf(stderr, "MarkerSeparator::doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>\n", rect.x, rect.y, rect.width, rect.height);
+	logger->verbose("doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>", rect.x, rect.y, rect.width, rect.height);
 	double hue = 0.0, minHue = -1, maxHue = -1;
 	double saturation = 0.0, minSaturation = -1, maxSaturation = -1;
 	double value = 0.0, minValue = -1, maxValue = -1;
@@ -198,7 +193,7 @@ void MarkerSeparator::doPickColor(void) {
 		for(int y = rect.y; y < rect.y + rect.height; y++) {
 			samples++;
 			Vec3b intensity = searchFrameHSV.at<Vec3b>(y, x);
-			fprintf(stderr, "MarkerSeparator::doPickColor: <%d, %d> HSV: <%d, %d, %d>\n", x, y, intensity[0], intensity[1], intensity[2]);
+			logger->verbose("doPickColor: <%d, %d> HSV: <%d, %d, %d>", x, y, intensity[0], intensity[1], intensity[2]);
 			hue += (double)intensity[0];
 			if(minHue < 0.0 || intensity[0] < minHue) {
 				minHue = intensity[0];
@@ -225,9 +220,9 @@ void MarkerSeparator::doPickColor(void) {
 	hue = hue / (double)samples;
 	saturation = saturation / (double)samples;
 	value = value / (double)samples;
-	fprintf(stderr, "MarkerSeparator::doPickColor: Average HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", hue, saturation, value);
-	fprintf(stderr, "MarkerSeparator::doPickColor: Minimum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", minHue, minSaturation, minValue);
-	fprintf(stderr, "MarkerSeparator::doPickColor: Maximum HSV color within selected rectangle: <%.02f, %.02f, %.02f>\n", maxHue, maxSaturation, maxValue);
+	logger->info("doPickColor: Average HSV color within selected rectangle: <%.02f, %.02f, %.02f>", hue, saturation, value);
+	logger->info("doPickColor: Minimum HSV color within selected rectangle: <%.02f, %.02f, %.02f>", minHue, minSaturation, minValue);
+	logger->info("doPickColor: Maximum HSV color within selected rectangle: <%.02f, %.02f, %.02f>", maxHue, maxSaturation, maxValue);
 }
 
 }; //namespace YerFace

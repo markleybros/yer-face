@@ -9,6 +9,7 @@
 #include "dlib/image_processing/render_face_detections.h"
 #include "dlib/image_processing.h"
 
+#include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "Metrics.hpp"
@@ -103,6 +104,7 @@ private:
 	int poseSmoothingBufferSize;
 	float poseSmoothingExponent;
 
+	Logger *logger;
 	Metrics *metrics;
 	TrackerState trackerState;
 

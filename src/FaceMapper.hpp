@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
@@ -36,6 +37,7 @@ private:
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 
+	Logger *logger;
 	Metrics *metrics;
 
 	MarkerSeparator *markerSeparator;

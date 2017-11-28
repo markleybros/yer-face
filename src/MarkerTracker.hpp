@@ -7,6 +7,7 @@
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
+#include "Logger.hpp"
 #include "MarkerType.hpp"
 #include "FaceMapper.hpp"
 #include "FaceTracker.hpp"
@@ -67,6 +68,7 @@ private:
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 
+	Logger *logger;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	FaceTracker *faceTracker;

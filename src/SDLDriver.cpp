@@ -19,7 +19,7 @@ SDLDriver::SDLDriver() {
 }
 
 SDLDriver::~SDLDriver() {
-	logger->debug("SDLDriver object destructing...\n");
+	logger->debug("SDLDriver object destructing...");
 }
 
 }; //namespace YerFace

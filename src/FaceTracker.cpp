@@ -46,15 +46,18 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 		throw invalid_argument("poseSmoothingExponent cannot be less than or equal to zero.");
 	}
 
+	logger = new Logger("FaceTracker");
+	metrics = new Metrics("FaceTracker");
+
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
-	metrics = new Metrics("FaceTracker");
-	fprintf(stderr, "FaceTracker object constructed and ready to go!\n");
+	logger->debug("FaceTracker object constructed and ready to go!");
 }
 
 FaceTracker::~FaceTracker() {
+	logger->debug("FaceTracker object destructing...");
 	delete metrics;
-	fprintf(stderr, "FaceTracker object destructing...\n");
+	delete logger;
 }
 
 // Pose recovery approach largely informed by the following sources:
@@ -125,7 +128,7 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 	double actualDistance = Utilities::lineDistance(Utilities::centerRect(classificationBoxNormalSize), Utilities::centerRect(trackingBox));
 	double maxDistance = std::sqrt(classificationBoxNormalSize.area()) * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
-		fprintf(stderr, "FaceTracker: WARNING: Optical tracker drifting excessively! Resetting it.\n");
+		logger->warn("Optical tracker drifting excessively! Resetting it.");
 		return true;
 	}
 	return false;
@@ -187,7 +190,7 @@ void FaceTracker::assignFaceRect(void) {
 	} else {
 		if(trackerState == TRACKING) {
 			trackerState = LOST;
-			fprintf(stderr, "FaceTracker: Lost face completely! Will keep searching...\n");
+			logger->warn("Lost face completely! Will keep searching...");
 		}
 	}
 }
@@ -343,8 +346,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	facialPose = tempPose;
 	facialPose.set = true;
 
-	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
-	// fprintf(stderr, "FaceTracker Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>\n", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
+	logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {

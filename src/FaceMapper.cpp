@@ -21,6 +21,7 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
 
+	logger = new Logger("FaceMapper");
 	metrics = new Metrics("FaceMapper");
 
 	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
@@ -51,11 +52,11 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this);
 	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this);
 	
-	fprintf(stderr, "FaceMapper object constructed and ready to go!\n");
+	logger->debug("FaceMapper object constructed and ready to go!");
 }
 
 FaceMapper::~FaceMapper() {
-	fprintf(stderr, "FaceMapper object destructing...\n");
+	logger->debug("FaceMapper object destructing...");
 	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
 	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*MarkerTracker::getMarkerTrackers());
 	size_t markerTrackersCount = markerTrackersSnapshot.size();
@@ -66,6 +67,7 @@ FaceMapper::~FaceMapper() {
 	}
 	delete markerSeparator;
 	delete metrics;
+	delete logger;
 }
 
 void FaceMapper::processCurrentFrame(void) {

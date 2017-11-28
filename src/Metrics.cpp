@@ -15,7 +15,7 @@ Metrics::Metrics(const char *myName, bool myMetricIsFrames, unsigned int mySampl
 	fps = 0.0;
 	snprintf(timesString, METRICS_STRING_LENGTH, "N/A");
 	snprintf(fpsString, METRICS_STRING_LENGTH, "N/A");
-	string loggerName = name + "-Metrics";
+	string loggerName = "Metrics<" + name + ">";
 	logger = new Logger(loggerName.c_str());
 	logger->debug("Metrics object constructed and ready to go!");
 }
