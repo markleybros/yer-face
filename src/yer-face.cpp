@@ -9,6 +9,8 @@
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 // alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
 
+#include "Logger.hpp"
+#include "SDLDriver.hpp"
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceMapper.hpp"
@@ -27,6 +29,8 @@ String dlib_shape_predictor;
 String prev_imgseq;
 String window_name = "Performance Capture Tests";
 
+Logger *logger;
+SDLDriver *sdlDriver;
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 FaceMapper *faceMapper;
@@ -34,6 +38,9 @@ Metrics *metrics;
 unsigned long frameNum = 0;
 
 int main(int argc, const char** argv) {
+	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
+	logger = new Logger("YerFace");
+
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
@@ -60,6 +67,7 @@ int main(int argc, const char** argv) {
 	Mat frame;
 
 	//Instantiate our classes.
+	sdlDriver = new SDLDriver();
 	frameDerivatives = new FrameDerivatives();
 	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
 	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
@@ -68,7 +76,7 @@ int main(int argc, const char** argv) {
 	//Open the video stream.
 	capture.open(capture_file);
 	if(!capture.isOpened()) {
-		fprintf(stderr, "Failed opening video stream\n");
+		logger->error("Failed opening video stream");
 		return 1;
 	}
 
@@ -78,7 +86,7 @@ int main(int argc, const char** argv) {
 		frameNum++;
 
 		if(frame.empty()) {
-			fprintf(stderr, "Breaking on no frame ready...\n");
+			logger->error("Breaking on no frame ready...");
 			break;
 		}
 
@@ -93,7 +101,7 @@ int main(int argc, const char** argv) {
 
 		Mat previewFrame = frameDerivatives->getPreviewFrame();
 
-		fprintf(stderr, "YerFace Frame %lu %s, %s\n", frameNum, metrics->getTimesString(), metrics->getFPSString());
+		logger->verbose("YerFace Frame %lu %s, %s", frameNum, metrics->getTimesString(), metrics->getFPSString());
 		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
@@ -101,7 +109,7 @@ int main(int argc, const char** argv) {
 		imshow(window_name, previewFrame);
 		char c = (char)waitKey(1);
 		if(c == 27) {
-			fprintf(stderr, "Breaking on user escape...\n");
+			logger->info("Breaking on user escape...");
 			break;
 		}
 
@@ -110,7 +118,7 @@ int main(int argc, const char** argv) {
 			int filenameLength = prev_imgseq.length() + 32;
 			char filename[filenameLength];
 			snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), frameNum);
-			fprintf(stderr, "YerFace writing preview frame to %s ...\n", filename);
+			logger->debug("YerFace writing preview frame to %s ...", filename);
 			imwrite(filename, previewFrame);
 		}
 	}
@@ -119,5 +127,7 @@ int main(int argc, const char** argv) {
 	delete faceMapper;
 	delete faceTracker;
 	delete frameDerivatives;
+	delete sdlDriver;
+	delete logger;
 	return 0;
 }
