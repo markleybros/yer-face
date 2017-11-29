@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+#include "SDLDriver.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
@@ -22,7 +23,7 @@ public:
 
 class FaceMapper {
 public:
-	FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
+	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void renderPreviewHUD(bool verbose = true);
@@ -34,6 +35,7 @@ public:
 private:
 	void calculateEyeRects(void);
 	
+	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 

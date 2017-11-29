@@ -12,7 +12,11 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage, float myMarkerBoxInflatePixels) {
+MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage, float myMarkerBoxInflatePixels) {
+	sdlDriver = mySDLDriver;
+	if(sdlDriver == NULL) {
+		throw invalid_argument("sdlDriver cannot be NULL");
+	}
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -40,6 +44,10 @@ MarkerSeparator::MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTrack
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	logger = new Logger("MarkerSeparator");
 	metrics = new Metrics("MarkerSeparator");
+	sdlDriver->onColorPickerEvent([this] (void) -> void {
+		this->logger->info("Got a Color Picker event. Popping up a color picker...");
+		this->doPickColor();
+	});
 	logger->debug("MarkerSeparator object constructed and ready to go!");
 }
 
@@ -148,11 +156,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 
 	if(debug) {
 		imshow("Trackers Separated", debugFrame);
-		char c = (char)waitKey(1);
-		if(c == ' ') {
-			doPickColor();
-			logger->info("User asked for a color picker...");
-		}
+		waitKey(1);
 	}
 
 	count = markerList.size();

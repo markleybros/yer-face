@@ -21,6 +21,7 @@ public:
 	void doRenderPreviewFrame(void);
 	void doHandleEvents(void);
 	void onQuitEvent(function<void(void)> callback);
+	void onColorPickerEvent(function<void(void)> callback);
 	bool getIsRunning(void);
 private:
 	void handleQuitEvent(void);
@@ -36,6 +37,7 @@ private:
 	SDL_Texture *previewTexture;
 
 	vector<function<void(void)>> onQuitCallbacks;
+	vector<function<void(void)>> onColorPickerCallbacks;
 };
 
 }; //namespace YerFace

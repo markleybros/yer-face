@@ -73,7 +73,7 @@ int main(int argc, const char** argv) {
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
 	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
-	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
+	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", true);
 
 	//Register for events.

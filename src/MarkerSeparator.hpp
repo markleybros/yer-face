@@ -4,6 +4,7 @@
 #include "opencv2/imgproc.hpp"
 
 #include "Logger.hpp"
+#include "SDLDriver.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerType.hpp"
@@ -23,14 +24,16 @@ public:
 
 class MarkerSeparator {
 public:
-	MarkerSeparator(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin = Scalar(56, 29, 80), Scalar myHSVRangeMax = Scalar(100, 211, 255), float myFaceSizePercentage = 1.5, float myMinTargetMarkerAreaPercentage = 0.00001, float myMaxTargetMarkerAreaPercentage = 0.01, float myMarkerBoxInflatePixels = 1.5);
+	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin = Scalar(56, 29, 80), Scalar myHSVRangeMax = Scalar(100, 211, 255), float myFaceSizePercentage = 1.5, float myMinTargetMarkerAreaPercentage = 0.00001, float myMaxTargetMarkerAreaPercentage = 0.01, float myMarkerBoxInflatePixels = 1.5);
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(bool debug = false);
 	void renderPreviewHUD(bool verbose = true);
 	vector<MarkerSeparated> *getMarkerList(void);
-	void doPickColor(void);
 private:
+	void doPickColor(void);
+	
+	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	float faceSizePercentage;

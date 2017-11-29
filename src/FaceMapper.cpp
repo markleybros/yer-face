@@ -11,7 +11,11 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
+FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
+	sdlDriver = mySDLDriver;
+	if(sdlDriver == NULL) {
+		throw invalid_argument("sdlDriver cannot be NULL");
+	}
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -24,7 +28,7 @@ FaceMapper::FaceMapper(FrameDerivatives *myFrameDerivatives, FaceTracker *myFace
 	logger = new Logger("FaceMapper");
 	metrics = new Metrics("FaceMapper");
 
-	markerSeparator = new MarkerSeparator(frameDerivatives, faceTracker);
+	markerSeparator = new MarkerSeparator(sdlDriver, frameDerivatives, faceTracker);
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this);
 	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this);

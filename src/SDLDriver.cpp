@@ -20,6 +20,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
 	onQuitCallbacks.clear();
+	onColorPickerCallbacks.clear();
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -119,6 +120,10 @@ void SDLDriver::doHandleEvents(void) {
 					case SDLK_ESCAPE:
 						handleQuitEvent();
 						break;
+					case SDLK_PERIOD:
+						logger->info("Received Color Picker keyboard event. Rebroadcasting...");
+						invokeAll(onColorPickerCallbacks);
+						break;
 				}
 				break;
 		}
@@ -133,8 +138,12 @@ void SDLDriver::onQuitEvent(function<void(void)> callback) {
 	onQuitCallbacks.push_back(callback);
 }
 
+void SDLDriver::onColorPickerEvent(function<void(void)> callback) {
+	onColorPickerCallbacks.push_back(callback);
+}
+
 void SDLDriver::handleQuitEvent(void) {
-	logger->info("Received Quit event from SDL or keyboard escape. Re-broadcasting...");
+	logger->info("Received Quit event from SDL or keyboard escape. Rebroadcasting...");
 	isRunning = false;
 	invokeAll(onQuitCallbacks);
 }
