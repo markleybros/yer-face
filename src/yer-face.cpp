@@ -29,6 +29,8 @@ String dlib_shape_predictor;
 String prev_imgseq;
 String window_name = "Performance Capture Tests";
 
+SDLWindowRenderer sdlWindowRenderer;
+
 Logger *logger;
 SDLDriver *sdlDriver;
 FrameDerivatives *frameDerivatives;
@@ -67,8 +69,8 @@ int main(int argc, const char** argv) {
 	Mat frame;
 
 	//Instantiate our classes.
-	sdlDriver = new SDLDriver();
 	frameDerivatives = new FrameDerivatives();
+	sdlDriver = new SDLDriver(frameDerivatives);
 	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
 	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", true);
@@ -80,7 +82,15 @@ int main(int argc, const char** argv) {
 		return 1;
 	}
 
+	sdlWindowRenderer.window = NULL;
+	sdlWindowRenderer.renderer = NULL;
+
 	while(capture.read(frame)) {
+		if(sdlWindowRenderer.window == NULL) {
+			Size frameSize = frame.size();
+			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+		}
+
 		// Start timer
 		metrics->startClock();
 		frameNum++;
@@ -111,6 +121,8 @@ int main(int argc, const char** argv) {
 			logger->info("Breaking on user escape...");
 			break;
 		}
+
+		sdlDriver->doRenderPreviewFrame();
 
 		//If requested, write image sequence.
 		if(prev_imgseq.length() > 0) {
