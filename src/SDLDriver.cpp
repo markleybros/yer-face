@@ -17,6 +17,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 
 	isRunning = true;
 	previewPositionInFrame = BottomRight;
+	setPreviewDebugDensity(2);
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
@@ -141,6 +142,11 @@ void SDLDriver::doHandleEvents(void) {
 							previewPositionInFrame = BottomRight;
 						}
 						break;
+					case SDLK_d:
+						previewDebugDensity++;
+						if(previewDebugDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
+							previewDebugDensity = 0;
+						}
 				}
 				break;
 		}
@@ -154,8 +160,23 @@ bool SDLDriver::getIsRunning(void) {
 void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
 	previewPositionInFrame = newPosition;
 }
+
 PreviewPositionInFrame SDLDriver::getPreviewPositionInFrame(void) {
 	return previewPositionInFrame;
+}
+
+void SDLDriver::setPreviewDebugDensity(int newDensity) {
+	if(newDensity < 0) {
+		previewDebugDensity = 0;
+	} else if(newDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
+		previewDebugDensity = YERFACE_PREVIEW_DEBUG_DENSITY_MAX;
+	} else {
+		previewDebugDensity = newDensity;
+	}
+}
+
+int SDLDriver::getPreviewDebugDensity(void) {
+	return previewDebugDensity;
 }
 
 void SDLDriver::onQuitEvent(function<void(void)> callback) {

@@ -5,6 +5,8 @@
 
 namespace YerFace {
 
+#define YERFACE_PREVIEW_DEBUG_DENSITY_MAX 4
+
 enum PreviewPositionInFrame {
 	BottomLeft,
 	BottomRight,
@@ -31,6 +33,8 @@ public:
 	bool getIsRunning(void);
 	void setPreviewPositionInFrame(PreviewPositionInFrame newPosition);
 	PreviewPositionInFrame getPreviewPositionInFrame(void);
+	void setPreviewDebugDensity(int newDensity);
+	int getPreviewDebugDensity(void);
 private:
 	void handleQuitEvent(void);
 	void invokeAll(vector<function<void(void)>> callbacks);
@@ -41,6 +45,7 @@ private:
 
 	bool isRunning;
 	PreviewPositionInFrame previewPositionInFrame;
+	int previewDebugDensity;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;

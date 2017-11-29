@@ -10,6 +10,7 @@
 #include "dlib/image_processing.h"
 
 #include "Logger.hpp"
+#include "SDLDriver.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "Metrics.hpp"
@@ -76,10 +77,10 @@ public:
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
+	FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
-	void renderPreviewHUD(bool verbose = true);
+	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
 	FacialBoundingBox getFacialBoundingBox(void);
 	FacialFeatures getFacialFeatures(void);
@@ -98,6 +99,7 @@ private:
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
 
 	string modelFileName;
+	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;

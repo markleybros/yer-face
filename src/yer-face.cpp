@@ -72,7 +72,7 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
-	faceTracker = new FaceTracker(dlib_shape_predictor, frameDerivatives);
+	faceTracker = new FaceTracker(dlib_shape_predictor, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", true);
 
@@ -111,7 +111,7 @@ int main(int argc, const char** argv) {
 		faceTracker->processCurrentFrame();
 		faceMapper->processCurrentFrame();
 
-		faceTracker->renderPreviewHUD(false);
+		faceTracker->renderPreviewHUD();
 		faceMapper->renderPreviewHUD(false);
 
 		metrics->endClock();

@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
+FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	classificationBoxSet = false;
@@ -25,6 +25,10 @@ FaceTracker::FaceTracker(string myModelFileName, FrameDerivatives *myFrameDeriva
 	facialCameraModel.set = false;
 	facialPose.set = false;
 
+	sdlDriver = mySDLDriver;
+	if(sdlDriver == NULL) {
+		throw invalid_argument("sdlDriver cannot be NULL");
+	}
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -367,41 +371,48 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 	return true;
 }
 
-void FaceTracker::renderPreviewHUD(bool verbose) {
+void FaceTracker::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(verbose) {
+	int density = sdlDriver->getPreviewDebugDensity();
+	if(density > 0) {
+		if(facialPose.set) {
+			std::vector<Point3d> gizmo3d(6);
+			std::vector<Point2d> gizmo2d;
+			gizmo3d[0] = Point3d(-50,0.0,0.0);
+			gizmo3d[1] = Point3d(50,0.0,0.0);
+			gizmo3d[2] = Point3d(0.0,-50,0.0);
+			gizmo3d[3] = Point3d(0.0,50,0.0);
+			gizmo3d[4] = Point3d(0.0,0.0,-50);
+			gizmo3d[5] = Point3d(0.0,0.0,50);
+			
+			Mat tempRotationVector;
+			Rodrigues(facialPose.rotationMatrix, tempRotationVector);
+			projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
+			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
+			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
+			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
+		}
+	}
+	if(density > 1) {
+		if(faceRectSet) {
+			cv::rectangle(frame, faceRect, Scalar(255, 255, 0), 1);
+		}
+	}
+	if(density > 2) {
 		if(classificationBoxSet) {
 			cv::rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
 		}
 		if(trackingBoxSet) {
 			cv::rectangle(frame, trackingBox, Scalar(255, 0, 0), 1);
 		}
-		if(faceRectSet) {
-			cv::rectangle(frame, faceRect, Scalar(255, 255, 0), 1);
-		}
+	}
+	if(density > 3) {
 		if(facialFeaturesSet) {
 			size_t featuresCount = facialFeatures.size();
 			for(size_t i = 0; i < featuresCount; i++) {
-				Utilities::drawX(frame, facialFeatures[i], Scalar(0, 255, 0));
+				Utilities::drawX(frame, facialFeatures[i], Scalar(147, 20, 255));
 			}
 		}
-	}
-	if(facialPose.set) {
-		std::vector<Point3d> gizmo3d(6);
-		std::vector<Point2d> gizmo2d;
-		gizmo3d[0] = Point3d(-50,0.0,0.0);
-		gizmo3d[1] = Point3d(50,0.0,0.0);
-		gizmo3d[2] = Point3d(0.0,-50,0.0);
-		gizmo3d[3] = Point3d(0.0,50,0.0);
-		gizmo3d[4] = Point3d(0.0,0.0,-50);
-		gizmo3d[5] = Point3d(0.0,0.0,50);
-		
-		Mat tempRotationVector;
-		Rodrigues(facialPose.rotationMatrix, tempRotationVector);
-		projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
-		arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-		arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
-		arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
 	}
 }
 
