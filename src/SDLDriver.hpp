@@ -5,6 +5,12 @@
 
 namespace YerFace {
 
+enum PreviewPositionInFrame {
+	BottomLeft,
+	BottomRight,
+	TopRight
+};
+
 class SDLWindowRenderer {
 public:
 	SDL_Window *window;
@@ -23,6 +29,8 @@ public:
 	void onQuitEvent(function<void(void)> callback);
 	void onColorPickerEvent(function<void(void)> callback);
 	bool getIsRunning(void);
+	void setPreviewPositionInFrame(PreviewPositionInFrame newPosition);
+	PreviewPositionInFrame getPreviewPositionInFrame(void);
 private:
 	void handleQuitEvent(void);
 	void invokeAll(vector<function<void(void)>> callbacks);
@@ -32,6 +40,7 @@ private:
 	Logger *logger;
 
 	bool isRunning;
+	PreviewPositionInFrame previewPositionInFrame;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;

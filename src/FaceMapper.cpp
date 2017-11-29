@@ -125,8 +125,17 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 	Rect2d previewRect;
 	previewRect.width = frameSize.width * previewWidthPercentage;
 	previewRect.height = previewRect.width * previewRatio;
-	previewRect.x = frameSize.width - previewRect.width;
-	previewRect.y = frameSize.height - previewRect.height;
+	PreviewPositionInFrame previewPosition = sdlDriver->getPreviewPositionInFrame();
+	if(previewPosition == BottomRight || previewPosition == TopRight) {
+		previewRect.x = frameSize.width - previewRect.width;
+	} else {
+		previewRect.x = 0;
+	}
+	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
+		previewRect.y = frameSize.height - previewRect.height;
+	} else {
+		previewRect.y = 0;
+	}
 	Point2d previewCenter = Utilities::centerRect(previewRect);
 	previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
 	double previewPointScale = previewRect.width / 200;

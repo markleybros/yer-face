@@ -16,6 +16,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	logger = new Logger("SDLDriver");
 
 	isRunning = true;
+	previewPositionInFrame = BottomRight;
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
@@ -124,6 +125,22 @@ void SDLDriver::doHandleEvents(void) {
 						logger->info("Received Color Picker keyboard event. Rebroadcasting...");
 						invokeAll(onColorPickerCallbacks);
 						break;
+					case SDLK_LEFT:
+						previewPositionInFrame = BottomLeft;
+						break;
+					case SDLK_UP:
+						previewPositionInFrame = TopRight;
+						break;
+					case SDLK_RIGHT:
+						if(previewPositionInFrame == BottomLeft) {
+							previewPositionInFrame = BottomRight;
+						}
+						break;
+					case SDLK_DOWN:
+						if(previewPositionInFrame == TopRight) {
+							previewPositionInFrame = BottomRight;
+						}
+						break;
 				}
 				break;
 		}
@@ -132,6 +149,13 @@ void SDLDriver::doHandleEvents(void) {
 
 bool SDLDriver::getIsRunning(void) {
 	return isRunning;
+}
+
+void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
+	previewPositionInFrame = newPosition;
+}
+PreviewPositionInFrame SDLDriver::getPreviewPositionInFrame(void) {
+	return previewPositionInFrame;
 }
 
 void SDLDriver::onQuitEvent(function<void(void)> callback) {
