@@ -23,6 +23,7 @@ public:
 	void onQuitEvent(function<void(void)> callback);
 	bool getIsRunning(void);
 private:
+	void handleQuitEvent(void);
 	void invokeAll(vector<function<void(void)>> callbacks);
 
 	FrameDerivatives *frameDerivatives;

@@ -121,14 +121,6 @@ int main(int argc, const char** argv) {
 		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
-		// //Display preview frame.
-		// imshow(window_name, previewFrame);
-		// char c = (char)waitKey(1);
-		// if(c == 27) {
-		// 	logger->info("Breaking on user escape...");
-		// 	break;
-		// }
-
 		sdlDriver->doRenderPreviewFrame();
 
 		//If requested, write image sequence.

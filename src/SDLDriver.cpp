@@ -110,10 +110,17 @@ void SDLDriver::doRenderPreviewFrame(void) {
 void SDLDriver::doHandleEvents(void) {
 	SDL_Event event;
 	while(SDL_PollEvent(&event)){
-		if(event.type == SDL_QUIT){
-			logger->info("Received Quit event from SDL. Broadcasting...");
-			isRunning = false;
-			invokeAll(onQuitCallbacks);
+		switch(event.type) {
+			case SDL_QUIT:
+				handleQuitEvent();
+				break;
+			case SDL_KEYUP:
+				switch(event.key.keysym.sym) {
+					case SDLK_ESCAPE:
+						handleQuitEvent();
+						break;
+				}
+				break;
 		}
 	}
 }
@@ -124,6 +131,12 @@ bool SDLDriver::getIsRunning(void) {
 
 void SDLDriver::onQuitEvent(function<void(void)> callback) {
 	onQuitCallbacks.push_back(callback);
+}
+
+void SDLDriver::handleQuitEvent(void) {
+	logger->info("Received Quit event from SDL or keyboard escape. Re-broadcasting...");
+	isRunning = false;
+	invokeAll(onQuitCallbacks);
 }
 
 void SDLDriver::invokeAll(vector<function<void(void)>> callbacks) {
