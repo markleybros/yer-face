@@ -19,13 +19,22 @@ public:
 	SDLWindowRenderer getPreviewWindow(void);
 	SDL_Texture *getPreviewTexture(void);
 	void doRenderPreviewFrame(void);
+	void doHandleEvents(void);
+	void onQuitEvent(function<void(void)> callback);
+	bool getIsRunning(void);
 private:
+	void invokeAll(vector<function<void(void)>> callbacks);
+
 	FrameDerivatives *frameDerivatives;
 
 	Logger *logger;
 
+	bool isRunning;
+
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
+
+	vector<function<void(void)>> onQuitCallbacks;
 };
 
 }; //namespace YerFace

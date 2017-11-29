@@ -38,6 +38,7 @@ FaceTracker *faceTracker;
 FaceMapper *faceMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
+bool isRunning = true;
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -75,6 +76,12 @@ int main(int argc, const char** argv) {
 	faceMapper = new FaceMapper(frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", true);
 
+	//Register for events.
+	sdlDriver->onQuitEvent([] (void) -> void {
+		logger->info("Got a Quit event! Going down...");
+		isRunning = false;
+	});
+
 	//Open the video stream.
 	capture.open(capture_file);
 	if(!capture.isOpened()) {
@@ -85,7 +92,7 @@ int main(int argc, const char** argv) {
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
 
-	while(capture.read(frame)) {
+	while(capture.read(frame) && isRunning) {
 		if(sdlWindowRenderer.window == NULL) {
 			Size frameSize = frame.size();
 			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
@@ -114,13 +121,13 @@ int main(int argc, const char** argv) {
 		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
-		//Display preview frame.
-		imshow(window_name, previewFrame);
-		char c = (char)waitKey(1);
-		if(c == 27) {
-			logger->info("Breaking on user escape...");
-			break;
-		}
+		// //Display preview frame.
+		// imshow(window_name, previewFrame);
+		// char c = (char)waitKey(1);
+		// if(c == 27) {
+		// 	logger->info("Breaking on user escape...");
+		// 	break;
+		// }
 
 		sdlDriver->doRenderPreviewFrame();
 
@@ -132,6 +139,8 @@ int main(int argc, const char** argv) {
 			logger->debug("YerFace writing preview frame to %s ...", filename);
 			imwrite(filename, previewFrame);
 		}
+
+		sdlDriver->doHandleEvents();
 	}
 
 	delete metrics;
