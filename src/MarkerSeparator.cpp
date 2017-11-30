@@ -170,9 +170,10 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	metrics->endClock();
 }
 
-void MarkerSeparator::renderPreviewHUD(bool verbose) {
+void MarkerSeparator::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(verbose) {
+	int density = sdlDriver->getPreviewDebugDensity();
+	if(density > 2) {
 		size_t count = markerList.size();
 		for(unsigned int i = 0; i < count; i++) {
 			if(markerList[i].active) {

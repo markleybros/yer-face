@@ -44,6 +44,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	trackingBoxSet = false;
 	markerList = NULL;
 
+	sdlDriver = faceMapper->getSDLDriver();
 	frameDerivatives = faceMapper->getFrameDerivatives();
 	faceTracker = faceMapper->getFaceTracker();
 	markerSeparator = faceMapper->getMarkerSeparator();
@@ -542,7 +543,7 @@ bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const Mark
 	return (a.distanceFromPointOfInterest < b.distanceFromPointOfInterest);
 }
 
-void MarkerTracker::renderPreviewHUD(bool verbose) {
+void MarkerTracker::renderPreviewHUD(void) {
 	Scalar color = Scalar(0, 0, 255);
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
@@ -572,16 +573,19 @@ void MarkerTracker::renderPreviewHUD(bool verbose) {
 		}
 	}
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(verbose) {
-		if(trackingBoxSet) {
-			rectangle(frame, trackingBox, color, 1);
-		}
+	int density = sdlDriver->getPreviewDebugDensity();
+	if(density > 0) {
+		Utilities::drawX(frame, markerPoint.point, color, 10, 2);
+	}
+	if(density > 1) {
 		if(markerDetectedSet) {
 			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
 		}
 	}
-	if(markerPoint.set) {
-		Utilities::drawX(frame, markerPoint.point, color, 10, 2);
+	if(density > 2) {
+		if(trackingBoxSet) {
+			rectangle(frame, trackingBox, color, 1);
+		}
 	}
 }
 

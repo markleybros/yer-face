@@ -112,7 +112,7 @@ int main(int argc, const char** argv) {
 		faceMapper->processCurrentFrame();
 
 		faceTracker->renderPreviewHUD();
-		faceMapper->renderPreviewHUD(false);
+		faceMapper->renderPreviewHUD();
 
 		metrics->endClock();
 

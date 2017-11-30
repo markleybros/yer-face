@@ -28,7 +28,7 @@ public:
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(bool debug = false);
-	void renderPreviewHUD(bool verbose = true);
+	void renderPreviewHUD(void);
 	vector<MarkerSeparated> *getMarkerList(void);
 private:
 	void doPickColor(void);

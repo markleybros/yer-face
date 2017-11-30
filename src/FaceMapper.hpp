@@ -26,7 +26,8 @@ public:
 	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~FaceMapper();
 	void processCurrentFrame(void);
-	void renderPreviewHUD(bool verbose = true);
+	void renderPreviewHUD(void);
+	SDLDriver *getSDLDriver(void);
 	FrameDerivatives *getFrameDerivatives(void);
 	FaceTracker *getFaceTracker(void);
 	MarkerSeparator *getMarkerSeparator(void);

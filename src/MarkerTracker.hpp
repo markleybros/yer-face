@@ -8,6 +8,7 @@
 #include "opencv2/tracking.hpp"
 
 #include "Logger.hpp"
+#include "SDLDriver.hpp"
 #include "MarkerType.hpp"
 #include "FaceMapper.hpp"
 #include "FaceTracker.hpp"
@@ -43,7 +44,7 @@ public:
 	~MarkerTracker();
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
-	void renderPreviewHUD(bool verbose = true);
+	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
 	MarkerPoint getMarkerPoint(void);
 	static vector<MarkerTracker *> *getMarkerTrackers(void);
@@ -69,6 +70,7 @@ private:
 	float maxTrackerDriftPercentage;
 
 	Logger *logger;
+	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	FaceTracker *faceTracker;

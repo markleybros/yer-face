@@ -108,11 +108,44 @@ void FaceMapper::processCurrentFrame(void) {
 	metrics->endClock();
 }
 
-void FaceMapper::renderPreviewHUD(bool verbose) {
+void FaceMapper::renderPreviewHUD() {
 	Mat frame = frameDerivatives->getPreviewFrame();
-	if(verbose) {
-		markerSeparator->renderPreviewHUD(true);
-
+	int density = sdlDriver->getPreviewDebugDensity();
+	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
+	for(MarkerTracker *markerTracker : (*markerTrackers)) {
+		markerTracker->renderPreviewHUD();
+	}
+	markerSeparator->renderPreviewHUD();
+	if(density > 0) {
+		Size frameSize = frame.size();
+		double previewRatio = 1.25, previewWidthPercentage = 0.2, previewCenterHeightPercentage = 0.2; // FIXME - magic numbers
+		Rect2d previewRect;
+		previewRect.width = frameSize.width * previewWidthPercentage;
+		previewRect.height = previewRect.width * previewRatio;
+		PreviewPositionInFrame previewPosition = sdlDriver->getPreviewPositionInFrame();
+		if(previewPosition == BottomRight || previewPosition == TopRight) {
+			previewRect.x = frameSize.width - previewRect.width;
+		} else {
+			previewRect.x = 0;
+		}
+		if(previewPosition == BottomLeft || previewPosition == BottomRight) {
+			previewRect.y = frameSize.height - previewRect.height;
+		} else {
+			previewRect.y = 0;
+		}
+		Point2d previewCenter = Utilities::centerRect(previewRect);
+		previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
+		double previewPointScale = previewRect.width / 200;
+		rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
+		for(MarkerTracker *markerTracker : (*markerTrackers)) {
+			MarkerPoint markerPoint = markerTracker->getMarkerPoint();
+			Point2d previewPoint = Point2d(
+					(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
+					(markerPoint.point3d.y * previewPointScale) + previewCenter.y);
+			Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
+		}
+	}
+	if(density > 3) {
 		if(leftEyeRect.set) {
 			rectangle(frame, leftEyeRect.rect, Scalar(0, 0, 255));
 		}
@@ -120,37 +153,10 @@ void FaceMapper::renderPreviewHUD(bool verbose) {
 			rectangle(frame, rightEyeRect.rect, Scalar(0, 0, 255));
 		}
 	}
-	Size frameSize = frame.size();
-	double previewRatio = 1.25, previewWidthPercentage = 0.2, previewCenterHeightPercentage = 0.2; // FIXME - magic numbers
-	Rect2d previewRect;
-	previewRect.width = frameSize.width * previewWidthPercentage;
-	previewRect.height = previewRect.width * previewRatio;
-	PreviewPositionInFrame previewPosition = sdlDriver->getPreviewPositionInFrame();
-	if(previewPosition == BottomRight || previewPosition == TopRight) {
-		previewRect.x = frameSize.width - previewRect.width;
-	} else {
-		previewRect.x = 0;
-	}
-	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
-		previewRect.y = frameSize.height - previewRect.height;
-	} else {
-		previewRect.y = 0;
-	}
-	Point2d previewCenter = Utilities::centerRect(previewRect);
-	previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
-	double previewPointScale = previewRect.width / 200;
-	rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
-	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
-	size_t markerTrackersCount = (*markerTrackers).size();
-	for(size_t i = 0; i < markerTrackersCount; i++) {
-		(*markerTrackers)[i]->renderPreviewHUD(verbose);
+}
 
-		MarkerPoint markerPoint = (*markerTrackers)[i]->getMarkerPoint();
-		Point2d previewPoint = Point2d(
-				(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
-				(markerPoint.point3d.y * previewPointScale) + previewCenter.y);
-		Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
-	}
+SDLDriver *FaceMapper::getSDLDriver(void) {
+	return sdlDriver;
 }
 
 FrameDerivatives *FaceMapper::getFrameDerivatives(void) {
