@@ -28,15 +28,14 @@ public:
 	SDL_Texture *getPreviewTexture(void);
 	void doRenderPreviewFrame(void);
 	void doHandleEvents(void);
-	void onQuitEvent(function<void(void)> callback);
 	void onColorPickerEvent(function<void(void)> callback);
 	bool getIsRunning(void);
+	bool getIsPaused(void);
 	void setPreviewPositionInFrame(PreviewPositionInFrame newPosition);
 	PreviewPositionInFrame getPreviewPositionInFrame(void);
 	void setPreviewDebugDensity(int newDensity);
 	int getPreviewDebugDensity(void);
 private:
-	void handleQuitEvent(void);
 	void invokeAll(vector<function<void(void)>> callbacks);
 
 	FrameDerivatives *frameDerivatives;
@@ -44,13 +43,13 @@ private:
 	Logger *logger;
 
 	bool isRunning;
+	bool isPaused;
 	PreviewPositionInFrame previewPositionInFrame;
 	int previewDebugDensity;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
 
-	vector<function<void(void)>> onQuitCallbacks;
 	vector<function<void(void)>> onColorPickerCallbacks;
 };
 

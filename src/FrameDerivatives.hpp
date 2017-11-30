@@ -18,6 +18,7 @@ public:
 	Mat getCurrentFrame(void);
 	Mat getClassificationFrame(void);
 	Mat getPreviewFrame(void);
+	void resetPreviewFrame(void);
 	double getClassificationScaleFactor(void);
 	Size getCurrentFrameSize(void);
 

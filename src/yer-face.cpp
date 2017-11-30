@@ -38,7 +38,8 @@ FaceTracker *faceTracker;
 FaceMapper *faceMapper;
 Metrics *metrics;
 unsigned long frameNum = 0;
-bool isRunning = true;
+
+void doRenderPreviewFrame(void);
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -76,12 +77,6 @@ int main(int argc, const char** argv) {
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", true);
 
-	//Register for events.
-	sdlDriver->onQuitEvent([] (void) -> void {
-		logger->info("Got a Quit event! Going down...");
-		isRunning = false;
-	});
-
 	//Open the video stream.
 	capture.open(capture_file);
 	if(!capture.isOpened()) {
@@ -92,47 +87,49 @@ int main(int argc, const char** argv) {
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
 
-	while(capture.read(frame) && isRunning) {
-		if(sdlWindowRenderer.window == NULL) {
-			Size frameSize = frame.size();
-			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+	while(sdlDriver->getIsRunning()) {
+		bool isPaused = sdlDriver->getIsPaused();
+		if(!isPaused) {
+			capture.read(frame);
+
+			if(sdlWindowRenderer.window == NULL) {
+				Size frameSize = frame.size();
+				sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+			}
+
+			// Start timer
+			metrics->startClock();
+			frameNum++;
+
+			if(frame.empty()) {
+				logger->error("Breaking on no frame ready...");
+				break;
+			}
+
+			frameDerivatives->setCurrentFrame(frame);
+			faceTracker->processCurrentFrame();
+			faceMapper->processCurrentFrame();
+			metrics->endClock();
 		}
 
-		// Start timer
-		metrics->startClock();
-		frameNum++;
+		doRenderPreviewFrame();
 
-		if(frame.empty()) {
-			logger->error("Breaking on no frame ready...");
-			break;
-		}
-
-		frameDerivatives->setCurrentFrame(frame);
-		faceTracker->processCurrentFrame();
-		faceMapper->processCurrentFrame();
-
-		faceTracker->renderPreviewHUD();
-		faceMapper->renderPreviewHUD();
-
-		metrics->endClock();
-
-		Mat previewFrame = frameDerivatives->getPreviewFrame();
-
-		putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-		putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-
-		sdlDriver->doRenderPreviewFrame();
-
-		//If requested, write image sequence.
-		if(prev_imgseq.length() > 0) {
-			int filenameLength = prev_imgseq.length() + 32;
-			char filename[filenameLength];
-			snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), frameNum);
-			logger->debug("YerFace writing preview frame to %s ...", filename);
-			imwrite(filename, previewFrame);
+		if(!isPaused) {
+			//If requested, write image sequence.
+			if(prev_imgseq.length() > 0) {
+				int filenameLength = prev_imgseq.length() + 32;
+				char filename[filenameLength];
+				snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), frameNum);
+				logger->debug("YerFace writing preview frame to %s ...", filename);
+				imwrite(filename, frameDerivatives->getPreviewFrame());
+			}
 		}
 
 		sdlDriver->doHandleEvents();
+
+		if(isPaused) {
+			SDL_Delay(50);
+		}
 	}
 
 	delete metrics;
@@ -142,4 +139,20 @@ int main(int argc, const char** argv) {
 	delete sdlDriver;
 	delete logger;
 	return 0;
+}
+
+void doRenderPreviewFrame(void) {
+	if(sdlDriver->getIsPaused()) {
+		frameDerivatives->resetPreviewFrame();
+	}
+
+	faceTracker->renderPreviewHUD();
+	faceMapper->renderPreviewHUD();
+
+	Mat previewFrame = frameDerivatives->getPreviewFrame();
+
+	putText(previewFrame, metrics->getTimesString(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+	putText(previewFrame, metrics->getFPSString(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+
+	sdlDriver->doRenderPreviewFrame();
 }

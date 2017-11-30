@@ -68,6 +68,10 @@ Mat FrameDerivatives::getPreviewFrame(void) {
 	return previewFrame;
 }
 
+void FrameDerivatives::resetPreviewFrame(void) {
+	previewFrameCloned = false;
+}
+
 double FrameDerivatives::getClassificationScaleFactor(void) {
 	return classificationScaleFactor;
 }

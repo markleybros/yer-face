@@ -16,12 +16,12 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	logger = new Logger("SDLDriver");
 
 	isRunning = true;
+	isPaused = false;
 	previewPositionInFrame = BottomRight;
 	setPreviewDebugDensity(2);
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
-	onQuitCallbacks.clear();
 	onColorPickerCallbacks.clear();
 
 	frameDerivatives = myFrameDerivatives;
@@ -115,16 +115,26 @@ void SDLDriver::doHandleEvents(void) {
 	while(SDL_PollEvent(&event)){
 		switch(event.type) {
 			case SDL_QUIT:
-				handleQuitEvent();
+				isRunning = false;
 				break;
 			case SDL_KEYUP:
 				switch(event.key.keysym.sym) {
 					case SDLK_ESCAPE:
-						handleQuitEvent();
+						isRunning = false;
+						break;
+					case SDLK_SPACE:
+						isPaused = !isPaused;
+						if(isPaused) {
+							logger->info("Paused processing.");
+						} else {
+							logger->info("Resumed processing.");
+						}
 						break;
 					case SDLK_PERIOD:
 						logger->info("Received Color Picker keyboard event. Rebroadcasting...");
 						invokeAll(onColorPickerCallbacks);
+						isPaused = true;
+						logger->info("Paused processing.");
 						break;
 					case SDLK_LEFT:
 						previewPositionInFrame = BottomLeft;
@@ -157,6 +167,10 @@ bool SDLDriver::getIsRunning(void) {
 	return isRunning;
 }
 
+bool SDLDriver::getIsPaused(void) {
+	return isPaused;
+}
+
 void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
 	previewPositionInFrame = newPosition;
 }
@@ -179,18 +193,8 @@ int SDLDriver::getPreviewDebugDensity(void) {
 	return previewDebugDensity;
 }
 
-void SDLDriver::onQuitEvent(function<void(void)> callback) {
-	onQuitCallbacks.push_back(callback);
-}
-
 void SDLDriver::onColorPickerEvent(function<void(void)> callback) {
 	onColorPickerCallbacks.push_back(callback);
-}
-
-void SDLDriver::handleQuitEvent(void) {
-	logger->info("Received Quit event from SDL or keyboard escape. Rebroadcasting...");
-	isRunning = false;
-	invokeAll(onQuitCallbacks);
 }
 
 void SDLDriver::invokeAll(vector<function<void(void)>> callbacks) {
