@@ -17,20 +17,31 @@ Metrics::Metrics(const char *myName, bool myMetricIsFrames, unsigned int mySampl
 	snprintf(fpsString, METRICS_STRING_LENGTH, "N/A");
 	string loggerName = "Metrics<" + name + ">";
 	logger = new Logger(loggerName.c_str());
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 	logger->debug("Metrics object constructed and ready to go!");
 }
 
 Metrics::~Metrics() {
 	logger->debug("Metrics object destructing...");
+	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
 
 void Metrics::startClock(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
 	timer = (double)getTickCount();
 	tickStartTimes.push_front(timer);
+	SDL_UnlockMutex(myMutex);
 }
 
 void Metrics::endClock(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
 	double now = (double)getTickCount();
 	timer = (now - timer) / getTickFrequency();
 	processRunTimes.push_front(timer);
@@ -62,26 +73,52 @@ void Metrics::endClock(void) {
 	} else {
 		logger->verbose("%s", timesString);
 	}
+	SDL_UnlockMutex(myMutex);
 }
 
 double Metrics::getAverageTimeSeconds(void) {
-	return averageTimeSeconds;
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	double status = averageTimeSeconds;
+	SDL_UnlockMutex(myMutex);
+	return status;
 }
 
 double Metrics::getWorstTimeSeconds(void) {
-	return worstTimeSeconds;
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	double status = worstTimeSeconds;
+	SDL_UnlockMutex(myMutex);
+	return status;
 }
 
 double Metrics::getFPS(void) {
-	return fps;
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	double status = fps;
+	SDL_UnlockMutex(myMutex);
+	return status;
 }
 
-char *Metrics::getTimesString(void) {
-	return timesString;
+std::string Metrics::getTimesString(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	std::string str = (std::string)timesString;
+	SDL_UnlockMutex(myMutex);
+	return str;
 }
 
-char *Metrics::getFPSString(void) {
-	return fpsString;
+std::string Metrics::getFPSString(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	std::string str = (std::string)fpsString;
+	SDL_UnlockMutex(myMutex);
+	return str;
 }
 
 } //namespace YerFace

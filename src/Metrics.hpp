@@ -19,15 +19,16 @@ public:
 	void endClock(void);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
-	char *getTimesString(void);
 	double getFPS(void);
-	char *getFPSString(void);
+	std::string getTimesString(void);
+	std::string getFPSString(void);
 private:
 	string name;
 	bool metricIsFrames;
 	unsigned int sampleBufferSize;
 
 	Logger *logger;
+	SDL_mutex *myMutex;
 	double timer;
 	list<double> processRunTimes;
 	list<double> tickStartTimes;
