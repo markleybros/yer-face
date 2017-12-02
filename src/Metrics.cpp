@@ -1,5 +1,6 @@
 
 #include "Metrics.hpp"
+#include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
@@ -30,18 +31,14 @@ Metrics::~Metrics() {
 }
 
 void Metrics::startClock(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	timer = (double)getTickCount();
 	tickStartTimes.push_front(timer);
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
 void Metrics::endClock(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount();
 	timer = (now - timer) / getTickFrequency();
 	processRunTimes.push_front(timer);
@@ -73,51 +70,41 @@ void Metrics::endClock(void) {
 	} else {
 		logger->verbose("%s", timesString);
 	}
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
 double Metrics::getAverageTimeSeconds(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	double status = averageTimeSeconds;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return status;
 }
 
 double Metrics::getWorstTimeSeconds(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	double status = worstTimeSeconds;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return status;
 }
 
 double Metrics::getFPS(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	double status = fps;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return status;
 }
 
 std::string Metrics::getTimesString(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	std::string str = (std::string)timesString;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return str;
 }
 
 std::string Metrics::getFPSString(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	std::string str = (std::string)fpsString;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return str;
 }
 

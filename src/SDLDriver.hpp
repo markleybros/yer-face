@@ -66,6 +66,7 @@ private:
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
 
+	SDL_mutex *onColorPickerCallbacksMutex;
 	vector<function<void(void)>> onColorPickerCallbacks;
 };
 

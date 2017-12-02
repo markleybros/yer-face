@@ -1,6 +1,8 @@
 
 #include "SDLDriver.hpp"
 
+#include "Utilities.hpp"
+
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -25,6 +27,9 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((previewDebugDensityMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((onColorPickerCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
@@ -62,6 +67,7 @@ SDLDriver::~SDLDriver() {
 	SDL_DestroyMutex(isPausedMutex);
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	SDL_DestroyMutex(previewDebugDensityMutex);
+	SDL_DestroyMutex(onColorPickerCallbacksMutex);
 }
 
 SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height) {
@@ -169,61 +175,47 @@ void SDLDriver::doHandleEvents(void) {
 }
 
 void SDLDriver::setIsRunning(bool newIsRunning) {
-	if(SDL_LockMutex(isRunningMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(isRunningMutex);
 	isRunning = newIsRunning;
-	SDL_UnlockMutex(isRunningMutex);
+	YerFace_MutexUnlock(isRunningMutex);
 }
 
 bool SDLDriver::getIsRunning(void) {
-	if(SDL_LockMutex(isRunningMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(isRunningMutex);
 	bool status = isRunning;
-	SDL_UnlockMutex(isRunningMutex);
+	YerFace_MutexUnlock(isRunningMutex);
 	return status;
 }
 
 void SDLDriver::setIsPaused(bool newIsPaused) {
-	if(SDL_LockMutex(isPausedMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(isPausedMutex);
 	isPaused = newIsPaused;
-	SDL_UnlockMutex(isPausedMutex);
+	YerFace_MutexUnlock(isPausedMutex);
 }
 
 bool SDLDriver::toggleIsPaused(void) {
-	if(SDL_LockMutex(isPausedMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(isPausedMutex);
 	setIsPaused(!isPaused);
 	bool status = isPaused;
-	SDL_UnlockMutex(isPausedMutex);
+	YerFace_MutexUnlock(isPausedMutex);
 	return status;
 }
 
 bool SDLDriver::getIsPaused(void) {
-	if(SDL_LockMutex(isPausedMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(isPausedMutex);
 	bool status = isPaused;
-	SDL_UnlockMutex(isPausedMutex);
+	YerFace_MutexUnlock(isPausedMutex);
 	return status;
 }
 
 void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
-	if(SDL_LockMutex(previewPositionInFrameMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewPositionInFrameMutex);
 	previewPositionInFrame = newPosition;
-	SDL_UnlockMutex(previewPositionInFrameMutex);
+	YerFace_MutexUnlock(previewPositionInFrameMutex);
 }
 
 PreviewPositionInFrame SDLDriver::movePreviewPositionInFrame(PreviewPositionInFrameDirection moveDirection) {
-	if(SDL_LockMutex(previewPositionInFrameMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewPositionInFrameMutex);
 	switch(moveDirection) {
 		case MoveLeft:
 			previewPositionInFrame = BottomLeft;
@@ -243,23 +235,19 @@ PreviewPositionInFrame SDLDriver::movePreviewPositionInFrame(PreviewPositionInFr
 			break;
 	}
 	PreviewPositionInFrame status = previewPositionInFrame;
-	SDL_UnlockMutex(previewPositionInFrameMutex);
+	YerFace_MutexUnlock(previewPositionInFrameMutex);
 	return status;
 }
 
 PreviewPositionInFrame SDLDriver::getPreviewPositionInFrame(void) {
-	if(SDL_LockMutex(previewPositionInFrameMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewPositionInFrameMutex);
 	PreviewPositionInFrame status = previewPositionInFrame;
-	SDL_UnlockMutex(previewPositionInFrameMutex);
+	YerFace_MutexUnlock(previewPositionInFrameMutex);
 	return status;
 }
 
 void SDLDriver::setPreviewDebugDensity(int newDensity) {
-	if(SDL_LockMutex(previewDebugDensityMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewDebugDensityMutex);
 	if(newDensity < 0) {
 		previewDebugDensity = 0;
 	} else if(newDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
@@ -267,39 +255,39 @@ void SDLDriver::setPreviewDebugDensity(int newDensity) {
 	} else {
 		previewDebugDensity = newDensity;
 	}
-	SDL_UnlockMutex(previewDebugDensityMutex);
+	YerFace_MutexUnlock(previewDebugDensityMutex);
 }
 
 int SDLDriver::incrementPreviewDebugDensity(void) {
-	if(SDL_LockMutex(previewDebugDensityMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewDebugDensityMutex);
 	previewDebugDensity++;
 	if(previewDebugDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
 		previewDebugDensity = 0;
 	}
 	int status = previewDebugDensity;
-	SDL_UnlockMutex(previewDebugDensityMutex);
+	YerFace_MutexUnlock(previewDebugDensityMutex);
 	return status;
 }
 
 int SDLDriver::getPreviewDebugDensity(void) {
-	if(SDL_LockMutex(previewDebugDensityMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(previewDebugDensityMutex);
 	int status = previewDebugDensity;
-	SDL_UnlockMutex(previewDebugDensityMutex);
+	YerFace_MutexUnlock(previewDebugDensityMutex);
 	return status;
 }
 
 void SDLDriver::onColorPickerEvent(function<void(void)> callback) {
+	YerFace_MutexLock(onColorPickerCallbacksMutex);
 	onColorPickerCallbacks.push_back(callback);
+	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
 }
 
 void SDLDriver::invokeAll(vector<function<void(void)>> callbacks) {
+	YerFace_MutexLock(onColorPickerCallbacksMutex);
 	for(auto callback : callbacks) {
 		callback();
 	}
+	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
 }
 
 }; //namespace YerFace

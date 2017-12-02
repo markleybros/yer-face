@@ -1,5 +1,6 @@
 
 #include "FrameDerivatives.hpp"
+#include "Utilities.hpp"
 #include <exception>
 #include <cstdio>
 
@@ -33,9 +34,7 @@ FrameDerivatives::~FrameDerivatives() {
 }
 
 void FrameDerivatives::setWorkingFrame(Mat newFrame, unsigned long newFrameNumber) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	metrics->startClock();
 	workingFrame = newFrame;
 	workingFrameNumber = newFrameNumber;
@@ -60,52 +59,42 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, unsigned long newFrameNumbe
 
 	previewFrameCloned = false;
 	metrics->endClock();
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
 Mat FrameDerivatives::getWorkingFrame(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	Mat value = workingFrame;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
 unsigned long FrameDerivatives::getWorkingFrameNumber(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	unsigned long value = workingFrameNumber;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
 void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	completedFrame = workingFrame.clone();
 	completedFrameNumber = workingFrameNumber;
 	completedFrameSet = true;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
 Mat FrameDerivatives::getClassificationFrame(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	Mat value = classificationFrame;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
 Mat FrameDerivatives::getPreviewFrame(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	if(!completedFrameSet) {
-		SDL_UnlockMutex(myMutex);
+		YerFace_MutexUnlock(myMutex);
 		throw runtime_error("Preview frame was requested, but no working frame has been advanced to completed frame yet.");
 	}
 	if(!previewFrameCloned) {
@@ -113,33 +102,27 @@ Mat FrameDerivatives::getPreviewFrame(void) {
 		previewFrameCloned = true;
 	}
 	Mat value = previewFrame;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
 void FrameDerivatives::resetPreviewFrame(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	previewFrameCloned = false;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
 double FrameDerivatives::getClassificationScaleFactor(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	double status = classificationScaleFactor;
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return status;
 }
 
 Size FrameDerivatives::getWorkingFrameSize(void) {
-	if(SDL_LockMutex(myMutex) != 0) {
-		throw runtime_error("Failed to lock mutex.");
-	}
+	YerFace_MutexLock(myMutex);
 	Size size = workingFrame.size();
-	SDL_UnlockMutex(myMutex);
+	YerFace_MutexUnlock(myMutex);
 	return size;
 }
 
