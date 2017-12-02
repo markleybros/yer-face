@@ -140,7 +140,7 @@ void SDLDriver::doHandleEvents(void) {
 			case SDL_QUIT:
 				setIsRunning(false);
 				break;
-			case SDL_KEYUP:
+			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym) {
 					case SDLK_ESCAPE:
 						setIsRunning(false);
@@ -190,6 +190,7 @@ bool SDLDriver::getIsRunning(void) {
 void SDLDriver::setIsPaused(bool newIsPaused) {
 	YerFace_MutexLock(isPausedMutex);
 	isPaused = newIsPaused;
+	logger->info("Processing status is set to %s...", isPaused ? "PAUSED" : "RESUMED");
 	YerFace_MutexUnlock(isPausedMutex);
 }
 
