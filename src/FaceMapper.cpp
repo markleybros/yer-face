@@ -131,9 +131,9 @@ void FaceMapper::advanceWorkingToCompleted(void) {
 
 	markerSeparator->advanceWorkingToCompleted();
 	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
-	// for(MarkerTracker *markerTracker : (*markerTrackers)) {
-	// 	markerTracker->advanceWorkingToCompleted();
-	// }
+	for(MarkerTracker *markerTracker : markerTrackers) {
+		markerTracker->advanceWorkingToCompleted();
+	}
 
 	YerFace_MutexUnlock(myMutex);
 }

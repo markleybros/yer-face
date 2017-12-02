@@ -41,9 +41,12 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	}
 
 	trackerState = DETECTING;
-	markerDetectedSet = false;
-	markerPoint.set = false;
-	trackingBoxSet = false;
+	working.markerPoint.set = false;
+	working.markerDetectedSet = false;
+	working.trackingBoxSet = false;
+	complete.markerPoint.set = false;
+	complete.markerDetectedSet = false;
+	complete.trackingBoxSet = false;
 	markerList = NULL;
 
 	sdlDriver = faceMapper->getSDLDriver();
@@ -51,12 +54,16 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	faceTracker = faceMapper->getFaceTracker();
 	markerSeparator = faceMapper->getMarkerSeparator();
 
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
 	string loggerName = "MarkerTracker<" + (string)markerType.toString() + ">";
 	logger = new Logger(loggerName.c_str());
 	logger->debug("MarkerTracker object constructed and ready to go!");
 }
 
-MarkerTracker::~MarkerTracker() {
+MarkerTracker::~MarkerTracker() noexcept(false) {
 	logger->debug("MarkerTracker object destructing...");
 	YerFace_MutexLock(myStaticMutex);
 	for(vector<MarkerTracker *>::iterator iterator = markerTrackers.begin(); iterator != markerTrackers.end(); ++iterator) {
@@ -66,6 +73,7 @@ MarkerTracker::~MarkerTracker() {
 		}
 	}
 	YerFace_MutexUnlock(myStaticMutex);
+	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
 
@@ -74,19 +82,21 @@ MarkerType MarkerTracker::getMarkerType(void) {
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
+	YerFace_MutexLock(myMutex);
+
 	performTracking();
 
-	markerDetectedSet = false;
-	markerList = markerSeparator->getMarkerList();
+	working.markerDetectedSet = false;
+	markerList = markerSeparator->getMarkerList(); //FIXME -- ???
 	
 	performTrackToSeparatedCorrelation();
 
-	if(!markerDetectedSet) {
+	if(!working.markerDetectedSet) {
 		performDetection();
 	}
 
-	if(markerDetectedSet) {
-		if(!trackingBoxSet || trackerDriftingExcessively()) {
+	if(working.markerDetectedSet) {
+		if(!working.trackingBoxSet || trackerDriftingExcessively()) {
 			performInitializationOfTracker();
 		}
 	}
@@ -95,7 +105,20 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 	calculate3dMarkerPoint();
 
+	YerFace_MutexUnlock(myMutex);
+
 	return trackerState;
+}
+
+void MarkerTracker::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myMutex);
+	
+	complete = working;
+	working.markerDetectedSet = false;
+	working.trackingBoxSet = false;
+	working.markerPoint.set = false;
+
+	YerFace_MutexUnlock(myMutex);
 }
 
 void MarkerTracker::performTrackToSeparatedCorrelation(void) {
@@ -105,12 +128,12 @@ void MarkerTracker::performTrackToSeparatedCorrelation(void) {
 	if((*markerList).size() < 1) {
 		return;
 	}
-	if(!trackingBoxSet) {
+	if(!working.trackingBoxSet) {
 		return;
 	}
-	Point2d trackingBoxCenter = Utilities::centerRect(trackingBox);
+	Point2d trackingBoxCenter = Utilities::centerRect(working.trackingBox);
 	list<MarkerCandidate> markerCandidateList;
-	generateMarkerCandidateList(&markerCandidateList, trackingBoxCenter, &trackingBox);
+	generateMarkerCandidateList(&markerCandidateList, trackingBoxCenter, &working.trackingBox);
 	if(markerCandidateList.size() <= 0) {
 		return;
 	}
@@ -379,7 +402,7 @@ void MarkerTracker::performDetection(void) {
 }
 
 void MarkerTracker::performInitializationOfTracker(void) {
-	if(!markerDetectedSet) {
+	if(!working.markerDetectedSet) {
 		throw invalid_argument("MarkerTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
 	trackerState = TRACKING;
@@ -388,31 +411,31 @@ void MarkerTracker::performInitializationOfTracker(void) {
 	#else
 	tracker = TrackerKCF::create();
 	#endif
-	trackingBox = Rect(Utilities::insetBox(markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
-	trackingBoxSet = true;
+	working.trackingBox = Rect(Utilities::insetBox(working.markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
+	working.trackingBoxSet = true;
 
-	tracker->init(frameDerivatives->getWorkingFrame(), trackingBox);
+	tracker->init(frameDerivatives->getWorkingFrame(), working.trackingBox);
 }
 
 bool MarkerTracker::performTracking(void) {
 	if(trackerState == TRACKING) {
-		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), trackingBox);
+		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), working.trackingBox);
 		if(!trackSuccess) {
-			trackingBoxSet = false;
+			working.trackingBoxSet = false;
 			return false;
 		}
-		trackingBoxSet = true;
+		working.trackingBoxSet = true;
 		return true;
 	}
 	return false;
 }
 
 bool MarkerTracker::trackerDriftingExcessively(void) {
-	if(!markerDetectedSet || !trackingBoxSet) {
+	if(!working.markerDetectedSet || !working.trackingBoxSet) {
 		throw invalid_argument("MarkerTracker::trackerDriftingExcessively() called while one or both of markerDetectedSet or trackingBoxSet are false");
 	}
-	double actualDistance = Utilities::lineDistance(markerDetected.marker.center, Utilities::centerRect(trackingBox));
-	double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+	double actualDistance = Utilities::lineDistance(working.markerDetected.marker.center, Utilities::centerRect(working.trackingBox));
+	double maxDistance = working.markerDetected.sqrtArea * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
 		logger->warn("Optical tracker drifting excessively! Resetting it.");
 		return true;
@@ -433,8 +456,8 @@ bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate) {
 		return false;
 	}
 	markerSeparatedCandidate->assignedType.type = markerType.type;
-	markerDetected = markerCandidate;
-	markerDetectedSet = true;
+	working.markerDetected = markerCandidate;
+	working.markerDetectedSet = true;
 	return true;
 }
 
@@ -451,12 +474,12 @@ bool MarkerTracker::claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *ma
 }
 
 void MarkerTracker::assignMarkerPoint(void) {
-	markerPoint.set = false;
-	if(markerDetectedSet && trackingBoxSet) {
-		Point2d detectedPoint = Point(markerDetected.marker.center);
-		Point2d trackingPoint = Point(Utilities::centerRect(trackingBox));
+	working.markerPoint.set = false;
+	if(working.markerDetectedSet && working.trackingBoxSet) {
+		Point2d detectedPoint = Point(working.markerDetected.marker.center);
+		Point2d trackingPoint = Point(Utilities::centerRect(working.trackingBox));
 		double actualDistance = Utilities::lineDistance(detectedPoint, trackingPoint);
-		double maxDistance = markerDetected.sqrtArea * maxTrackerDriftPercentage;
+		double maxDistance = working.markerDetected.sqrtArea * maxTrackerDriftPercentage;
 		double detectedPointWeight = actualDistance / maxDistance;
 		if(detectedPointWeight < 0.0) {
 			detectedPointWeight = 0.0;
@@ -468,14 +491,14 @@ void MarkerTracker::assignMarkerPoint(void) {
 		detectedPoint.y = detectedPoint.y * detectedPointWeight;
 		trackingPoint.x = trackingPoint.x * trackingPointWeight;
 		trackingPoint.y = trackingPoint.y * trackingPointWeight;
-		markerPoint.point = detectedPoint + trackingPoint;
-		markerPoint.set = true;
-	} else if(markerDetectedSet) {
-		markerPoint.point = markerDetected.marker.center;
-		markerPoint.set = true;
-	} else if(trackingBoxSet) {
-		markerPoint.point = Utilities::centerRect(trackingBox);
-		markerPoint.set = true;
+		working.markerPoint.point = detectedPoint + trackingPoint;
+		working.markerPoint.set = true;
+	} else if(working.markerDetectedSet) {
+		working.markerPoint.point = working.markerDetected.marker.center;
+		working.markerPoint.set = true;
+	} else if(working.trackingBoxSet) {
+		working.markerPoint.point = Utilities::centerRect(working.trackingBox);
+		working.markerPoint.set = true;
 	} else {
 		if(trackerState == TRACKING) {
 			trackerState = LOST;
@@ -485,7 +508,7 @@ void MarkerTracker::assignMarkerPoint(void) {
 }
 
 void MarkerTracker::calculate3dMarkerPoint(void) {
-	if(!markerPoint.set) {
+	if(!working.markerPoint.set) {
 		return;
 	}
 	FacialPose facialPose = faceTracker->getFacialPose();
@@ -493,7 +516,7 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	if(!facialPose.set || !cameraModel.set) {
 		return;
 	}
-	Mat homogeneousPoint = (Mat_<double>(3,1) << markerPoint.point.x, markerPoint.point.y, 1.0);
+	Mat homogeneousPoint = (Mat_<double>(3,1) << working.markerPoint.point.x, working.markerPoint.point.y, 1.0);
 	Mat worldPoint = cameraModel.cameraMatrix.inv() * homogeneousPoint;
 	Point3d intersection;
 	Point3d rayOrigin = Point3d(0,0,0);
@@ -505,8 +528,8 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
 	markerMat = markerMat - facialPose.translationVector;
 	markerMat = facialPose.rotationMatrix.inv() * markerMat;
-	markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
-	logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", markerPoint.point3d.x, markerPoint.point3d.y, markerPoint.point3d.z);
+	working.markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
+	logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {
@@ -547,6 +570,7 @@ bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const Mark
 }
 
 void MarkerTracker::renderPreviewHUD(void) {
+	YerFace_MutexLock(myMutex);
 	Scalar color = Scalar(0, 0, 255);
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
@@ -578,26 +602,33 @@ void MarkerTracker::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
-		Utilities::drawX(frame, markerPoint.point, color, 10, 2);
+		Utilities::drawX(frame, complete.markerPoint.point, color, 10, 2);
 	}
 	if(density > 1) {
-		if(markerDetectedSet) {
-			Utilities::drawRotatedRectOutline(frame, markerDetected.marker, color, 1);
+		if(complete.markerDetectedSet) {
+			Utilities::drawRotatedRectOutline(frame, complete.markerDetected.marker, color, 1);
 		}
 	}
 	if(density > 2) {
-		if(trackingBoxSet) {
-			rectangle(frame, trackingBox, color, 1);
+		if(complete.trackingBoxSet) {
+			rectangle(frame, complete.trackingBox, color, 1);
 		}
 	}
+	YerFace_MutexUnlock(myMutex);
 }
 
 TrackerState MarkerTracker::getTrackerState(void) {
-	return trackerState;
+	YerFace_MutexLock(myMutex);
+	TrackerState val = trackerState;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 MarkerPoint MarkerTracker::getMarkerPoint(void) {
-	return markerPoint;
+	YerFace_MutexLock(myMutex);
+	MarkerPoint val = working.markerPoint;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 vector<MarkerTracker *> MarkerTracker::markerTrackers;

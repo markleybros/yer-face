@@ -421,15 +421,15 @@ void FaceTracker::renderPreviewHUD(void) {
 		}
 	}
 	if(density > 1) {
-		if(working.faceRect.set) {
+		if(complete.faceRect.set) {
 			cv::rectangle(frame, complete.faceRect.rect, Scalar(255, 255, 0), 1);
 		}
 	}
 	if(density > 2) {
-		if(working.classificationBox.set) {
+		if(complete.classificationBox.set) {
 			cv::rectangle(frame, complete.classificationBox.boxNormalSize, Scalar(0, 255, 0), 1);
 		}
-		if(working.trackingBox.set) {
+		if(complete.trackingBox.set) {
 			cv::rectangle(frame, complete.trackingBox.rect, Scalar(255, 0, 0), 1);
 		}
 	}

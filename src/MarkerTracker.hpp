@@ -36,14 +36,24 @@ public:
 	bool set;
 };
 
+class MarkerTrackerWorkingVariables {
+public:
+	MarkerCandidate markerDetected;
+	bool markerDetectedSet;
+	Rect2d trackingBox;
+	bool trackingBoxSet;
+	MarkerPoint markerPoint;
+};
+
 class FaceMapper;
 
 class MarkerTracker {
 public:
 	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
-	~MarkerTracker();
+	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
+	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
 	MarkerPoint getMarkerPoint(void);
@@ -71,6 +81,7 @@ private:
 	float maxTrackerDriftPercentage;
 
 	Logger *logger;
+	SDL_mutex *myMutex;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
@@ -79,11 +90,8 @@ private:
 	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;
 	TrackerState trackerState;
-	MarkerCandidate markerDetected;
-	bool markerDetectedSet;
-	Rect2d trackingBox;
-	bool trackingBoxSet;
-	MarkerPoint markerPoint;
+
+	MarkerTrackerWorkingVariables working, complete;
 };
 
 }; //namespace YerFace
