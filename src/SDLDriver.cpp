@@ -31,7 +31,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	setIsRunning(true);
 	setIsPaused(false);
 	setPreviewPositionInFrame(BottomRight);
-	setPreviewDebugDensity(2);
+	setPreviewDebugDensity(1);
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
