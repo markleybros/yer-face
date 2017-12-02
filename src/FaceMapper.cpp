@@ -63,7 +63,10 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 	complete.leftEye.set = false;
 	complete.rightEye.set = false;
 
-	if((myMutex = SDL_CreateMutex()) == NULL) {
+	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
@@ -78,21 +81,23 @@ FaceMapper::~FaceMapper() {
 			delete markerTracker;
 		}
 	}
-	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
 	delete markerSeparator;
 	delete metrics;
 	delete logger;
 }
 
 void FaceMapper::processCurrentFrame(void) {
-	YerFace_MutexLock(myMutex);
 
 	markerSeparator->processCurrentFrame();
 
 	metrics->startClock();
 
+	YerFace_MutexLock(myWrkMutex);
 	working.features = faceTracker->getFacialFeatures();
 	calculateEyeRects();
+	YerFace_MutexUnlock(myWrkMutex);
 
 	markerJaw->processCurrentFrame();
 
@@ -117,25 +122,24 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightBottom->processCurrentFrame();
 
 	metrics->endClock();
-
-	YerFace_MutexUnlock(myMutex);
 }
 
 void FaceMapper::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myMutex);
-	
+	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myCmpMutex);
 	complete = working;
+	YerFace_MutexUnlock(myCmpMutex);
+
 	working.features.set = false;
 	working.leftEye.set = false;
 	working.rightEye.set = false;
+	YerFace_MutexUnlock(myWrkMutex);
 
 	markerSeparator->advanceWorkingToCompleted();
 	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
 	for(MarkerTracker *markerTracker : markerTrackers) {
 		markerTracker->advanceWorkingToCompleted();
 	}
-
-	YerFace_MutexUnlock(myMutex);
 }
 
 void FaceMapper::renderPreviewHUD() {
@@ -175,7 +179,7 @@ void FaceMapper::renderPreviewHUD() {
 			Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
 		}
 	}
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myCmpMutex);
 	if(density > 3) {
 		if(complete.leftEye.set) {
 			rectangle(frame, complete.leftEye.rect, Scalar(0, 0, 255));
@@ -184,7 +188,7 @@ void FaceMapper::renderPreviewHUD() {
 			rectangle(frame, complete.rightEye.rect, Scalar(0, 0, 255));
 		}
 	}
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myCmpMutex);
 }
 
 SDLDriver *FaceMapper::getSDLDriver(void) {
@@ -204,20 +208,22 @@ MarkerSeparator *FaceMapper::getMarkerSeparator(void) {
 }
 
 EyeRect FaceMapper::getLeftEyeRect(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	EyeRect val = working.leftEye;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 	return val;
 }
 
 EyeRect FaceMapper::getRightEyeRect(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	EyeRect val = working.rightEye;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 	return val;
 }
 
 void FaceMapper::calculateEyeRects(void) {
+	YerFace_MutexLock(myWrkMutex);
+
 	Point2d pointA, pointB;
 	double dist;
 
@@ -247,6 +253,8 @@ void FaceMapper::calculateEyeRects(void) {
 	working.rightEye.rect.height = dist;
 	working.rightEye.rect = Utilities::insetBox(working.rightEye.rect, 1.25); // FIXME - magic numbers
 	working.rightEye.set = true;
+
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 }; //namespace YerFace

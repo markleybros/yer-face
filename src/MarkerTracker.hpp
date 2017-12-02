@@ -81,7 +81,7 @@ private:
 	float maxTrackerDriftPercentage;
 
 	Logger *logger;
-	SDL_mutex *myMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;

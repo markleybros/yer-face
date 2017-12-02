@@ -148,7 +148,7 @@ private:
 
 	FaceTrackerWorkingVariables working, complete;
 
-	SDL_mutex *myMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex;
 };
 
 }; //namespace YerFace

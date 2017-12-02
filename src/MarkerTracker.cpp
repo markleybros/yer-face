@@ -54,7 +54,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	faceTracker = faceMapper->getFaceTracker();
 	markerSeparator = faceMapper->getMarkerSeparator();
 
-	if((myMutex = SDL_CreateMutex()) == NULL) {
+	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
@@ -73,7 +76,8 @@ MarkerTracker::~MarkerTracker() noexcept(false) {
 		}
 	}
 	YerFace_MutexUnlock(myStaticMutex);
-	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
 	delete logger;
 }
 
@@ -82,7 +86,7 @@ MarkerType MarkerTracker::getMarkerType(void) {
 }
 
 TrackerState MarkerTracker::processCurrentFrame(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 
 	performTracking();
 
@@ -105,20 +109,20 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 	calculate3dMarkerPoint();
 
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 
 	return trackerState;
 }
 
 void MarkerTracker::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myMutex);
-	
+	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myCmpMutex);
 	complete = working;
+	YerFace_MutexUnlock(myCmpMutex);
 	working.markerDetectedSet = false;
 	working.trackingBoxSet = false;
 	working.markerPoint.set = false;
-
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void MarkerTracker::performTrackToSeparatedCorrelation(void) {
@@ -570,7 +574,7 @@ bool MarkerTracker::sortMarkerCandidatesByDistanceFromPointOfInterest(const Mark
 }
 
 void MarkerTracker::renderPreviewHUD(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myCmpMutex);
 	Scalar color = Scalar(0, 0, 255);
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
@@ -614,20 +618,20 @@ void MarkerTracker::renderPreviewHUD(void) {
 			rectangle(frame, complete.trackingBox, color, 1);
 		}
 	}
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myCmpMutex);
 }
 
 TrackerState MarkerTracker::getTrackerState(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	TrackerState val = trackerState;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 	return val;
 }
 
 MarkerPoint MarkerTracker::getMarkerPoint(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	MarkerPoint val = working.markerPoint;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 	return val;
 }
 

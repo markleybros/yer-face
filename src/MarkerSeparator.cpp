@@ -43,7 +43,10 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	}
 	logger = new Logger("MarkerSeparator");
 	metrics = new Metrics("MarkerSeparator");
-	if((myMutex = SDL_CreateMutex()) == NULL) {
+	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
@@ -56,20 +59,21 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 
 MarkerSeparator::~MarkerSeparator() {
 	logger->debug("MarkerSeparator object destructing...");
-	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
 	delete metrics;
 	delete logger;
 }
 
 void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	HSVRangeMin = myHSVRangeMin;
 	HSVRangeMax = myHSVRangeMax;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void MarkerSeparator::processCurrentFrame(bool debug) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 
 	metrics->startClock();
 	
@@ -177,19 +181,22 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 
 	metrics->endClock();
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void MarkerSeparator::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myCmpMutex);
 	complete = working;
+	YerFace_MutexUnlock(myCmpMutex);
 	working.markerList.clear();
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void MarkerSeparator::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
+	YerFace_MutexLock(myCmpMutex);
 	if(density > 2) {
 		for(auto marker : complete.markerList) {
 			if(marker.active) {
@@ -197,6 +204,7 @@ void MarkerSeparator::renderPreviewHUD(void) {
 			}
 		}
 	}
+	YerFace_MutexUnlock(myCmpMutex);
 }
 
 vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {

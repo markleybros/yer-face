@@ -48,7 +48,7 @@ private:
 	FaceTracker *faceTracker;
 
 	Logger *logger;
-	SDL_mutex *myMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex;
 	Metrics *metrics;
 
 	MarkerSeparator *markerSeparator;
