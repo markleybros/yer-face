@@ -72,7 +72,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 	Rect2d searchBox = Rect(Utilities::insetBox(facialBoundingBox.rect, faceSizePercentage));
 	try {
-		Mat frame = frameDerivatives->getCurrentFrame();
+		Mat frame = frameDerivatives->getWorkingFrame();
 		Size frameSize = frame.size();
 		Rect2d imageRect = Rect(0, 0, frameSize.width, frameSize.height);
 		markerBoundaryRect = Rect(searchBox & imageRect);

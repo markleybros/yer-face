@@ -40,7 +40,7 @@ FaceMapper *faceMapper;
 Metrics *metrics;
 
 //VARIABLES PROTECTED BY frameMetadataMutex
-unsigned long workingFrameNum = 0, completedFrameNum = -1;
+unsigned long workingFrameNumber = 0, completedFrameNumber = 0;
 Size frameSize;
 bool frameSizeValid = false;
 SDL_mutex *frameMetadataMutex;
@@ -154,7 +154,7 @@ int runCaptureLoop(void *ptr) {
 			if(SDL_LockMutex(frameMetadataMutex) != 0) {
 				throw runtime_error("Failed locking mutex!");
 			}
-			workingFrameNum++;
+			workingFrameNumber++;
 			if(!frameSizeValid) {
 				frameSize = frame.size();
 				frameSizeValid = true;
@@ -170,7 +170,7 @@ int runCaptureLoop(void *ptr) {
 			// Start timer
 			metrics->startClock();
 
-			frameDerivatives->setCurrentFrame(frame);
+			frameDerivatives->setWorkingFrame(frame, workingFrameNumber);
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
@@ -179,14 +179,15 @@ int runCaptureLoop(void *ptr) {
 			if(SDL_LockMutex(frameMetadataMutex) != 0) {
 				throw runtime_error("Failed locking mutex!");
 			}
-			completedFrameNum = workingFrameNum;
+			completedFrameNumber = workingFrameNumber;
 			SDL_UnlockMutex(frameMetadataMutex);
+			frameDerivatives->advanceWorkingFrameToCompleted();
 
 			//If requested, write image sequence.
 			if(prev_imgseq.length() > 0) {
 				int filenameLength = prev_imgseq.length() + 32;
 				char filename[filenameLength];
-				snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), completedFrameNum);
+				snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), completedFrameNumber);
 				logger->debug("YerFace writing preview frame to %s ...", filename);
 				imwrite(filename, frameDerivatives->getPreviewFrame());
 			}
@@ -198,6 +199,16 @@ int runCaptureLoop(void *ptr) {
 }
 
 void doRenderPreviewFrame(void) {
+	if(SDL_LockMutex(frameMetadataMutex) != 0) {
+		throw runtime_error("Failed locking mutex!");
+	}
+	unsigned long frameNumber = completedFrameNumber;
+	SDL_UnlockMutex(frameMetadataMutex);
+
+	if(frameNumber < 1) {
+		return;
+	}
+
 	if(sdlDriver->getIsPaused()) {
 		frameDerivatives->resetPreviewFrame();
 	}

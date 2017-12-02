@@ -92,7 +92,7 @@ SDL_Texture *SDLDriver::getPreviewTexture(void) {
 	if(previewWindow.renderer == NULL) {
 		throw logic_error("SDLDriver::getPreviewTexture() was called, but there is no preview window renderer!");
 	}
-	Size frameSize = frameDerivatives->getCurrentFrameSize();
+	Size frameSize = frameDerivatives->getWorkingFrameSize();
 	logger->verbose("Creating Preview SDL Texture <%dx%d>", frameSize.width, frameSize.height);
 	previewTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, frameSize.width, frameSize.height);
 	if(previewTexture == NULL) {

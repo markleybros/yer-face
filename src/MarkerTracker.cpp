@@ -129,7 +129,7 @@ void MarkerTracker::performDetection(void) {
 	list<MarkerCandidate> markerCandidateList;
 
 	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
-	Size frameSize = frameDerivatives->getCurrentFrame().size();
+	Size frameSize = frameDerivatives->getWorkingFrameSize();
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
@@ -388,12 +388,12 @@ void MarkerTracker::performInitializationOfTracker(void) {
 	trackingBox = Rect(Utilities::insetBox(markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
 	trackingBoxSet = true;
 
-	tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
+	tracker->init(frameDerivatives->getWorkingFrame(), trackingBox);
 }
 
 bool MarkerTracker::performTracking(void) {
 	if(trackerState == TRACKING) {
-		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
+		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), trackingBox);
 		if(!trackSuccess) {
 			trackingBoxSet = false;
 			return false;

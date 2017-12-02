@@ -19,6 +19,7 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	if(myClassificationScaleFactor < 0.0 || myClassificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
+	completedFrameSet = false;
 	classificationScaleFactor = myClassificationScaleFactor;
 	metrics = new Metrics("FrameDerivatives");
 	logger->debug("FrameDerivatives constructed and ready to go!");
@@ -31,14 +32,15 @@ FrameDerivatives::~FrameDerivatives() {
 	delete logger;
 }
 
-void FrameDerivatives::setCurrentFrame(Mat newFrame) {
+void FrameDerivatives::setWorkingFrame(Mat newFrame, unsigned long newFrameNumber) {
 	if(SDL_LockMutex(myMutex) != 0) {
 		throw runtime_error("Failed to lock mutex.");
 	}
 	metrics->startClock();
-	currentFrame = newFrame;
+	workingFrame = newFrame;
+	workingFrameNumber = newFrameNumber;
 
-	Size frameSize = currentFrame.size();
+	Size frameSize = workingFrame.size();
 
 	if(classificationBoundingBox > 0) {
 		if(frameSize.width >= frameSize.height) {
@@ -48,7 +50,7 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 		}
 	}
 
-	resize(currentFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
+	resize(workingFrame, classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
 
 	static bool reportedScale = false;
 	if(!reportedScale) {
@@ -61,13 +63,32 @@ void FrameDerivatives::setCurrentFrame(Mat newFrame) {
 	SDL_UnlockMutex(myMutex);
 }
 
-Mat FrameDerivatives::getCurrentFrame(void) {
+Mat FrameDerivatives::getWorkingFrame(void) {
 	if(SDL_LockMutex(myMutex) != 0) {
 		throw runtime_error("Failed to lock mutex.");
 	}
-	Mat value = currentFrame;
+	Mat value = workingFrame;
 	SDL_UnlockMutex(myMutex);
 	return value;
+}
+
+unsigned long FrameDerivatives::getWorkingFrameNumber(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	unsigned long value = workingFrameNumber;
+	SDL_UnlockMutex(myMutex);
+	return value;
+}
+
+void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
+	if(SDL_LockMutex(myMutex) != 0) {
+		throw runtime_error("Failed to lock mutex.");
+	}
+	completedFrame = workingFrame.clone();
+	completedFrameNumber = workingFrameNumber;
+	completedFrameSet = true;
+	SDL_UnlockMutex(myMutex);
 }
 
 Mat FrameDerivatives::getClassificationFrame(void) {
@@ -83,8 +104,12 @@ Mat FrameDerivatives::getPreviewFrame(void) {
 	if(SDL_LockMutex(myMutex) != 0) {
 		throw runtime_error("Failed to lock mutex.");
 	}
+	if(!completedFrameSet) {
+		SDL_UnlockMutex(myMutex);
+		throw runtime_error("Preview frame was requested, but no working frame has been advanced to completed frame yet.");
+	}
 	if(!previewFrameCloned) {
-		previewFrame = currentFrame.clone();
+		previewFrame = completedFrame.clone();
 		previewFrameCloned = true;
 	}
 	Mat value = previewFrame;
@@ -109,11 +134,11 @@ double FrameDerivatives::getClassificationScaleFactor(void) {
 	return status;
 }
 
-Size FrameDerivatives::getCurrentFrameSize(void) {
+Size FrameDerivatives::getWorkingFrameSize(void) {
 	if(SDL_LockMutex(myMutex) != 0) {
 		throw runtime_error("Failed to lock mutex.");
 	}
-	Size size = currentFrame.size();
+	Size size = workingFrame.size();
 	SDL_UnlockMutex(myMutex);
 	return size;
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <map>
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
@@ -109,6 +110,8 @@ private:
 	Logger *logger;
 	Metrics *metrics;
 	TrackerState trackerState;
+
+	long unsigned int currentFrame;
 
 	Rect2d classificationBox;
 	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.

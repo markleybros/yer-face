@@ -24,6 +24,7 @@ FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDe
 	facialFeaturesSet = false;
 	facialCameraModel.set = false;
 	facialPose.set = false;
+	currentFrame = 0;
 
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
@@ -109,12 +110,12 @@ void FaceTracker::performInitializationOfTracker(void) {
 	trackingBox = Rect(Utilities::insetBox(classificationBoxNormalSize, trackingBoxPercentage));
 	trackingBoxSet = true;
 
-	tracker->init(frameDerivatives->getCurrentFrame(), trackingBox);
+	tracker->init(frameDerivatives->getWorkingFrame(), trackingBox);
 }
 
 bool FaceTracker::performTracking(void) {
 	if(trackerState == TRACKING) {
-		bool trackSuccess = tracker->update(frameDerivatives->getCurrentFrame(), trackingBox);
+		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), trackingBox);
 		if(!trackSuccess) {
 			trackingBoxSet = false;
 			return false;
@@ -212,8 +213,6 @@ void FaceTracker::doIdentifyFeatures(void) {
 
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
 
-	Mat prevFrame = frameDerivatives->getPreviewFrame();
-
 	facialFeatures.clear();
 	facialFeatures3d.clear();
 	dlib::point part;
@@ -294,7 +293,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 
 void FaceTracker::doInitializeCameraModel(void) {
 	//Totally fake, idealized camera.
-	Size frameSize = frameDerivatives->getCurrentFrameSize();
+	Size frameSize = frameDerivatives->getWorkingFrameSize();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
 	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
