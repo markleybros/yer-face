@@ -56,6 +56,17 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this);
 	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this);
 	
+	working.features.set = false;
+	working.leftEye.set = false;
+	working.rightEye.set = false;
+	complete.features.set = false;
+	complete.leftEye.set = false;
+	complete.rightEye.set = false;
+
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
 	logger->debug("FaceMapper object constructed and ready to go!");
 }
 
@@ -69,18 +80,20 @@ FaceMapper::~FaceMapper() {
 			delete markerTrackersSnapshot[i];
 		}
 	}
+	SDL_DestroyMutex(myMutex);
 	delete markerSeparator;
 	delete metrics;
 	delete logger;
 }
 
 void FaceMapper::processCurrentFrame(void) {
+	YerFace_MutexLock(myMutex);
 
 	markerSeparator->processCurrentFrame();
 
 	metrics->startClock();
 
-	facialFeatures = faceTracker->getFacialFeatures();
+	working.features = faceTracker->getFacialFeatures();
 	calculateEyeRects();
 
 	markerJaw->processCurrentFrame();
@@ -106,6 +119,18 @@ void FaceMapper::processCurrentFrame(void) {
 	markerLipsRightBottom->processCurrentFrame();
 
 	metrics->endClock();
+
+	YerFace_MutexUnlock(myMutex);
+}
+
+void FaceMapper::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myMutex);
+	complete = working;
+	working.features.set = false;
+	working.leftEye.set = false;
+	working.rightEye.set = false;
+	//FIXME - handle children
+	YerFace_MutexUnlock(myMutex);
 }
 
 void FaceMapper::renderPreviewHUD() {
@@ -145,14 +170,16 @@ void FaceMapper::renderPreviewHUD() {
 			Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
 		}
 	}
+	YerFace_MutexLock(myMutex);
 	if(density > 3) {
-		if(leftEyeRect.set) {
-			rectangle(frame, leftEyeRect.rect, Scalar(0, 0, 255));
+		if(complete.leftEye.set) {
+			rectangle(frame, complete.leftEye.rect, Scalar(0, 0, 255));
 		}
-		if(rightEyeRect.set) {
-			rectangle(frame, rightEyeRect.rect, Scalar(0, 0, 255));
+		if(complete.rightEye.set) {
+			rectangle(frame, complete.rightEye.rect, Scalar(0, 0, 255));
 		}
 	}
+	YerFace_MutexUnlock(myMutex);
 }
 
 SDLDriver *FaceMapper::getSDLDriver(void) {
@@ -172,43 +199,49 @@ MarkerSeparator *FaceMapper::getMarkerSeparator(void) {
 }
 
 EyeRect FaceMapper::getLeftEyeRect(void) {
-	return leftEyeRect;
+	YerFace_MutexLock(myMutex);
+	EyeRect val = working.leftEye;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 EyeRect FaceMapper::getRightEyeRect(void) {
-	return rightEyeRect;
+	YerFace_MutexLock(myMutex);
+	EyeRect val = working.rightEye;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 void FaceMapper::calculateEyeRects(void) {
 	Point2d pointA, pointB;
 	double dist;
 
-	leftEyeRect.set = false;
-	rightEyeRect.set = false;
+	working.leftEye.set = false;
+	working.rightEye.set = false;
 
-	if(!facialFeatures.set) {
+	if(!working.features.set) {
 		return;
 	}
 
-	pointA = facialFeatures.eyeLeftInnerCorner;
-	pointB = facialFeatures.eyeLeftOuterCorner;
+	pointA = working.features.eyeLeftInnerCorner;
+	pointB = working.features.eyeLeftOuterCorner;
 	dist = Utilities::lineDistance(pointA, pointB);
-	leftEyeRect.rect.x = pointA.x;
-	leftEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
-	leftEyeRect.rect.width = dist;
-	leftEyeRect.rect.height = dist;
-	leftEyeRect.rect = Utilities::insetBox(leftEyeRect.rect, 1.25); // FIXME - magic numbers
-	leftEyeRect.set = true;
+	working.leftEye.rect.x = pointA.x;
+	working.leftEye.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
+	working.leftEye.rect.width = dist;
+	working.leftEye.rect.height = dist;
+	working.leftEye.rect = Utilities::insetBox(working.leftEye.rect, 1.25); // FIXME - magic numbers
+	working.leftEye.set = true;
 
-	pointA = facialFeatures.eyeRightOuterCorner;
-	pointB = facialFeatures.eyeRightInnerCorner;
+	pointA = working.features.eyeRightOuterCorner;
+	pointB = working.features.eyeRightInnerCorner;
 	dist = Utilities::lineDistance(pointA, pointB);
-	rightEyeRect.rect.x = pointA.x;
-	rightEyeRect.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
-	rightEyeRect.rect.width = dist;
-	rightEyeRect.rect.height = dist;
-	rightEyeRect.rect = Utilities::insetBox(rightEyeRect.rect, 1.25); // FIXME - magic numbers
-	rightEyeRect.set = true;
+	working.rightEye.rect.x = pointA.x;
+	working.rightEye.rect.y = ((pointA.y + pointB.y) / 2.0) - (dist / 2.0);
+	working.rightEye.rect.width = dist;
+	working.rightEye.rect.height = dist;
+	working.rightEye.rect = Utilities::insetBox(working.rightEye.rect, 1.25); // FIXME - magic numbers
+	working.rightEye.set = true;
 }
 
 }; //namespace YerFace

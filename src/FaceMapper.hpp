@@ -21,11 +21,18 @@ public:
 	bool set;
 };
 
+class FaceMapperWorkingVariables {
+public:
+	FacialFeatures features;
+	EyeRect leftEye, rightEye;
+};
+
 class FaceMapper {
 public:
 	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~FaceMapper();
 	void processCurrentFrame(void);
+	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	SDLDriver *getSDLDriver(void);
 	FrameDerivatives *getFrameDerivatives(void);
@@ -41,6 +48,7 @@ private:
 	FaceTracker *faceTracker;
 
 	Logger *logger;
+	SDL_mutex *myMutex;
 	Metrics *metrics;
 
 	MarkerSeparator *markerSeparator;
@@ -71,9 +79,7 @@ private:
 	MarkerTracker *markerLipsLeftBottom;
 	MarkerTracker *markerLipsRightBottom;
 
-	FacialFeatures facialFeatures;
-	EyeRect leftEyeRect;
-	EyeRect rightEyeRect;
+	FaceMapperWorkingVariables working, complete;
 };
 
 }; //namespace YerFace

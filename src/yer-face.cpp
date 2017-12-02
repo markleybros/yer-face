@@ -185,6 +185,7 @@ int runCaptureLoop(void *ptr) {
 			
 			frameDerivatives->advanceWorkingFrameToCompleted();
 			faceTracker->advanceWorkingToCompleted();
+			faceMapper->advanceWorkingToCompleted();
 
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 
