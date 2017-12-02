@@ -125,11 +125,15 @@ void FaceMapper::processCurrentFrame(void) {
 
 void FaceMapper::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myMutex);
+	
 	complete = working;
 	working.features.set = false;
 	working.leftEye.set = false;
 	working.rightEye.set = false;
+
 	//FIXME - handle children
+	markerSeparator->advanceWorkingToCompleted();
+
 	YerFace_MutexUnlock(myMutex);
 }
 

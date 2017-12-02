@@ -22,12 +22,18 @@ public:
 	bool active;
 };
 
+class MarkerSeparatorWorkingVariables {
+public:
+	vector<MarkerSeparated> markerList;
+};
+
 class MarkerSeparator {
 public:
 	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin = Scalar(56, 29, 80), Scalar myHSVRangeMax = Scalar(100, 211, 255), float myFaceSizePercentage = 1.5, float myMinTargetMarkerAreaPercentage = 0.00001, float myMaxTargetMarkerAreaPercentage = 0.01, float myMarkerBoxInflatePixels = 1.5);
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(bool debug = false);
+	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	vector<MarkerSeparated> *getMarkerList(void);
 private:
@@ -42,13 +48,14 @@ private:
 	double markerBoxInflatePixels;
 
 	Logger *logger;
+	SDL_mutex *myMutex;
 	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;
 	Mat searchFrameBGR;
 	Mat searchFrameHSV;
-	Rect2d markerBoundaryRect;
-	vector<MarkerSeparated> markerList;
+	
+	MarkerSeparatorWorkingVariables working, complete;
 };
 
 }; //namespace YerFace

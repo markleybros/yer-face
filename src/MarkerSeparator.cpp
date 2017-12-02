@@ -41,9 +41,12 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	if(markerBoxInflatePixels < 0.0) {
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
-	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	logger = new Logger("MarkerSeparator");
 	metrics = new Metrics("MarkerSeparator");
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	sdlDriver->onColorPickerEvent([this] (void) -> void {
 		this->logger->info("Got a Color Picker event. Popping up a color picker...");
 		this->doPickColor();
@@ -53,23 +56,29 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 
 MarkerSeparator::~MarkerSeparator() {
 	logger->debug("MarkerSeparator object destructing...");
+	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
 
 void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+	YerFace_MutexLock(myMutex);
 	HSVRangeMin = myHSVRangeMin;
 	HSVRangeMax = myHSVRangeMax;
+	YerFace_MutexUnlock(myMutex);
 }
 
 void MarkerSeparator::processCurrentFrame(bool debug) {
+	YerFace_MutexLock(myMutex);
+
 	metrics->startClock();
 	
-	markerList.clear();
+	working.markerList.clear();
 	FacialRect facialBoundingBox = faceTracker->getFacialBoundingBox();
 	if(!facialBoundingBox.set) {
 		return;
 	}
+	Rect2d markerBoundaryRect;
 	Rect2d searchBox = Rect(Utilities::insetBox(facialBoundingBox.rect, faceSizePercentage));
 	try {
 		Mat frame = frameDerivatives->getWorkingFrame();
@@ -110,41 +119,41 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 			MarkerSeparated markerSeparated;
 			markerSeparated.active = true;
 			markerSeparated.marker = markerCandidate;
-			markerList.push_back(markerSeparated);
+			working.markerList.push_back(markerSeparated);
 		}
 	}
 
-	count = markerList.size();
+	count = working.markerList.size();
 	for(i = 0; i < count; i++) {
-		if(!markerList[i].active) {
+		if(!working.markerList[i].active) {
 			continue;
 		}
 		Point2f vertices[8];
-		markerList[i].marker.points(vertices);
+		working.markerList[i].marker.points(vertices);
 		Rect2d primaryRect;
 		bool didRemoveDuplicate;
 		do {
 			didRemoveDuplicate = false;
-			primaryRect = Rect2d(markerList[i].marker.boundingRect2f());
+			primaryRect = Rect2d(working.markerList[i].marker.boundingRect2f());
 			primaryRect.x -= markerBoxInflatePixels;
 			primaryRect.y -= markerBoxInflatePixels;
 			primaryRect.width += markerBoxInflatePixels * 2;
 			primaryRect.height += markerBoxInflatePixels * 2;
 			for(size_t j = 0; j < count; j++) {
-				if(i == j || !markerList[j].active) {
+				if(i == j || !working.markerList[j].active) {
 					continue;
 				}
-				Rect2d secondaryRect = Rect2d(markerList[j].marker.boundingRect2f());
+				Rect2d secondaryRect = Rect2d(working.markerList[j].marker.boundingRect2f());
 				secondaryRect.x -= markerBoxInflatePixels;
 				secondaryRect.y -= markerBoxInflatePixels;
 				secondaryRect.width += markerBoxInflatePixels * 2;
 				secondaryRect.height += markerBoxInflatePixels * 2;
 				if((primaryRect & secondaryRect).area() > 0) {
-					markerList[i].marker.points(&vertices[0]);
-					markerList[j].marker.points(&vertices[4]);
+					working.markerList[i].marker.points(&vertices[0]);
+					working.markerList[j].marker.points(&vertices[4]);
 					vector<Point2f> verticesVector(std::begin(vertices), std::end(vertices));
-					markerList[i].marker = minAreaRect(verticesVector);
-					markerList[j].active = false;
+					working.markerList[i].marker = minAreaRect(verticesVector);
+					working.markerList[j].active = false;
 					didRemoveDuplicate = true;
 				}
 			}
@@ -159,32 +168,39 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		waitKey(1);
 	}
 
-	count = markerList.size();
+	count = working.markerList.size();
 	for(i = 0; i < count; i++) {
-		if(!markerList[i].active) {
+		if(!working.markerList[i].active) {
 			continue;
 		}
-		markerList[i].marker.center += Point2f(markerBoundaryRect.tl());
+		working.markerList[i].marker.center += Point2f(markerBoundaryRect.tl());
 	}
 
 	metrics->endClock();
+	YerFace_MutexUnlock(myMutex);
+}
+
+void MarkerSeparator::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myMutex);
+	complete = working;
+	working.markerList.clear();
+	YerFace_MutexUnlock(myMutex);
 }
 
 void MarkerSeparator::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 2) {
-		size_t count = markerList.size();
-		for(unsigned int i = 0; i < count; i++) {
-			if(markerList[i].active) {
-				Utilities::drawRotatedRectOutline(frame, markerList[i].marker, Scalar(255,255,0), 3);
+		for(auto marker : complete.markerList) {
+			if(marker.active) {
+				Utilities::drawRotatedRectOutline(frame, marker.marker, Scalar(255,255,0), 3);
 			}
 		}
 	}
 }
 
 vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {
-	return &markerList;
+	return &working.markerList;
 }
 
 void MarkerSeparator::doPickColor(void) {
