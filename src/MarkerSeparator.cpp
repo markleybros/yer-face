@@ -200,6 +200,8 @@ void MarkerSeparator::renderPreviewHUD(void) {
 }
 
 vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {
+	//No mutex needed because the pointer does not change.
+	//Watch out, however! The contents will change suddenly. (FIXME lock working marker list???)
 	return &working.markerList;
 }
 

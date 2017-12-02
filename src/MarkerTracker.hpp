@@ -47,7 +47,7 @@ public:
 	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
 	MarkerPoint getMarkerPoint(void);
-	static vector<MarkerTracker *> *getMarkerTrackers(void);
+	static vector<MarkerTracker *> getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
 private:
@@ -63,6 +63,7 @@ private:
 	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;
+	static SDL_mutex *myStaticMutex;
 
 	MarkerType markerType;
 	FaceMapper *faceMapper;

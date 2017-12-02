@@ -72,12 +72,10 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 
 FaceMapper::~FaceMapper() {
 	logger->debug("FaceMapper object destructing...");
-	//Make a COPY of the vector, because otherwise it will change size out from under us while we are iterating.
-	vector<MarkerTracker *> markerTrackersSnapshot = vector<MarkerTracker *>(*MarkerTracker::getMarkerTrackers());
-	size_t markerTrackersCount = markerTrackersSnapshot.size();
-	for(size_t i = 0; i < markerTrackersCount; i++) {
-		if(markerTrackersSnapshot[i] != NULL) {
-			delete markerTrackersSnapshot[i];
+	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
+	for(MarkerTracker *markerTracker : markerTrackers) {
+		if(markerTracker != NULL) {
+			delete markerTracker;
 		}
 	}
 	SDL_DestroyMutex(myMutex);
@@ -131,8 +129,11 @@ void FaceMapper::advanceWorkingToCompleted(void) {
 	working.leftEye.set = false;
 	working.rightEye.set = false;
 
-	//FIXME - handle children
 	markerSeparator->advanceWorkingToCompleted();
+	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
+	// for(MarkerTracker *markerTracker : (*markerTrackers)) {
+	// 	markerTracker->advanceWorkingToCompleted();
+	// }
 
 	YerFace_MutexUnlock(myMutex);
 }
@@ -140,8 +141,8 @@ void FaceMapper::advanceWorkingToCompleted(void) {
 void FaceMapper::renderPreviewHUD() {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
-	vector<MarkerTracker *> *markerTrackers = MarkerTracker::getMarkerTrackers();
-	for(MarkerTracker *markerTracker : (*markerTrackers)) {
+	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
+	for(MarkerTracker *markerTracker : markerTrackers) {
 		markerTracker->renderPreviewHUD();
 	}
 	markerSeparator->renderPreviewHUD();
@@ -166,7 +167,7 @@ void FaceMapper::renderPreviewHUD() {
 		previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
-		for(MarkerTracker *markerTracker : (*markerTrackers)) {
+		for(MarkerTracker *markerTracker : markerTrackers) {
 			MarkerPoint markerPoint = markerTracker->getMarkerPoint();
 			Point2d previewPoint = Point2d(
 					(markerPoint.point3d.x * previewPointScale) + previewCenter.x,

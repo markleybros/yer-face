@@ -17,14 +17,16 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	if(markerType.type == NoMarkerAssigned) {
 		throw invalid_argument("MarkerTracker class cannot be assigned NoMarkerAssigned");
 	}
-	size_t markerTrackersCount = markerTrackers.size();
-	for(size_t i = 0; i < markerTrackersCount; i++) {
-		if(markerTrackers[i]->getMarkerType().type == markerType.type) {
+
+	YerFace_MutexLock(myStaticMutex);
+	for(auto markerTracker : markerTrackers) {
+		if(markerTracker->getMarkerType().type == markerType.type) {
 			throw invalid_argument("MarkerType collision trying to construct MarkerTracker");
 		}
 	}
 	markerTrackers.push_back(this);
-
+	YerFace_MutexUnlock(myStaticMutex);
+	
 	faceMapper = myFaceMapper;
 	if(faceMapper == NULL) {
 		throw invalid_argument("faceMapper cannot be NULL");
@@ -51,18 +53,19 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 
 	string loggerName = "MarkerTracker<" + (string)markerType.toString() + ">";
 	logger = new Logger(loggerName.c_str());
-
 	logger->debug("MarkerTracker object constructed and ready to go!");
 }
 
 MarkerTracker::~MarkerTracker() {
 	logger->debug("MarkerTracker object destructing...");
+	YerFace_MutexLock(myStaticMutex);
 	for(vector<MarkerTracker *>::iterator iterator = markerTrackers.begin(); iterator != markerTrackers.end(); ++iterator) {
 		if(*iterator == this) {
 			markerTrackers.erase(iterator);
 			return;
 		}
 	}
+	YerFace_MutexUnlock(myStaticMutex);
 	delete logger;
 }
 
@@ -598,18 +601,24 @@ MarkerPoint MarkerTracker::getMarkerPoint(void) {
 }
 
 vector<MarkerTracker *> MarkerTracker::markerTrackers;
+SDL_mutex *MarkerTracker::myStaticMutex = SDL_CreateMutex();
 
-vector<MarkerTracker *> *MarkerTracker::getMarkerTrackers(void) {
-	return &markerTrackers;
+vector<MarkerTracker *> MarkerTracker::getMarkerTrackers(void) {
+	YerFace_MutexLock(myStaticMutex);
+	auto val = markerTrackers;
+	YerFace_MutexUnlock(myStaticMutex);
+	return val;
 }
 
 MarkerTracker *MarkerTracker::getMarkerTrackerByType(MarkerType markerType) {
-	size_t markerTrackersCount = markerTrackers.size();
-	for(size_t i = 0; i < markerTrackersCount; i++) {
-		if(markerTrackers[i]->getMarkerType().type == markerType.type) {
-			return markerTrackers[i];
+	YerFace_MutexLock(myStaticMutex);
+	for(auto markerTracker : markerTrackers) {
+		if(markerTracker->getMarkerType().type == markerType.type) {
+			YerFace_MutexUnlock(myStaticMutex);
+			return markerTracker;
 		}
 	}
+	YerFace_MutexUnlock(myStaticMutex);
 	return NULL;
 }
 
