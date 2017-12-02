@@ -2,6 +2,8 @@
 
 #include "Logger.hpp"
 
+#include "SDL.h"
+
 #include "opencv2/core/utility.hpp"
 #include <list>
 

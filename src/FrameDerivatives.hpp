@@ -3,6 +3,8 @@
 #include "Metrics.hpp"
 #include "Logger.hpp"
 
+#include "SDL.h"
+
 #include "opencv2/imgproc.hpp"
 
 using namespace std;
@@ -26,6 +28,7 @@ private:
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;
+	SDL_mutex *myMutex;
 	Metrics *metrics;
 	Mat currentFrame; //BGR format, at the native resolution of the input.
 	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.
