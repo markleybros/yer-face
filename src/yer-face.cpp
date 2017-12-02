@@ -209,9 +209,7 @@ void doRenderPreviewFrame(void) {
 		return;
 	}
 
-	if(sdlDriver->getIsPaused()) {
-		frameDerivatives->resetPreviewFrame();
-	}
+	frameDerivatives->resetPreviewFrame();
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
