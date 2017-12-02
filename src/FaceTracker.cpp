@@ -18,13 +18,18 @@ namespace YerFace {
 FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
-	classificationBoxSet = false;
-	trackingBoxSet = false;
-	faceRectSet = false;
-	facialFeaturesSet = false;
+	working.classificationBox.set = false;
+	working.trackingBox.set = false;
+	working.faceRect.set = false;
+	working.facialFeatures.set = false;
+	working.facialFeatures.featuresExposed.set = false;
+	working.facialPose.set = false;
+	complete.classificationBox.set = false;
+	complete.trackingBox.set = false;
+	complete.faceRect.set = false;
+	complete.facialFeatures.set = false;
+	complete.facialPose.set = false;
 	facialCameraModel.set = false;
-	facialPose.set = false;
-	currentFrame = 0;
 
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
@@ -54,6 +59,10 @@ FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDe
 	logger = new Logger("FaceTracker");
 	metrics = new Metrics("FaceTracker");
 
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
 	frontalFaceDetector = get_frontal_face_detector();
 	deserialize(modelFileName.c_str()) >> shapePredictor;
 	logger->debug("FaceTracker object constructed and ready to go!");
@@ -61,6 +70,7 @@ FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDe
 
 FaceTracker::~FaceTracker() {
 	logger->debug("FaceTracker object destructing...");
+	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
@@ -69,6 +79,8 @@ FaceTracker::~FaceTracker() {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 TrackerState FaceTracker::processCurrentFrame(void) {
+	YerFace_MutexLock(myMutex);
+
 	metrics->startClock();
 	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 
@@ -78,8 +90,8 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doClassifyFace();
 
-	if(classificationBoxSet) {
-		if(!trackingBoxSet || trackerDriftingExcessively()) {
+	if(working.classificationBox.set) {
+		if(!working.trackingBox.set || trackerDriftingExcessively()) {
 			performInitializationOfTracker();
 		}
 	}
@@ -93,12 +105,26 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	doCalculateFacialPlane();
 
 	metrics->endClock();
+
+	YerFace_MutexUnlock(myMutex);
+
 	return trackerState;
 }
 
+void FaceTracker::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myMutex);
+	complete = working;
+	working.classificationBox.set = false;
+	working.trackingBox.set = false;
+	working.faceRect.set = false;
+	working.facialFeatures.set = false;
+	working.facialFeatures.featuresExposed.set = false;
+	working.facialPose.set = false;
+	YerFace_MutexUnlock(myMutex);
+}
 
 void FaceTracker::performInitializationOfTracker(void) {
-	if(!classificationBoxSet) {
+	if(!working.classificationBox.set) {
 		throw invalid_argument("FaceTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
 	trackerState = TRACKING;
@@ -107,31 +133,31 @@ void FaceTracker::performInitializationOfTracker(void) {
 	#else
 	tracker = TrackerKCF::create();
 	#endif
-	trackingBox = Rect(Utilities::insetBox(classificationBoxNormalSize, trackingBoxPercentage));
-	trackingBoxSet = true;
+	working.trackingBox.rect = Rect(Utilities::insetBox(working.classificationBox.boxNormalSize, trackingBoxPercentage));
+	working.trackingBox.set = true;
 
-	tracker->init(frameDerivatives->getWorkingFrame(), trackingBox);
+	tracker->init(frameDerivatives->getWorkingFrame(), working.trackingBox.rect);
 }
 
 bool FaceTracker::performTracking(void) {
 	if(trackerState == TRACKING) {
-		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), trackingBox);
+		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), working.trackingBox.rect);
 		if(!trackSuccess) {
-			trackingBoxSet = false;
+			working.trackingBox.set = false;
 			return false;
 		}
-		trackingBoxSet = true;
+		working.trackingBox.set = true;
 		return true;
 	}
 	return false;
 }
 
 bool FaceTracker::trackerDriftingExcessively(void) {
-	if(!classificationBoxSet || !trackingBoxSet) {
-		throw invalid_argument("FaceTracker::trackerDriftingExcessively() called while one or both of classificationBoxSet or trackingBoxSet are false");
+	if(!working.classificationBox.set || !working.trackingBox.set) {
+		throw invalid_argument("FaceTracker::trackerDriftingExcessively() called while one or both of working.classificationBox.set or working.trackingBox.set are false");
 	}
-	double actualDistance = Utilities::lineDistance(Utilities::centerRect(classificationBoxNormalSize), Utilities::centerRect(trackingBox));
-	double maxDistance = std::sqrt(classificationBoxNormalSize.area()) * maxTrackerDriftPercentage;
+	double actualDistance = Utilities::lineDistance(Utilities::centerRect(working.classificationBox.boxNormalSize), Utilities::centerRect(working.trackingBox.rect));
+	double maxDistance = std::sqrt(working.classificationBox.boxNormalSize.area()) * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
 		logger->warn("Optical tracker drifting excessively! Resetting it.");
 		return true;
@@ -140,7 +166,7 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 }
 
 void FaceTracker::doClassifyFace(void) {
-	classificationBoxSet = false;
+	working.classificationBox.set = false;
 	//Using dlib's built-in HOG face detector instead of a CNN-based detector because it trades off accuracy for speed.
 	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
 
@@ -154,8 +180,8 @@ void FaceTracker::doClassifyFace(void) {
 		tempBox.width = faces[i].right() - tempBox.x;
 		tempBox.height = faces[i].bottom() - tempBox.y;
 		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationScaleFactor);
-		if(trackingBoxSet) {
-			if((tempBoxNormalSize & trackingBox).area() <= 0) {
+		if(working.trackingBox.set) {
+			if((tempBoxNormalSize & working.trackingBox.rect).area() <= 0) {
 				continue;
 			}
 		}
@@ -168,30 +194,30 @@ void FaceTracker::doClassifyFace(void) {
 	}
 	if(bestFace >= 0) {
 		trackerState = TRACKING;
-		classificationBox = bestFaceBox;
-		classificationBoxNormalSize = bestFaceBoxNormalSize;
-		classificationBoxSet = true;
+		working.classificationBox.box = bestFaceBox;
+		working.classificationBox.boxNormalSize = bestFaceBoxNormalSize;
+		working.classificationBox.set = true;
 	}
 }
 
 void FaceTracker::assignFaceRect(void) {
-	faceRectSet = false;
+	working.faceRect.set = false;
 	Rect2d trackingBoxNormalSize;
-	if(trackingBoxSet) {
-		trackingBoxNormalSize = Utilities::insetBox(trackingBox, 1.0 / trackingBoxPercentage);
+	if(working.trackingBox.set) {
+		trackingBoxNormalSize = Utilities::insetBox(working.trackingBox.rect, 1.0 / trackingBoxPercentage);
 	}
-	if(classificationBoxSet && trackingBoxSet) {
-		faceRect.x = (classificationBoxNormalSize.x + trackingBoxNormalSize.x) / 2.0;
-		faceRect.y = (classificationBoxNormalSize.y + trackingBoxNormalSize.y) / 2.0;
-		faceRect.width = (classificationBoxNormalSize.width + trackingBoxNormalSize.width) / 2.0;
-		faceRect.height = (classificationBoxNormalSize.height + trackingBoxNormalSize.height) / 2.0;
-		faceRectSet = true;
-	} else if(classificationBoxSet) {
-		faceRect = classificationBoxNormalSize;
-		faceRectSet = true;
-	} else if(trackingBoxSet) {
-		faceRect = trackingBoxNormalSize;
-		faceRectSet = true;
+	if(working.classificationBox.set && working.trackingBox.set) {
+		working.faceRect.rect.x = (working.classificationBox.boxNormalSize.x + trackingBoxNormalSize.x) / 2.0;
+		working.faceRect.rect.y = (working.classificationBox.boxNormalSize.y + trackingBoxNormalSize.y) / 2.0;
+		working.faceRect.rect.width = (working.classificationBox.boxNormalSize.width + trackingBoxNormalSize.width) / 2.0;
+		working.faceRect.rect.height = (working.classificationBox.boxNormalSize.height + trackingBoxNormalSize.height) / 2.0;
+		working.faceRect.set = true;
+	} else if(working.classificationBox.set) {
+		working.faceRect.rect = working.classificationBox.boxNormalSize;
+		working.faceRect.set = true;
+	} else if(working.trackingBox.set) {
+		working.faceRect.rect = trackingBoxNormalSize;
+		working.faceRect.set = true;
 	} else {
 		if(trackerState == TRACKING) {
 			trackerState = LOST;
@@ -201,20 +227,20 @@ void FaceTracker::assignFaceRect(void) {
 }
 
 void FaceTracker::doIdentifyFeatures(void) {
-	facialFeaturesSet = false;
-	if(!faceRectSet) {
+	working.facialFeatures.set = false;
+	if(!working.faceRect.set) {
 		return;
 	}
 	dlib::rectangle dlibClassificationBox = dlib::rectangle(
-		faceRect.x * classificationScaleFactor,
-		faceRect.y * classificationScaleFactor,
-		(faceRect.width + faceRect.x) * classificationScaleFactor,
-		(faceRect.height + faceRect.y) * classificationScaleFactor);
+		working.faceRect.rect.x * classificationScaleFactor,
+		working.faceRect.rect.y * classificationScaleFactor,
+		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationScaleFactor,
+		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationScaleFactor);
 
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
 
-	facialFeatures.clear();
-	facialFeatures3d.clear();
+	working.facialFeatures.features.clear();
+	working.facialFeatures.features3D.clear();
 	dlib::point part;
 	Point2d partPoint;
 	std::vector<int> featureIndexes = {IDX_NOSE_SELLION, IDX_EYE_RIGHT_OUTER_CORNER, IDX_EYE_LEFT_OUTER_CORNER, IDX_EYE_RIGHT_INNER_CORNER, IDX_EYE_LEFT_INNER_CORNER, IDX_JAW_RIGHT_TOP, IDX_JAW_LEFT_TOP, IDX_NOSE_TIP, IDX_MENTON};
@@ -230,44 +256,44 @@ void FaceTracker::doIdentifyFeatures(void) {
 			default:
 				throw logic_error("bad facial feature index");
 			case IDX_NOSE_SELLION:
-				facialFeatures3d.push_back(VERTEX_NOSE_SELLION);
-				facialFeaturesExposed.noseSellion = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_NOSE_SELLION);
+				working.facialFeatures.featuresExposed.noseSellion = partPoint;
 				break;
 			case IDX_EYE_RIGHT_OUTER_CORNER:
-				facialFeatures3d.push_back(VERTEX_EYE_RIGHT_OUTER_CORNER);
-				facialFeaturesExposed.eyeRightOuterCorner = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_EYE_RIGHT_OUTER_CORNER);
+				working.facialFeatures.featuresExposed.eyeRightOuterCorner = partPoint;
 				break;
 			case IDX_EYE_LEFT_OUTER_CORNER:
-				facialFeatures3d.push_back(VERTEX_EYE_LEFT_OUTER_CORNER);
-				facialFeaturesExposed.eyeLeftOuterCorner = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_EYE_LEFT_OUTER_CORNER);
+				working.facialFeatures.featuresExposed.eyeLeftOuterCorner = partPoint;
 				break;
 			case IDX_EYE_RIGHT_INNER_CORNER:
-				facialFeaturesExposed.eyeRightInnerCorner = partPoint;
+				working.facialFeatures.featuresExposed.eyeRightInnerCorner = partPoint;
 				pushCorrelationPoint = false;
 				break;
 			case IDX_EYE_LEFT_INNER_CORNER:
-				facialFeaturesExposed.eyeLeftInnerCorner = partPoint;
+				working.facialFeatures.featuresExposed.eyeLeftInnerCorner = partPoint;
 				pushCorrelationPoint = false;
 				break;
 			case IDX_JAW_RIGHT_TOP:
-				facialFeatures3d.push_back(VERTEX_RIGHT_EAR);
-				facialFeaturesExposed.jawRightTop = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_RIGHT_EAR);
+				working.facialFeatures.featuresExposed.jawRightTop = partPoint;
 				break;
 			case IDX_JAW_LEFT_TOP:
-				facialFeatures3d.push_back(VERTEX_LEFT_EAR);
-				facialFeaturesExposed.jawLeftTop = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_LEFT_EAR);
+				working.facialFeatures.featuresExposed.jawLeftTop = partPoint;
 				break;
 			case IDX_NOSE_TIP:
-				facialFeatures3d.push_back(VERTEX_NOSE_TIP);
-				facialFeaturesExposed.noseTip = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_NOSE_TIP);
+				working.facialFeatures.featuresExposed.noseTip = partPoint;
 				break;
 			case IDX_MENTON:
-				facialFeatures3d.push_back(VERTEX_MENTON);
-				facialFeaturesExposed.menton = partPoint;
+				working.facialFeatures.features3D.push_back(VERTEX_MENTON);
+				working.facialFeatures.featuresExposed.menton = partPoint;
 				break;
 		}
 		if(pushCorrelationPoint) {
-			facialFeatures.push_back(partPoint);
+			working.facialFeatures.features.push_back(partPoint);
 		}
 	}
 
@@ -285,10 +311,11 @@ void FaceTracker::doIdentifyFeatures(void) {
 		return;
 	}
 	partPoint = (mouthTop + mouthBottom) * 0.5;
-	facialFeatures.push_back(partPoint);
-	facialFeaturesExposed.stommion = partPoint;
-	facialFeatures3d.push_back(VERTEX_STOMMION);
-	facialFeaturesSet = true;
+	working.facialFeatures.features.push_back(partPoint);
+	working.facialFeatures.featuresExposed.stommion = partPoint;
+	working.facialFeatures.features3D.push_back(VERTEX_STOMMION);
+	working.facialFeatures.set = true;
+	working.facialFeatures.featuresExposed.set = true;
 }
 
 void FaceTracker::doInitializeCameraModel(void) {
@@ -302,7 +329,7 @@ void FaceTracker::doInitializeCameraModel(void) {
 }
 
 void FaceTracker::doCalculateFacialTransformation(void) {
-	if(!facialFeaturesSet) {
+	if(!working.facialFeatures.set) {
 		return;
 	}
 	if(!facialCameraModel.set) {
@@ -313,7 +340,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	tempPose.set = false;
 	Mat tempRotationVector;
 
-	solvePnP(facialFeatures3d, facialFeatures, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	solvePnP(working.facialFeatures.features3D, working.facialFeatures.features, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -30.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
@@ -346,18 +373,18 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		i++;
 	}
 
-	facialPose = tempPose;
-	facialPose.set = true;
+	working.facialPose = tempPose;
+	working.facialPose.set = true;
 
-	Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
-	logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(working.facialPose.rotationMatrix);
+	logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
-	facialPose.planePoint = Point3d(facialPose.translationVector.at<double>(0), facialPose.translationVector.at<double>(1), facialPose.translationVector.at<double>(2));
+	working.facialPose.planePoint = Point3d(working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
-	planeNormalMat = facialPose.rotationMatrix * planeNormalMat;
-	facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+	planeNormalMat = working.facialPose.rotationMatrix * planeNormalMat;
+	working.facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
@@ -373,8 +400,9 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 void FaceTracker::renderPreviewHUD(void) {
 	Mat frame = frameDerivatives->getPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
+	YerFace_MutexLock(myMutex);
 	if(density > 0) {
-		if(facialPose.set) {
+		if(complete.facialPose.set) {
 			std::vector<Point3d> gizmo3d(6);
 			std::vector<Point2d> gizmo2d;
 			gizmo3d[0] = Point3d(-50,0.0,0.0);
@@ -385,58 +413,69 @@ void FaceTracker::renderPreviewHUD(void) {
 			gizmo3d[5] = Point3d(0.0,0.0,50);
 			
 			Mat tempRotationVector;
-			Rodrigues(facialPose.rotationMatrix, tempRotationVector);
-			projectPoints(gizmo3d, tempRotationVector, facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
+			Rodrigues(complete.facialPose.rotationMatrix, tempRotationVector);
+			projectPoints(gizmo3d, tempRotationVector, complete.facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
 			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
 			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
 			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
 		}
 	}
 	if(density > 1) {
-		if(faceRectSet) {
-			cv::rectangle(frame, faceRect, Scalar(255, 255, 0), 1);
+		if(working.faceRect.set) {
+			cv::rectangle(frame, complete.faceRect.rect, Scalar(255, 255, 0), 1);
 		}
 	}
 	if(density > 2) {
-		if(classificationBoxSet) {
-			cv::rectangle(frame, classificationBoxNormalSize, Scalar(0, 255, 0), 1);
+		if(working.classificationBox.set) {
+			cv::rectangle(frame, complete.classificationBox.boxNormalSize, Scalar(0, 255, 0), 1);
 		}
-		if(trackingBoxSet) {
-			cv::rectangle(frame, trackingBox, Scalar(255, 0, 0), 1);
+		if(working.trackingBox.set) {
+			cv::rectangle(frame, complete.trackingBox.rect, Scalar(255, 0, 0), 1);
 		}
 	}
 	if(density > 3) {
-		if(facialFeaturesSet) {
-			size_t featuresCount = facialFeatures.size();
-			for(size_t i = 0; i < featuresCount; i++) {
-				Utilities::drawX(frame, facialFeatures[i], Scalar(147, 20, 255));
+		if(complete.facialFeatures.set) {
+			for(auto feature : complete.facialFeatures.features) {
+				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
 			}
 		}
 	}
+	YerFace_MutexUnlock(myMutex);
 }
 
 TrackerState FaceTracker::getTrackerState(void) {
-	return trackerState;
+	YerFace_MutexLock(myMutex);
+	TrackerState val = trackerState;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
-FacialBoundingBox FaceTracker::getFacialBoundingBox(void) {
-	FacialBoundingBox box;
-	box.rect = faceRect;
-	box.set = faceRectSet;
-	return box;
+FacialRect FaceTracker::getFacialBoundingBox(void) {
+	YerFace_MutexLock(myMutex);
+	FacialRect val = working.faceRect;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 FacialFeatures FaceTracker::getFacialFeatures(void) {
-	facialFeaturesExposed.set = facialFeaturesSet;
-	return facialFeaturesExposed;
+	YerFace_MutexLock(myMutex);
+	FacialFeatures val = working.facialFeatures.featuresExposed;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 FacialCameraModel FaceTracker::getFacialCameraModel(void) {
-	return facialCameraModel;
+	YerFace_MutexLock(myMutex);
+	FacialCameraModel val = facialCameraModel;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 FacialPose FaceTracker::getFacialPose(void) {
-	return facialPose;
+	YerFace_MutexLock(myMutex);
+	FacialPose val = working.facialPose;
+	YerFace_MutexUnlock(myMutex);
+	return val;
 }
 
 }; //namespace YerFace

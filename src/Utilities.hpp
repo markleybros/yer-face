@@ -1,11 +1,18 @@
 #pragma once
 
+#include "SDL.h"
+
 #include "opencv2/imgproc.hpp"
+
+#include <exception>
 
 using namespace std;
 using namespace cv;
 
 namespace YerFace {
+
+#define YerFace_MutexLock(X) do { if(SDL_LockMutex(X) != 0) { throw runtime_error("Failed to lock mutex."); } } while(0)
+#define YerFace_MutexUnlock(X) do { if(SDL_UnlockMutex(X) != 0) { throw runtime_error("Failed to unlock mutex."); } } while(0)
 
 class Utilities {
 public:

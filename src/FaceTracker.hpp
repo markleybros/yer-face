@@ -1,7 +1,6 @@
 #pragma once
 
 #include <string>
-#include <map>
 #include "opencv2/objdetect.hpp"
 #include "opencv2/tracking.hpp"
 
@@ -49,7 +48,6 @@ enum DlibFeatureIndexes {
 #define VERTEX_STOMMION Point3d(0.0, 75.0, 10.0)
 #define VERTEX_MENTON Point3d(0.0, 133.0, 0.0)
 
-
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
@@ -58,7 +56,7 @@ public:
 	bool set;
 };
 
-class FacialBoundingBox {
+class FacialRect {
 public:
 	Rect2d rect;
 	bool set;
@@ -70,10 +68,34 @@ public:
 	bool set;
 };
 
+class FacialFeaturesInternal {
+public:
+	std::vector<Point2d> features;
+	std::vector<Point3d> features3D;
+	FacialFeatures featuresExposed;
+	bool set;
+};
+
 class FacialCameraModel {
 public:
 	Mat cameraMatrix, distortionCoefficients;
 	bool set;
+};
+
+class FacialClassificationBox {
+public:
+	Rect2d box;
+	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
+	bool set;
+};
+
+class FaceTrackerWorkingVariables {
+public:
+	FacialClassificationBox classificationBox;
+	FacialRect trackingBox;
+	FacialRect faceRect;
+	FacialFeaturesInternal facialFeatures;
+	FacialPose facialPose;
 };
 
 class FaceTracker {
@@ -81,9 +103,10 @@ public:
 	FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
+	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
-	FacialBoundingBox getFacialBoundingBox(void);
+	FacialRect getFacialBoundingBox(void);
 	FacialFeatures getFacialFeatures(void);
 	FacialCameraModel getFacialCameraModel(void);
 	FacialPose getFacialPose(void);
@@ -111,33 +134,21 @@ private:
 	Metrics *metrics;
 	TrackerState trackerState;
 
-	long unsigned int currentFrame;
-
-	Rect2d classificationBox;
-	Rect2d classificationBoxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	double classificationScaleFactor;
-	bool classificationBoxSet;
 
 	Ptr<Tracker> tracker;
-	Rect2d trackingBox;
-	bool trackingBoxSet;
-
-	Rect2d faceRect;
-	bool faceRectSet;
-
-	std::vector<Point2d> facialFeatures;
-	FacialFeatures facialFeaturesExposed;
-	std::vector<Point3d> facialFeatures3d;
-	bool facialFeaturesSet;
 
 	FacialCameraModel facialCameraModel;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
-	FacialPose facialPose;
 
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
 	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
+
+	FaceTrackerWorkingVariables working, complete;
+
+	SDL_mutex *myMutex;
 };
 
 }; //namespace YerFace

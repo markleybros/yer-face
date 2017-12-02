@@ -15,6 +15,7 @@
 #include "FrameDerivatives.hpp"
 #include "FaceMapper.hpp"
 #include "Metrics.hpp"
+#include "Utilities.hpp"
 
 #include <iostream>
 #include <cstdio>
@@ -43,7 +44,7 @@ Metrics *metrics;
 unsigned long workingFrameNumber = 0, completedFrameNumber = 0;
 Size frameSize;
 bool frameSizeValid = false;
-SDL_mutex *frameMetadataMutex;
+SDL_mutex *frameMetadataMutex, *flipWorkingCompletedMutex;
 
 static int runCaptureLoop(void *ptr);
 void doRenderPreviewFrame(void);
@@ -87,6 +88,9 @@ int main(int argc, const char** argv) {
 	if((frameMetadataMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((flipWorkingCompletedMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
 	//Create worker thread.
 	if((workerThread = SDL_CreateThread(runCaptureLoop, "CaptureLoop", (void *)NULL)) == NULL) {
@@ -96,15 +100,13 @@ int main(int argc, const char** argv) {
 	//Launch event / rendering loop.
 	while(sdlDriver->getIsRunning()) {
 		if(sdlWindowRenderer.window == NULL) {
-			if(SDL_LockMutex(frameMetadataMutex) != 0) {
-				throw runtime_error("Failed locking mutex!");
-			}
+			YerFace_MutexLock(frameMetadataMutex);
 			if(!frameSizeValid) {
-				SDL_UnlockMutex(frameMetadataMutex);
+				YerFace_MutexUnlock(frameMetadataMutex);
 				continue;
 			}
 			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
-			SDL_UnlockMutex(frameMetadataMutex);
+			YerFace_MutexUnlock(frameMetadataMutex);
 		}
 
 		doRenderPreviewFrame();
@@ -119,6 +121,7 @@ int main(int argc, const char** argv) {
 
 	//Cleanup.
 	SDL_DestroyMutex(frameMetadataMutex);
+	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
 	delete metrics;
 	delete faceMapper;
@@ -151,9 +154,7 @@ int runCaptureLoop(void *ptr) {
 				continue;
 			}
 
-			if(SDL_LockMutex(frameMetadataMutex) != 0) {
-				throw runtime_error("Failed locking mutex!");
-			}
+			YerFace_MutexLock(frameMetadataMutex);
 			workingFrameNumber++;
 			if(!frameSizeValid) {
 				frameSize = frame.size();
@@ -161,11 +162,11 @@ int runCaptureLoop(void *ptr) {
 			}
 			if(frame.empty()) {
 				logger->error("Breaking on no frame ready...");
-				SDL_UnlockMutex(frameMetadataMutex);
+				YerFace_MutexUnlock(frameMetadataMutex);
 				sdlDriver->setIsRunning(false);
 				return -1;
 			}
-			SDL_UnlockMutex(frameMetadataMutex);
+			YerFace_MutexUnlock(frameMetadataMutex);
 
 			// Start timer
 			metrics->startClock();
@@ -176,12 +177,16 @@ int runCaptureLoop(void *ptr) {
 
 			metrics->endClock();
 
-			if(SDL_LockMutex(frameMetadataMutex) != 0) {
-				throw runtime_error("Failed locking mutex!");
-			}
+			YerFace_MutexLock(flipWorkingCompletedMutex);
+
+			YerFace_MutexLock(frameMetadataMutex);
 			completedFrameNumber = workingFrameNumber;
-			SDL_UnlockMutex(frameMetadataMutex);
+			YerFace_MutexUnlock(frameMetadataMutex);
+			
 			frameDerivatives->advanceWorkingFrameToCompleted();
+			faceTracker->advanceWorkingToCompleted();
+
+			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 
 			//If requested, write image sequence.
 			if(prev_imgseq.length() > 0) {
@@ -199,13 +204,14 @@ int runCaptureLoop(void *ptr) {
 }
 
 void doRenderPreviewFrame(void) {
-	if(SDL_LockMutex(frameMetadataMutex) != 0) {
-		throw runtime_error("Failed locking mutex!");
-	}
+	YerFace_MutexLock(flipWorkingCompletedMutex);
+
+	YerFace_MutexLock(frameMetadataMutex);
 	unsigned long frameNumber = completedFrameNumber;
-	SDL_UnlockMutex(frameMetadataMutex);
+	YerFace_MutexUnlock(frameMetadataMutex);
 
 	if(frameNumber < 1) {
+		YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		return;
 	}
 
@@ -215,6 +221,8 @@ void doRenderPreviewFrame(void) {
 	faceMapper->renderPreviewHUD();
 
 	Mat previewFrame = frameDerivatives->getPreviewFrame();
+
+	YerFace_MutexUnlock(flipWorkingCompletedMutex);
 
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);

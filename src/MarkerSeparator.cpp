@@ -66,7 +66,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	metrics->startClock();
 	
 	markerList.clear();
-	FacialBoundingBox facialBoundingBox = faceTracker->getFacialBoundingBox();
+	FacialRect facialBoundingBox = faceTracker->getFacialBoundingBox();
 	if(!facialBoundingBox.set) {
 		return;
 	}
