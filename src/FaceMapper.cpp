@@ -70,18 +70,24 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 		throw runtime_error("Failed creating mutex!");
 	}
 
-	workerLeft.trackers = { markerEyelidLeftTop, markerEyelidLeftBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerCheekLeft, markerLipsLeftCorner, markerLipsLeftTop, markerLipsLeftBottom };
-	initializeWorkerThread(&workerLeft, "MarkersLeft");
-	workerRight.trackers = { markerEyelidRightTop, markerEyelidRightBottom, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter, markerCheekRight, markerLipsRightCorner, markerLipsRightTop, markerLipsRightBottom };
-	initializeWorkerThread(&workerRight, "MarkersRight");
+	workerLeftTop.trackers = { markerEyelidLeftTop, markerEyelidLeftBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter };
+	initializeWorkerThread(&workerLeftTop, "MarkersLeftTop");
+	workerLeftBottom.trackers = { markerCheekLeft, markerLipsLeftCorner, markerLipsLeftTop, markerLipsLeftBottom };
+	initializeWorkerThread(&workerLeftBottom, "MarkersLeftBottom");
+	workerRightTop.trackers = { markerEyelidRightTop, markerEyelidRightBottom, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter };
+	initializeWorkerThread(&workerRightTop, "MarkersRightTop");
+	workerRightBottom.trackers = { markerCheekRight, markerLipsRightCorner, markerLipsRightTop, markerLipsRightBottom };
+	initializeWorkerThread(&workerRightBottom, "MarkersRightBottom");
 
 	logger->debug("FaceMapper object constructed and ready to go!");
 }
 
 FaceMapper::~FaceMapper() {
 	logger->debug("FaceMapper object destructing...");
-	destroyWorkerThread(&workerLeft);
-	destroyWorkerThread(&workerRight);
+	destroyWorkerThread(&workerLeftTop);
+	destroyWorkerThread(&workerLeftBottom);
+	destroyWorkerThread(&workerRightTop);
+	destroyWorkerThread(&workerRightBottom);
 	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
 	for(MarkerTracker *markerTracker : markerTrackers) {
 		if(markerTracker != NULL) {
@@ -108,7 +114,7 @@ void FaceMapper::processCurrentFrame(void) {
 
 	markerJaw->processCurrentFrame();
 
-	vector<FaceMapperWorkerThread *> workers = { &workerLeft, &workerRight };
+	vector<FaceMapperWorkerThread *> workers = { &workerLeftTop, &workerLeftBottom, &workerRightTop, &workerRightBottom };
 	for(FaceMapperWorkerThread *worker : workers) {
 		YerFace_MutexLock(worker->mutex);
 		worker->working = true;
@@ -295,15 +301,16 @@ void FaceMapper::destroyWorkerThread(FaceMapperWorkerThread *thread) {
 
 int FaceMapper::workerThreadFunction(void* data) {
 	FaceMapperWorkerThread *thread = (FaceMapperWorkerThread *)data;
+	thread->logger->verbose("%s Thread alive!", thread->name);
 	YerFace_MutexLock(thread->mutex);
 	while(thread->running) {
-		thread->logger->debug("%s Thread going to sleep, waiting for work.", thread->name);
+		// thread->logger->debug("%s Thread going to sleep, waiting for work.", thread->name);
 		if(SDL_CondWait(thread->condition, thread->mutex) < 0) {
 			throw runtime_error("Failed waiting on condition.");
 		}
-		thread->logger->debug("%s Thread is awake now!", thread->name);
+		// thread->logger->debug("%s Thread is awake now!", thread->name);
 		if(thread->working) {
-			thread->logger->debug("%s Thread is getting to work...", thread->name);
+			// thread->logger->debug("%s Thread is getting to work...", thread->name);
 			for(MarkerTracker *tracker : thread->trackers) {
 				tracker->processCurrentFrame();
 			}
@@ -311,7 +318,7 @@ int FaceMapper::workerThreadFunction(void* data) {
 		}
 	}
 	YerFace_MutexUnlock(thread->mutex);
-	thread->logger->debug("%s Thread quitting...", thread->name);
+	thread->logger->verbose("%s Thread quitting...", thread->name);
 	return 0;
 }
 

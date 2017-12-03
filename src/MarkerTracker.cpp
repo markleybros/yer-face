@@ -290,25 +290,23 @@ void MarkerTracker::performDetection(void) {
 			xDirection = 1;
 		}
 
-		MarkerTracker *eyelidTracker;
-		if(xDirection < 0) {
-			eyelidTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyelidRightBottom));
+		EyeRect eyeRect;
+		if(xDirection > 0) {
+			eyeRect = faceMapper->getLeftEyeRect();
 		} else {
-			eyelidTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(EyelidLeftBottom));
+			eyeRect = faceMapper->getRightEyeRect();
 		}
-		if(eyelidTracker == NULL) {
+		if(!eyeRect.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
+		Point2d cheekPoI = Point2d(
+			(eyeRect.rect.x + eyeRect.rect.x + eyeRect.rect.width) / 2.0,
+			eyeRect.rect.y + eyeRect.rect.height
+		);
 
-		MarkerPoint eyelidPoint = eyelidTracker->getMarkerPoint();
-		if(!eyelidPoint.set) {
-			markerSeparator->unlockWorkingMarkerList();
-			return;
-		}
-
-		boundingRect.y = eyelidPoint.point.y;
-		boundingRect.height = facialFeatures.stommion.y - eyelidPoint.point.y;
+		boundingRect.y = cheekPoI.y;
+		boundingRect.height = facialFeatures.stommion.y - cheekPoI.y;
 		if(xDirection < 0) {
 			boundingRect.x = facialFeatures.jawRightTop.x;
 			boundingRect.width = facialFeatures.noseSellion.x - facialFeatures.jawRightTop.x;
@@ -316,7 +314,7 @@ void MarkerTracker::performDetection(void) {
 			boundingRect.x = facialFeatures.noseSellion.x;
 			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
-		generateMarkerCandidateList(&markerCandidateList, eyelidPoint.point, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, cheekPoI, &boundingRect);
 
 		if(markerCandidateList.size() < 1) {
 			markerSeparator->unlockWorkingMarkerList();
@@ -550,7 +548,7 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	markerMat = markerMat - facialPose.translationVector;
 	markerMat = facialPose.rotationMatrix.inv() * markerMat;
 	working.markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
-	logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
+	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {

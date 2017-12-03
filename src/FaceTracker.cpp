@@ -409,8 +409,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	working.facialPose = tempPose;
 	working.facialPose.set = true;
 
-	Vec3d angles = Utilities::rotationMatrixToEulerAngles(working.facialPose.rotationMatrix);
-	logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
+	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(working.facialPose.rotationMatrix);
+	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
 	YerFace_MutexUnlock(myWrkMutex);
 }
 

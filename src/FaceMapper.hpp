@@ -95,7 +95,7 @@ private:
 
 	FaceMapperWorkingVariables working, complete;
 
-	FaceMapperWorkerThread workerLeft, workerRight;
+	FaceMapperWorkerThread workerLeftTop, workerLeftBottom, workerRightTop, workerRightBottom;
 };
 
 }; //namespace YerFace
