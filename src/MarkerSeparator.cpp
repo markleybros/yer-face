@@ -49,6 +49,11 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((myWorkingMarkerListMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	working.markerList.clear();
+	complete.markerList.clear();
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	sdlDriver->onColorPickerEvent([this] (void) -> void {
 		this->logger->info("Got a Color Picker event. Popping up a color picker...");
@@ -61,6 +66,7 @@ MarkerSeparator::~MarkerSeparator() {
 	logger->debug("MarkerSeparator object destructing...");
 	SDL_DestroyMutex(myWrkMutex);
 	SDL_DestroyMutex(myCmpMutex);
+	SDL_DestroyMutex(myWorkingMarkerListMutex);
 	delete metrics;
 	delete logger;
 }
@@ -77,7 +83,6 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 
 	metrics->startClock();
 	
-	working.markerList.clear();
 	FacialRect facialBoundingBox = faceTracker->getFacialBoundingBox();
 	if(!facialBoundingBox.set) {
 		return;
@@ -110,6 +115,8 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	vector<vector<Point>> contours;
 	vector<Vec4i> heirarchy;
 	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+
+	YerFace_MutexLock(myWorkingMarkerListMutex);
 
 	float minTargetMarkerArea = markerBoundaryRect.area() * minTargetMarkerAreaPercentage;
 	float maxTargetMarkerArea = markerBoundaryRect.area() * maxTargetMarkerAreaPercentage;
@@ -180,6 +187,8 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		working.markerList[i].marker.center += Point2f(markerBoundaryRect.tl());
 	}
 
+	YerFace_MutexUnlock(myWorkingMarkerListMutex);
+	
 	metrics->endClock();
 	YerFace_MutexUnlock(myWrkMutex);
 }
@@ -189,7 +198,9 @@ void MarkerSeparator::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myCmpMutex);
 	complete = working;
 	YerFace_MutexUnlock(myCmpMutex);
+	YerFace_MutexLock(myWorkingMarkerListMutex);
 	working.markerList.clear();
+	YerFace_MutexUnlock(myWorkingMarkerListMutex);
 	YerFace_MutexUnlock(myWrkMutex);
 }
 
@@ -207,10 +218,18 @@ void MarkerSeparator::renderPreviewHUD(void) {
 	YerFace_MutexUnlock(myCmpMutex);
 }
 
-vector<MarkerSeparated> *MarkerSeparator::getMarkerList(void) {
+vector<MarkerSeparated> *MarkerSeparator::getWorkingMarkerList(void) {
 	//No mutex needed because the pointer does not change.
 	//Watch out, however! The contents will change suddenly. (FIXME lock working marker list???)
 	return &working.markerList;
+}
+
+void MarkerSeparator::lockWorkingMarkerList(void) {
+	YerFace_MutexLock(myWorkingMarkerListMutex);
+}
+
+void MarkerSeparator::unlockWorkingMarkerList(void) {
+	YerFace_MutexUnlock(myWorkingMarkerListMutex);
 }
 
 void MarkerSeparator::doPickColor(void) {

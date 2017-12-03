@@ -35,7 +35,9 @@ public:
 	void processCurrentFrame(bool debug = false);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
-	vector<MarkerSeparated> *getMarkerList(void);
+	vector<MarkerSeparated> *getWorkingMarkerList(void);
+	void lockWorkingMarkerList(void);
+	void unlockWorkingMarkerList(void);
 private:
 	void doPickColor(void);
 	
@@ -48,7 +50,7 @@ private:
 	double markerBoxInflatePixels;
 
 	Logger *logger;
-	SDL_mutex *myWrkMutex, *myCmpMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex, *myWorkingMarkerListMutex;
 	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;
