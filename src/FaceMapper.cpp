@@ -70,11 +70,18 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 		throw runtime_error("Failed creating mutex!");
 	}
 
+	workerLeft.trackers = { markerEyelidLeftTop, markerEyelidLeftBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter, markerCheekLeft, markerLipsLeftCorner, markerLipsLeftTop, markerLipsLeftBottom };
+	initializeWorkerThread(&workerLeft, "MarkersLeft");
+	workerRight.trackers = { markerEyelidRightTop, markerEyelidRightBottom, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter, markerCheekRight, markerLipsRightCorner, markerLipsRightTop, markerLipsRightBottom };
+	initializeWorkerThread(&workerRight, "MarkersRight");
+
 	logger->debug("FaceMapper object constructed and ready to go!");
 }
 
 FaceMapper::~FaceMapper() {
 	logger->debug("FaceMapper object destructing...");
+	destroyWorkerThread(&workerLeft);
+	destroyWorkerThread(&workerRight);
 	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
 	for(MarkerTracker *markerTracker : markerTrackers) {
 		if(markerTracker != NULL) {
@@ -101,25 +108,24 @@ void FaceMapper::processCurrentFrame(void) {
 
 	markerJaw->processCurrentFrame();
 
-	markerEyelidLeftTop->processCurrentFrame();
-	markerEyelidLeftBottom->processCurrentFrame();
-	markerEyebrowLeftInner->processCurrentFrame();
-	markerEyebrowLeftMiddle->processCurrentFrame();
-	markerEyebrowLeftOuter->processCurrentFrame();
-	markerCheekLeft->processCurrentFrame();
-	markerLipsLeftCorner->processCurrentFrame();
-	markerLipsLeftTop->processCurrentFrame();
-	markerLipsLeftBottom->processCurrentFrame();
-
-	markerEyelidRightTop->processCurrentFrame();
-	markerEyelidRightBottom->processCurrentFrame();
-	markerEyebrowRightInner->processCurrentFrame();
-	markerEyebrowRightMiddle->processCurrentFrame();
-	markerEyebrowRightOuter->processCurrentFrame();
-	markerCheekRight->processCurrentFrame();
-	markerLipsRightCorner->processCurrentFrame();
-	markerLipsRightTop->processCurrentFrame();
-	markerLipsRightBottom->processCurrentFrame();
+	vector<FaceMapperWorkerThread *> workers = { &workerLeft, &workerRight };
+	for(FaceMapperWorkerThread *worker : workers) {
+		YerFace_MutexLock(worker->mutex);
+		worker->working = true;
+		SDL_CondSignal(worker->condition);
+		YerFace_MutexUnlock(worker->mutex);
+	}
+	bool stillWorking;
+	do {
+		stillWorking = false;
+		for(FaceMapperWorkerThread *worker : workers) {
+			YerFace_MutexLock(worker->mutex);
+			if(worker->working) {
+				stillWorking = true;
+			}
+			YerFace_MutexUnlock(worker->mutex);
+		}
+	} while(stillWorking);
 
 	metrics->endClock();
 }
@@ -255,6 +261,58 @@ void FaceMapper::calculateEyeRects(void) {
 	working.rightEye.set = true;
 
 	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void FaceMapper::initializeWorkerThread(FaceMapperWorkerThread *thread, const char *name) {
+	thread->name = name;
+	thread->running = true;
+	thread->working = false;
+	thread->logger = this->logger;
+	
+	if((thread->mutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((thread->condition = SDL_CreateCond()) == NULL) {
+		throw runtime_error("Failed creating condition!");
+	}
+	if((thread->thread = SDL_CreateThread(FaceMapper::workerThreadFunction, name, (void *)thread)) == NULL) {
+		throw runtime_error("Failed starting thread!");
+	}
+}
+
+void FaceMapper::destroyWorkerThread(FaceMapperWorkerThread *thread) {
+	YerFace_MutexLock(thread->mutex);
+	thread->running = false;
+	thread->working = false;
+	SDL_CondSignal(thread->condition);
+	YerFace_MutexUnlock(thread->mutex);
+
+	SDL_WaitThread(thread->thread, NULL);
+
+	SDL_DestroyCond(thread->condition);
+	SDL_DestroyMutex(thread->mutex);
+}
+
+int FaceMapper::workerThreadFunction(void* data) {
+	FaceMapperWorkerThread *thread = (FaceMapperWorkerThread *)data;
+	YerFace_MutexLock(thread->mutex);
+	while(thread->running) {
+		thread->logger->debug("%s Thread going to sleep, waiting for work.", thread->name);
+		if(SDL_CondWait(thread->condition, thread->mutex) < 0) {
+			throw runtime_error("Failed waiting on condition.");
+		}
+		thread->logger->debug("%s Thread is awake now!", thread->name);
+		if(thread->working) {
+			thread->logger->debug("%s Thread is getting to work...", thread->name);
+			for(MarkerTracker *tracker : thread->trackers) {
+				tracker->processCurrentFrame();
+			}
+			thread->working = false;
+		}
+	}
+	YerFace_MutexUnlock(thread->mutex);
+	thread->logger->debug("%s Thread quitting...", thread->name);
+	return 0;
 }
 
 }; //namespace YerFace

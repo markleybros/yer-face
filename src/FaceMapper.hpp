@@ -27,6 +27,17 @@ public:
 	EyeRect leftEye, rightEye;
 };
 
+class FaceMapperWorkerThread {
+public:
+	bool running, working;
+	const char *name;
+	SDL_Thread *thread;
+	SDL_mutex *mutex;
+	SDL_cond *condition;
+	Logger *logger;
+	std::vector<MarkerTracker *> trackers;
+};
+
 class FaceMapper {
 public:
 	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
@@ -42,6 +53,9 @@ public:
 	EyeRect getRightEyeRect(void);
 private:
 	void calculateEyeRects(void);
+	void initializeWorkerThread(FaceMapperWorkerThread *thread, const char *name);
+	void destroyWorkerThread(FaceMapperWorkerThread *thread);
+	static int workerThreadFunction(void* data);
 	
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
@@ -80,6 +94,8 @@ private:
 	MarkerTracker *markerLipsRightBottom;
 
 	FaceMapperWorkingVariables working, complete;
+
+	FaceMapperWorkerThread workerLeft, workerRight;
 };
 
 }; //namespace YerFace
