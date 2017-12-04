@@ -5,6 +5,7 @@
 #ifdef HAVE_CUDA
 #include "GPUUtils.hpp"
 #include "opencv2/cudaimgproc.hpp"
+#include "opencv2/cudafilters.hpp"
 #endif
 
 #include "opencv2/highgui.hpp"
@@ -64,6 +65,13 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 		this->logger->info("Got a Color Picker event. Popping up a color picker...");
 		this->doPickColor();
 	});
+
+	structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
+	#ifdef HAVE_CUDA
+		openFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, structuringElement);
+		closeFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, structuringElement);
+	#endif
+
 	logger->debug("MarkerSeparator object constructed and ready to go!");
 }
 
@@ -108,9 +116,9 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 
 	Mat searchFrameThreshold, debugFrame;
-
+	
 	#ifdef HAVE_CUDA
-		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU, searchFrameThresholdGPU;
+		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU, searchFrameThresholdGPU, tempImageGPU;
 
 		searchFrameBGRGPU.upload(searchFrameBGR);
 
@@ -119,16 +127,18 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		searchFrameThresholdGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
 		inRangeGPU(searchFrameHSVGPU, HSVRangeMin, HSVRangeMax, searchFrameThresholdGPU);
 
+		tempImageGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
+		openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
+		closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
+
 		searchFrameThresholdGPU.download(searchFrameThreshold);
 	#else
 		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
 		inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
+		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
+		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 	#endif
 
-
-	Mat structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
-	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
-	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
 	if(debug) {
 		cvtColor(searchFrameThreshold, debugFrame, COLOR_GRAY2BGR);

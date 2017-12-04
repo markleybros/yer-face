@@ -32,15 +32,17 @@ add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
 include_directories("src")
 
+set( _OPENCV_REQUIRED_MODULES core tracking calib3d )
+
 if(USE_CUDA)
+	list(APPEND _OPENCV_REQUIRED_MODULES cudaimgproc cudafilters )
 	add_definitions(-DHAVE_CUDA)
-	find_package( OpenCV REQUIRED core tracking calib3d cudaimgproc )
 	add_library( yer-face-cuda STATIC src/GPUUtils.cu )
 else()
-	find_package( OpenCV REQUIRED core tracking calib3d )
 	unset(CUDA_FOUND)
 endif()
 
+find_package( OpenCV REQUIRED ${_OPENCV_REQUIRED_MODULES} )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 
@@ -54,9 +56,8 @@ target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRA
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 
-if( CUDA_FOUND )
+if( USE_CUDA )
 	target_link_libraries( yer-face yer-face-cuda )
-	set_target_properties( yer-face PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 endif()
 
 #Adapted from http://qrikko.blogspot.com/2016/05/cmake-and-how-to-copy-resources-during.html

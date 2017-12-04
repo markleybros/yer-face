@@ -3,6 +3,10 @@
 #include "opencv2/objdetect.hpp"
 #include "opencv2/imgproc.hpp"
 
+#ifdef HAVE_CUDA
+#include "opencv2/cudafilters.hpp"
+#endif
+
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "FrameDerivatives.hpp"
@@ -56,6 +60,11 @@ private:
 	Scalar HSVRangeMax;
 	Mat searchFrameBGR;
 	Mat searchFrameHSV;
+
+	Mat structuringElement;
+	#ifdef HAVE_CUDA
+	Ptr<cuda::Filter> openFilter, closeFilter;
+	#endif
 	
 	MarkerSeparatorWorkingVariables working, complete;
 };
