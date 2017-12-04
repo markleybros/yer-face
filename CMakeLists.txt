@@ -39,13 +39,19 @@ if (CMAKE_VERSION VERSION_LESS 2.8.11)
                         "${gmock_SOURCE_DIR}/include")
 endif()
 
-find_package( OpenCV REQUIRED core tracking calib3d )
+find_package( OpenCV REQUIRED core tracking calib3d OPTIONAL_COMPONENTS cudaimgproc )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 
 string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES)
 
-include_directories("src" ${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
+include_directories("src" ${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+
+INCLUDE (CheckIncludeFileCXX)
+
+set(CMAKE_REQUIRED_INCLUDES ${OpenCV_INCLUDE_DIRS})
+CHECK_INCLUDE_FILE_CXX("opencv2/cudaimgproc.hpp" HAVE_OPENCV_CUDA)
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/src/yerface-config.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/yerface-config.hpp)
 
 add_executable(yer-face src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
 target_link_libraries(yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES})
