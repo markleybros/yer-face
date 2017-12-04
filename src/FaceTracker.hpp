@@ -5,6 +5,7 @@
 #include "opencv2/tracking.hpp"
 
 #include "dlib/opencv.h"
+#include "dlib/dnn.h"
 #include "dlib/image_processing/frontal_face_detector.h"
 #include "dlib/image_processing/render_face_detections.h"
 #include "dlib/image_processing.h"
@@ -98,9 +99,18 @@ public:
 	FacialPose facialPose;
 };
 
+
+template <long num_filters, typename SUBNET> using con5d = dlib::con<num_filters,5,5,2,2,SUBNET>;
+template <long num_filters, typename SUBNET> using con5  = dlib::con<num_filters,5,5,1,1,SUBNET>;
+
+template <typename SUBNET> using downsampler  = dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<16,SUBNET>>>>>>>>>;
+template <typename SUBNET> using rcon5  = dlib::relu<dlib::affine<con5<45,SUBNET>>>;
+
+using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<dlib::input_rgb_image_pyramid<dlib::pyramid_down<6>>>>>>>>;
+
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
+	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -122,7 +132,7 @@ private:
 	void doCalculateFacialPlane(void);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
 
-	string modelFileName;
+	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	bool performOpticalTracking;
@@ -137,6 +147,8 @@ private:
 
 	double classificationScaleFactor;
 
+	bool usingDNNFaceDetection;
+
 	Ptr<Tracker> tracker;
 
 	FacialCameraModel facialCameraModel;
@@ -145,6 +157,7 @@ private:
 
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
+	FaceDetectionModel faceDetectionModel;
 	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
 
 	FaceTrackerWorkingVariables working, complete;

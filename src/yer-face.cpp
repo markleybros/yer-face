@@ -25,9 +25,10 @@ using namespace std;
 using namespace cv;
 using namespace YerFace;
 
-String capture_file;
-String dlib_shape_predictor;
-String prev_imgseq;
+String captureFile;
+String dlibFaceLandmarks;
+String dlibFaceDetector;
+String previewImgSeq;
 String window_name = "Performance Capture Tests";
 
 SDLWindowRenderer sdlWindowRenderer;
@@ -56,9 +57,10 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{dlib_shape_predictor|data/dlib-shape-predictor/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
-		"{capture_file|/dev/video0|Video file or video capture device file to open.}"
-		"{prev_imgseq||If set, is presumed to be the file name prefix of the output preview image sequence.}");
+		"{dlibFaceLandmarks|data/dlib-models/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
+		"{dlibFaceDetector|data/dlib-models/mmod_human_face_detector.dat|Model for dlib's DNN facial landmark detector or empty string (\"\") to default to the older HOG detector.}"
+		"{captureFile|/dev/video0|Video file or video capture device file to open.}"
+		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -70,14 +72,15 @@ int main(int argc, const char** argv) {
 		parser.printErrors();
 		return 1;
 	}
-	capture_file = parser.get<string>("capture_file");
-	dlib_shape_predictor = parser.get<string>("dlib_shape_predictor");
-	prev_imgseq = parser.get<string>("prev_imgseq");
+	captureFile = parser.get<string>("captureFile");
+	previewImgSeq = parser.get<string>("previewImgSeq");
+	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
+	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
-	faceTracker = new FaceTracker(dlib_shape_predictor, sdlDriver, frameDerivatives, false);
+	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", true);
 
@@ -138,7 +141,7 @@ int runCaptureLoop(void *ptr) {
 	Mat frame;
 
 	//Open the video stream.
-	capture.open(capture_file);
+	capture.open(captureFile);
 	if(!capture.isOpened()) {
 		logger->error("Failed opening video stream");
 		sdlDriver->setIsRunning(false);
@@ -190,10 +193,10 @@ int runCaptureLoop(void *ptr) {
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 
 			//If requested, write image sequence.
-			if(prev_imgseq.length() > 0) {
-				int filenameLength = prev_imgseq.length() + 32;
+			if(previewImgSeq.length() > 0) {
+				int filenameLength = previewImgSeq.length() + 32;
 				char filename[filenameLength];
-				snprintf(filename, filenameLength, "%s-%06lu.png", prev_imgseq.c_str(), completedFrameNumber);
+				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), completedFrameNumber);
 				logger->debug("YerFace writing preview frame to %s ...", filename);
 				imwrite(filename, frameDerivatives->getPreviewFrame());
 			}

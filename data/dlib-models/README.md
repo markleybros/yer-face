@@ -1,5 +1,5 @@
-dlib-shape-predictor
-====================
+dlib-models
+===========
 
 These files contain models which are used by _YerFace_ to detect faces and eyes in the frame.
 

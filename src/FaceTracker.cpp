@@ -15,8 +15,9 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
-	modelFileName = myModelFileName;
+FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
+	featureDetectionModelFileName = myFeatureDetectionModelFileName;
+	faceDetectionModelFileName = myFaceDetectionModelFileName;
 	trackerState = DETECTING;
 	working.classificationBox.set = false;
 	working.trackingBox.set = false;
@@ -67,9 +68,15 @@ FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDe
 		throw runtime_error("Failed creating mutex!");
 	}
 
-	frontalFaceDetector = get_frontal_face_detector();
-	deserialize(modelFileName.c_str()) >> shapePredictor;
-	logger->debug("FaceTracker object constructed and ready to go!");
+	deserialize(featureDetectionModelFileName.c_str()) >> shapePredictor;
+	if(faceDetectionModelFileName.length() > 0) {
+		usingDNNFaceDetection = true;
+		deserialize(faceDetectionModelFileName.c_str()) >> faceDetectionModel;
+	} else {
+		usingDNNFaceDetection = false;
+		frontalFaceDetector = get_frontal_face_detector();
+	}
+	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s", usingDNNFaceDetection ? "DNN" : "HOG");
 }
 
 FaceTracker::~FaceTracker() {
@@ -192,27 +199,40 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 void FaceTracker::doClassifyFace(void) {
 	YerFace_MutexLock(myWrkMutex);
 	working.classificationBox.set = false;
-	//Using dlib's built-in HOG face detector instead of a CNN-based detector because it trades off accuracy for speed.
-	std::vector<dlib::rectangle> faces = frontalFaceDetector(dlibClassificationFrame);
+	std::vector<dlib::rectangle> faces;
+
+	if(usingDNNFaceDetection) {
+		//Using dlib's CNN-based face detector which can (optimistically) be pushed out to the GPU
+		dlib::matrix<dlib::rgb_pixel> imageMatrix;
+		dlib::assign_image(imageMatrix, dlibClassificationFrame);
+		std::vector<dlib::mmod_rect> detections = faceDetectionModel(imageMatrix);
+		for(dlib::mmod_rect detection : detections) {
+			faces.push_back(detection.rect);
+		}
+	} else {
+		//Using dlib's built-in HOG face detector instead of a CNN-based detector
+		faces = frontalFaceDetector(dlibClassificationFrame);
+	}
 
 	int bestFace = -1;
 	int bestFaceArea = -1;
 	Rect2d tempBox, tempBoxNormalSize, bestFaceBox, bestFaceBoxNormalSize;
-	size_t facesCount = faces.size();
-	for(size_t i = 0; i < facesCount; i++) {
-		tempBox.x = faces[i].left();
-		tempBox.y = faces[i].top();
-		tempBox.width = faces[i].right() - tempBox.x;
-		tempBox.height = faces[i].bottom() - tempBox.y;
+	int i = -1;
+	for(dlib::rectangle face : faces) {
+		i++;
+		tempBox.x = face.left();
+		tempBox.y = face.top();
+		tempBox.width = face.right() - tempBox.x;
+		tempBox.height = face.bottom() - tempBox.y;
 		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationScaleFactor);
 		if(working.trackingBox.set) {
 			if((tempBoxNormalSize & working.trackingBox.rect).area() <= 0) {
 				continue;
 			}
 		}
-		if((int)faces[i].area() > bestFaceArea) {
+		if((int)face.area() > bestFaceArea) {
 			bestFace = i;
-			bestFaceArea = faces[i].area();
+			bestFaceArea = face.area();
 			bestFaceBox = tempBox;
 			bestFaceBoxNormalSize = tempBoxNormalSize;
 		}
