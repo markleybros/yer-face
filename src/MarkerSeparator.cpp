@@ -1,10 +1,9 @@
 
-#include "yerface-config.hpp"
-
 #include "MarkerSeparator.hpp"
 #include "Utilities.hpp"
 
-#ifdef HAVE_OPENCV_CUDA
+#ifdef HAVE_CUDA
+#include "GPUUtils.hpp"
 #include "opencv2/cudaimgproc.hpp"
 #endif
 
@@ -95,37 +94,42 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 	Rect2d markerBoundaryRect;
 	Rect2d searchBox = Rect(Utilities::insetBox(facialBoundingBox.rect, faceSizePercentage));
+	Size searchFrameSize;
 	try {
 		Mat frame = frameDerivatives->getWorkingFrame();
 		Size frameSize = frame.size();
 		Rect2d imageRect = Rect(0, 0, frameSize.width, frameSize.height);
 		markerBoundaryRect = Rect(searchBox & imageRect);
 		searchFrameBGR = frame(markerBoundaryRect);
+		searchFrameSize = searchFrameBGR.size();
 	} catch(exception &e) {
 		logger->warn("Failed search box cropping. Got exception: %s", e.what());
 		return;
 	}
 
-	#ifdef HAVE_OPENCV_CUDA
-		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU;
+	Mat searchFrameThreshold, debugFrame;
+
+	#ifdef HAVE_CUDA
+		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU, searchFrameThresholdGPU;
 
 		searchFrameBGRGPU.upload(searchFrameBGR);
 
 		cv::cuda::cvtColor(searchFrameBGRGPU, searchFrameHSVGPU, COLOR_BGR2HSV);
 
-		searchFrameHSVGPU.download(searchFrameHSV);
+		searchFrameThresholdGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
+		inRangeGPU(searchFrameHSVGPU, HSVRangeMin, HSVRangeMax, searchFrameThresholdGPU);
+
+		searchFrameThresholdGPU.download(searchFrameThreshold);
 	#else
 		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
+		inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
 	#endif
 
-	Mat searchFrameThreshold;
-	inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
 
 	Mat structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
-	Mat debugFrame;
 	if(debug) {
 		cvtColor(searchFrameThreshold, debugFrame, COLOR_GRAY2BGR);
 	}
@@ -251,7 +255,7 @@ void MarkerSeparator::unlockWorkingMarkerList(void) {
 }
 
 void MarkerSeparator::doPickColor(void) {
-	Rect2d rect = selectROI(searchFrameBGR);
+	Rect2d rect = selectROI(searchFrameBGR); //FIXME -- this is probably broken now
 	logger->verbose("doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>", rect.x, rect.y, rect.width, rect.height);
 	double hue = 0.0, minHue = -1, maxHue = -1;
 	double saturation = 0.0, minSaturation = -1, maxSaturation = -1;
@@ -260,7 +264,7 @@ void MarkerSeparator::doPickColor(void) {
 	for(int x = rect.x; x < rect.x + rect.width; x++) {
 		for(int y = rect.y; y < rect.y + rect.height; y++) {
 			samples++;
-			Vec3b intensity = searchFrameHSV.at<Vec3b>(y, x);
+			Vec3b intensity = searchFrameHSV.at<Vec3b>(y, x); //FIXME -- this is broken now :)
 			logger->verbose("doPickColor: <%d, %d> HSV: <%d, %d, %d>", x, y, intensity[0], intensity[1], intensity[2]);
 			hue += (double)intensity[0];
 			if(minHue < 0.0 || intensity[0] < minHue) {

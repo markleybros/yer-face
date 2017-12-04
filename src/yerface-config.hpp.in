@@ -1,4 +1,0 @@
-
-#pragma once
-
-#cmakedefine HAVE_OPENCV_CUDA
