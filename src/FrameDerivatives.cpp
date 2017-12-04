@@ -102,9 +102,11 @@ void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 	workingFrameSet = false;
 	if(workingPreviewFrameSet) {
 		completedPreviewFrameSource = workingPreviewFrame;
-		completedPreviewFrameSet = false;
-		workingPreviewFrameSet = false;
+	} else {
+		completedPreviewFrameSource = completedFrame;
 	}
+	completedPreviewFrameSet = false;
+	workingPreviewFrameSet = false;
 	YerFace_MutexUnlock(myMutex);
 }
 
