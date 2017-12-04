@@ -1,6 +1,12 @@
 
+#include "yerface-config.hpp"
+
 #include "MarkerSeparator.hpp"
 #include "Utilities.hpp"
+
+#ifdef HAVE_OPENCV_CUDA
+#include "opencv2/cudaimgproc.hpp"
+#endif
 
 #include "opencv2/highgui.hpp"
 
@@ -99,9 +105,21 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		logger->warn("Failed search box cropping. Got exception: %s", e.what());
 		return;
 	}
-	cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
+
+	#ifdef HAVE_OPENCV_CUDA
+		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU;
+
+		searchFrameBGRGPU.upload(searchFrameBGR);
+
+		cv::cuda::cvtColor(searchFrameBGRGPU, searchFrameHSVGPU, COLOR_BGR2HSV);
+
+		searchFrameHSVGPU.download(searchFrameHSV);
+	#else
+		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
+	#endif
+
 	Mat searchFrameThreshold;
-    inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
+	inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
 
 	Mat structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
 	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
