@@ -237,9 +237,9 @@ void MarkerSeparator::advanceWorkingToCompleted(void) {
 }
 
 void MarkerSeparator::renderPreviewHUD(void) {
-	Mat frame = frameDerivatives->getPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
 	YerFace_MutexLock(myCmpMutex);
+	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 2) {
 		for(auto marker : complete.markerList) {
 			if(marker.active) {

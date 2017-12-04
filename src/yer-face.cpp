@@ -112,7 +112,10 @@ int main(int argc, const char** argv) {
 			YerFace_MutexUnlock(frameMetadataMutex);
 		}
 
-		doRenderPreviewFrame();
+		if(frameDerivatives->getCompletedFrameSet()) {
+			doRenderPreviewFrame();
+			sdlDriver->doRenderPreviewFrame();
+		}
 
 		sdlDriver->doHandleEvents();
 
@@ -190,16 +193,18 @@ int runCaptureLoop(void *ptr) {
 			faceTracker->advanceWorkingToCompleted();
 			faceMapper->advanceWorkingToCompleted();
 
-			YerFace_MutexUnlock(flipWorkingCompletedMutex);
-
 			//If requested, write image sequence.
 			if(previewImgSeq.length() > 0) {
+				doRenderPreviewFrame();
+
 				int filenameLength = previewImgSeq.length() + 32;
 				char filename[filenameLength];
 				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), completedFrameNumber);
 				logger->debug("YerFace writing preview frame to %s ...", filename);
-				imwrite(filename, frameDerivatives->getPreviewFrame());
+				imwrite(filename, frameDerivatives->getCompletedPreviewFrame());
 			}
+
+			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
 	}
 	capture.release();
@@ -219,17 +224,15 @@ void doRenderPreviewFrame(void) {
 		return;
 	}
 
-	frameDerivatives->resetPreviewFrame();
+	frameDerivatives->resetCompletedPreviewFrame();
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
 
-	Mat previewFrame = frameDerivatives->getPreviewFrame();
-
-	YerFace_MutexUnlock(flipWorkingCompletedMutex);
+	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
-	sdlDriver->doRenderPreviewFrame();
+	YerFace_MutexUnlock(flipWorkingCompletedMutex);
 }

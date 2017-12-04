@@ -20,7 +20,11 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	if(myClassificationScaleFactor < 0.0 || myClassificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
+	workingFrameSet = false;
 	completedFrameSet = false;
+	workingPreviewFrameSet = false;
+	completedPreviewFrameSet = false;
+	workingFrameSizeSet = false;
 	classificationScaleFactor = myClassificationScaleFactor;
 	metrics = new Metrics("FrameDerivatives");
 	logger->debug("FrameDerivatives constructed and ready to go!");
@@ -57,13 +61,19 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, unsigned long newFrameNumbe
 		reportedScale = true;
 	}
 
-	previewFrameCloned = false;
+	workingFrameSet = true;
+	workingPreviewFrameSet = false;
+
 	metrics->endClock();
 	YerFace_MutexUnlock(myMutex);
 }
 
 Mat FrameDerivatives::getWorkingFrame(void) {
 	YerFace_MutexLock(myMutex);
+	if(!workingFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getWorkingFrame() called, but no working frame set");
+	}
 	Mat value = workingFrame;
 	YerFace_MutexUnlock(myMutex);
 	return value;
@@ -71,6 +81,10 @@ Mat FrameDerivatives::getWorkingFrame(void) {
 
 unsigned long FrameDerivatives::getWorkingFrameNumber(void) {
 	YerFace_MutexLock(myMutex);
+	if(!workingFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getWorkingFrameNumber() called, but no working frame set");
+	}
 	unsigned long value = workingFrameNumber;
 	YerFace_MutexUnlock(myMutex);
 	return value;
@@ -78,37 +92,66 @@ unsigned long FrameDerivatives::getWorkingFrameNumber(void) {
 
 void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 	YerFace_MutexLock(myMutex);
-	completedFrame = workingFrame.clone();
+	if(!workingFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("advanceWorkingFrameToCompleted() called, but no working frame set");
+	}
+	completedFrame = workingFrame;
 	completedFrameNumber = workingFrameNumber;
 	completedFrameSet = true;
+	workingFrameSet = false;
+	if(workingPreviewFrameSet) {
+		completedPreviewFrameSource = workingPreviewFrame;
+		completedPreviewFrameSet = false;
+		workingPreviewFrameSet = false;
+	}
 	YerFace_MutexUnlock(myMutex);
 }
 
 Mat FrameDerivatives::getClassificationFrame(void) {
 	YerFace_MutexLock(myMutex);
+	if(!workingFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getClassificationFrame() called, but no working frame set");
+	}
 	Mat value = classificationFrame;
 	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
-Mat FrameDerivatives::getPreviewFrame(void) {
+Mat FrameDerivatives::getWorkingPreviewFrame(void) {
 	YerFace_MutexLock(myMutex);
-	if(!completedFrameSet) {
+	if(!workingFrameSet) {
 		YerFace_MutexUnlock(myMutex);
-		throw runtime_error("Preview frame was requested, but no working frame has been advanced to completed frame yet.");
+		throw runtime_error("getWorkingPreviewFrame() called, but no working frame set");
 	}
-	if(!previewFrameCloned) {
-		previewFrame = completedFrame.clone();
-		previewFrameCloned = true;
+	if(!workingPreviewFrameSet) {
+		workingPreviewFrame = workingFrame.clone();
+		workingPreviewFrameSet = true;
 	}
-	Mat value = previewFrame;
+	Mat value = workingPreviewFrame;
 	YerFace_MutexUnlock(myMutex);
 	return value;
 }
 
-void FrameDerivatives::resetPreviewFrame(void) {
+Mat FrameDerivatives::getCompletedPreviewFrame(void) {
 	YerFace_MutexLock(myMutex);
-	previewFrameCloned = false;
+	if(!completedFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getCompletedPreviewFrame() called, but no completed frame set");
+	}
+	if(!completedPreviewFrameSet) {
+		completedPreviewFrame = completedPreviewFrameSource.clone();
+		completedPreviewFrameSet = true;
+	}
+	Mat value = completedPreviewFrame;
+	YerFace_MutexUnlock(myMutex);
+	return value;
+}
+
+void FrameDerivatives::resetCompletedPreviewFrame(void) {
+	YerFace_MutexLock(myMutex);
+	completedPreviewFrameSet = false;
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -121,9 +164,25 @@ double FrameDerivatives::getClassificationScaleFactor(void) {
 
 Size FrameDerivatives::getWorkingFrameSize(void) {
 	YerFace_MutexLock(myMutex);
-	Size size = workingFrame.size();
+	if(!workingFrameSizeSet) {
+		if(!workingFrameSet) {
+			YerFace_MutexUnlock(myMutex);
+			throw runtime_error("getWorkingFrameSize() called, but no working frame set and no cached size");
+		}
+		workingFrameSize = workingFrame.size();
+		workingFrameSizeSet = true;
+	}
+	Size size = workingFrameSize;
 	YerFace_MutexUnlock(myMutex);
 	return size;
 }
+
+bool FrameDerivatives::getCompletedFrameSet(void) {
+	YerFace_MutexLock(myMutex);
+	bool status = completedFrameSet;
+	YerFace_MutexUnlock(myMutex);
+	return status;
+}
+
 
 }; //namespace YerFace

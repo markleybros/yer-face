@@ -431,9 +431,9 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 }
 
 void FaceTracker::renderPreviewHUD(void) {
-	Mat frame = frameDerivatives->getPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
 	YerFace_MutexLock(myCmpMutex);
+	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
 		if(complete.facialPose.set) {
 			std::vector<Point3d> gizmo3d(6);

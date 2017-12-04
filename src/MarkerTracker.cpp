@@ -560,7 +560,7 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called with NULL markerCandidateList");
 	}
 	if(debug) {
-		Mat prevFrame = frameDerivatives->getPreviewFrame();
+		Mat prevFrame = frameDerivatives->getWorkingPreviewFrame();
 		Utilities::drawX(prevFrame, pointOfInterest, Scalar(255, 0, 255), 10, 2);
 		if(boundingRect != NULL) {
 			rectangle(prevFrame, *boundingRect, Scalar(255, 0, 255), 2);
@@ -619,7 +619,7 @@ void MarkerTracker::renderPreviewHUD(void) {
 			color[1] = 127;
 		}
 	}
-	Mat frame = frameDerivatives->getPreviewFrame();
+	Mat frame = frameDerivatives->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
 		Utilities::drawX(frame, complete.markerPoint.point, color, 10, 2);

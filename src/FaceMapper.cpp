@@ -156,7 +156,8 @@ void FaceMapper::advanceWorkingToCompleted(void) {
 }
 
 void FaceMapper::renderPreviewHUD() {
-	Mat frame = frameDerivatives->getPreviewFrame();
+	YerFace_MutexLock(myCmpMutex);
+	Mat frame = frameDerivatives->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	vector<MarkerTracker *> markerTrackers = MarkerTracker::getMarkerTrackers();
 	for(MarkerTracker *markerTracker : markerTrackers) {
@@ -192,7 +193,6 @@ void FaceMapper::renderPreviewHUD() {
 			Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
 		}
 	}
-	YerFace_MutexLock(myCmpMutex);
 	if(density > 3) {
 		if(complete.leftEye.set) {
 			rectangle(frame, complete.leftEye.rect, Scalar(0, 0, 255));

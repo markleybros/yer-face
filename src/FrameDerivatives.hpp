@@ -21,10 +21,12 @@ public:
 	unsigned long getWorkingFrameNumber(void);
 	void advanceWorkingFrameToCompleted(void);
 	Mat getClassificationFrame(void);
-	Mat getPreviewFrame(void);
-	void resetPreviewFrame(void);
+	Mat getWorkingPreviewFrame(void);
+	Mat getCompletedPreviewFrame(void);
+	void resetCompletedPreviewFrame(void);
 	double getClassificationScaleFactor(void);
 	Size getWorkingFrameSize(void);
+	bool getCompletedFrameSet(void);
 
 private:
 	unsigned long workingFrameNumber, completedFrameNumber;
@@ -34,10 +36,12 @@ private:
 	SDL_mutex *myMutex;
 	Metrics *metrics;
 	Mat workingFrame, completedFrame; //BGR format, at the native resolution of the input.
-	bool completedFrameSet;
+	bool workingFrameSet, completedFrameSet;
 	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.
-	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
-	bool previewFrameCloned;
+	Mat workingPreviewFrame, completedPreviewFrameSource, completedPreviewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
+	bool workingPreviewFrameSet, completedPreviewFrameSet;
+	Size workingFrameSize;
+	bool workingFrameSizeSet;
 };
 
 }; //namespace YerFace

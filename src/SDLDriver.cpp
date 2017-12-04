@@ -113,7 +113,7 @@ void SDLDriver::doRenderPreviewFrame(void) {
 	}
 
 	SDL_Texture *texture = getPreviewTexture();
-	Mat previewFrame = frameDerivatives->getPreviewFrame();
+	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 	Size previewFrameSize = previewFrame.size();
 
 	int textureWidth, textureHeight;
