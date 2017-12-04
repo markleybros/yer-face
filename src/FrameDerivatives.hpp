@@ -16,9 +16,8 @@ class FrameDerivatives {
 public:
 	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);
 	~FrameDerivatives();
-	void setWorkingFrame(Mat newFrame, unsigned long newFrameNumber); //Expected to be in BGR format, at the native resolution of the input.
+	void setWorkingFrame(Mat newFrame); //Expected to be in BGR format, at the native resolution of the input.
 	Mat getWorkingFrame(void);
-	unsigned long getWorkingFrameNumber(void);
 	void advanceWorkingFrameToCompleted(void);
 	Mat getClassificationFrame(void);
 	Mat getWorkingPreviewFrame(void);
@@ -29,7 +28,6 @@ public:
 	bool getCompletedFrameSet(void);
 
 private:
-	unsigned long workingFrameNumber, completedFrameNumber;
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;

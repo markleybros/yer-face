@@ -41,11 +41,14 @@ FaceTracker *faceTracker;
 FaceMapper *faceMapper;
 Metrics *metrics;
 
-//VARIABLES PROTECTED BY frameMetadataMutex
-unsigned long workingFrameNumber = 0, completedFrameNumber = 0;
+unsigned long workingFrameNumber = 0;
+SDL_mutex *flipWorkingCompletedMutex;
+
+//VARIABLES PROTECTED BY frameSizeMutex
 Size frameSize;
 bool frameSizeValid = false;
-SDL_mutex *frameMetadataMutex, *flipWorkingCompletedMutex;
+SDL_mutex *frameSizeMutex;
+//END VARIABLES PROTECTED BY frameSizeMutex
 
 static int runCaptureLoop(void *ptr);
 void doRenderPreviewFrame(void);
@@ -88,7 +91,7 @@ int main(int argc, const char** argv) {
 	sdlWindowRenderer.renderer = NULL;
 
 	//Create locks.
-	if((frameMetadataMutex = SDL_CreateMutex()) == NULL) {
+	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((flipWorkingCompletedMutex = SDL_CreateMutex()) == NULL) {
@@ -102,14 +105,16 @@ int main(int argc, const char** argv) {
 
 	//Launch event / rendering loop.
 	while(sdlDriver->getIsRunning()) {
+		SDL_Delay(10);
+
 		if(sdlWindowRenderer.window == NULL) {
-			YerFace_MutexLock(frameMetadataMutex);
+			YerFace_MutexLock(frameSizeMutex);
 			if(!frameSizeValid) {
-				YerFace_MutexUnlock(frameMetadataMutex);
+				YerFace_MutexUnlock(frameSizeMutex);
 				continue;
 			}
 			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
-			YerFace_MutexUnlock(frameMetadataMutex);
+			YerFace_MutexUnlock(frameSizeMutex);
 		}
 
 		if(frameDerivatives->getCompletedFrameSet()) {
@@ -118,15 +123,13 @@ int main(int argc, const char** argv) {
 		}
 
 		sdlDriver->doHandleEvents();
-
-		SDL_Delay(10);
 	}
 
 	//Join worker thread.
 	SDL_WaitThread(workerThread, NULL);
 
 	//Cleanup.
-	SDL_DestroyMutex(frameMetadataMutex);
+	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
 	delete metrics;
@@ -151,6 +154,7 @@ int runCaptureLoop(void *ptr) {
 		return -1;
 	}
 
+	bool didSetFrameSizeValid = false;
 	while(sdlDriver->getIsRunning()) {
 		if(!sdlDriver->getIsPaused()) {
 
@@ -159,25 +163,28 @@ int runCaptureLoop(void *ptr) {
 				sdlDriver->setIsRunning(false);
 				continue;
 			}
-
-			YerFace_MutexLock(frameMetadataMutex);
 			workingFrameNumber++;
-			if(!frameSizeValid) {
-				frameSize = frame.size();
-				frameSizeValid = true;
-			}
+
 			if(frame.empty()) {
 				logger->error("Breaking on no frame ready...");
-				YerFace_MutexUnlock(frameMetadataMutex);
+				YerFace_MutexUnlock(frameSizeMutex);
 				sdlDriver->setIsRunning(false);
 				return -1;
 			}
-			YerFace_MutexUnlock(frameMetadataMutex);
+			if(!didSetFrameSizeValid) {
+				YerFace_MutexLock(frameSizeMutex);
+				if(!frameSizeValid) {
+					frameSize = frame.size();
+					frameSizeValid = true;
+					didSetFrameSizeValid = true;
+				}
+				YerFace_MutexUnlock(frameSizeMutex);
+			}
 
 			// Start timer
 			metrics->startClock();
 
-			frameDerivatives->setWorkingFrame(frame, workingFrameNumber);
+			frameDerivatives->setWorkingFrame(frame);
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
@@ -185,10 +192,6 @@ int runCaptureLoop(void *ptr) {
 
 			YerFace_MutexLock(flipWorkingCompletedMutex);
 
-			YerFace_MutexLock(frameMetadataMutex);
-			completedFrameNumber = workingFrameNumber;
-			YerFace_MutexUnlock(frameMetadataMutex);
-			
 			frameDerivatives->advanceWorkingFrameToCompleted();
 			faceTracker->advanceWorkingToCompleted();
 			faceMapper->advanceWorkingToCompleted();
@@ -199,7 +202,7 @@ int runCaptureLoop(void *ptr) {
 
 				int filenameLength = previewImgSeq.length() + 32;
 				char filename[filenameLength];
-				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), completedFrameNumber);
+				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), workingFrameNumber);
 				logger->debug("YerFace writing preview frame to %s ...", filename);
 				imwrite(filename, frameDerivatives->getCompletedPreviewFrame());
 			}
@@ -214,15 +217,6 @@ int runCaptureLoop(void *ptr) {
 
 void doRenderPreviewFrame(void) {
 	YerFace_MutexLock(flipWorkingCompletedMutex);
-
-	YerFace_MutexLock(frameMetadataMutex);
-	unsigned long frameNumber = completedFrameNumber;
-	YerFace_MutexUnlock(frameMetadataMutex);
-
-	if(frameNumber < 1) {
-		YerFace_MutexUnlock(flipWorkingCompletedMutex);
-		return;
-	}
 
 	frameDerivatives->resetCompletedPreviewFrame();
 

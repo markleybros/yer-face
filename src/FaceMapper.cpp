@@ -72,13 +72,13 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 	}
 
 	workerLeftTop.trackers = { markerEyelidLeftTop, markerEyelidLeftBottom, markerEyebrowLeftInner, markerEyebrowLeftMiddle, markerEyebrowLeftOuter };
-	initializeWorkerThread(&workerLeftTop, "MarkersLeftTop");
+	initializeWorkerThread(&workerLeftTop, "MarkersLT");
 	workerLeftBottom.trackers = { markerCheekLeft, markerLipsLeftCorner, markerLipsLeftTop, markerLipsLeftBottom };
-	initializeWorkerThread(&workerLeftBottom, "MarkersLeftBottom");
+	initializeWorkerThread(&workerLeftBottom, "MarkersLB");
 	workerRightTop.trackers = { markerEyelidRightTop, markerEyelidRightBottom, markerEyebrowRightInner, markerEyebrowRightMiddle, markerEyebrowRightOuter };
-	initializeWorkerThread(&workerRightTop, "MarkersRightTop");
+	initializeWorkerThread(&workerRightTop, "MarkersRT");
 	workerRightBottom.trackers = { markerCheekRight, markerLipsRightCorner, markerLipsRightTop, markerLipsRightBottom };
-	initializeWorkerThread(&workerRightBottom, "MarkersRightBottom");
+	initializeWorkerThread(&workerRightBottom, "MarkersRB");
 
 	logger->debug("FaceMapper object constructed and ready to go!");
 }

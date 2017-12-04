@@ -37,11 +37,10 @@ FrameDerivatives::~FrameDerivatives() {
 	delete logger;
 }
 
-void FrameDerivatives::setWorkingFrame(Mat newFrame, unsigned long newFrameNumber) {
+void FrameDerivatives::setWorkingFrame(Mat newFrame) {
 	YerFace_MutexLock(myMutex);
 	metrics->startClock();
 	workingFrame = newFrame;
-	workingFrameNumber = newFrameNumber;
 
 	Size frameSize = workingFrame.size();
 
@@ -79,17 +78,6 @@ Mat FrameDerivatives::getWorkingFrame(void) {
 	return value;
 }
 
-unsigned long FrameDerivatives::getWorkingFrameNumber(void) {
-	YerFace_MutexLock(myMutex);
-	if(!workingFrameSet) {
-		YerFace_MutexUnlock(myMutex);
-		throw runtime_error("getWorkingFrameNumber() called, but no working frame set");
-	}
-	unsigned long value = workingFrameNumber;
-	YerFace_MutexUnlock(myMutex);
-	return value;
-}
-
 void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 	YerFace_MutexLock(myMutex);
 	if(!workingFrameSet) {
@@ -97,7 +85,6 @@ void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 		throw runtime_error("advanceWorkingFrameToCompleted() called, but no working frame set");
 	}
 	completedFrame = workingFrame;
-	completedFrameNumber = workingFrameNumber;
 	completedFrameSet = true;
 	workingFrameSet = false;
 	if(workingPreviewFrameSet) {
