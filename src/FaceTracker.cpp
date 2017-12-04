@@ -94,9 +94,9 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	metrics->startClock();
 
 	YerFace_MutexLock(myWrkMutex);
+
 	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	dlibClassificationFrame = cv_image<bgr_pixel>(frameDerivatives->getClassificationFrame());
-	YerFace_MutexUnlock(myWrkMutex);
 
 	if(performOpticalTracking) {
 		performTracking();
@@ -105,13 +105,11 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 	doClassifyFace();
 
 	if(performOpticalTracking) {
-		YerFace_MutexLock(myWrkMutex);
 		if(working.classificationBox.set) {
 			if(!working.trackingBox.set || trackerDriftingExcessively()) {
 				performInitializationOfTracker();
 			}
 		}
-		YerFace_MutexUnlock(myWrkMutex);
 	}
 
 	assignFaceRect();
@@ -122,11 +120,11 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doCalculateFacialPlane();
 
-	metrics->endClock();
-
-	YerFace_MutexLock(myWrkMutex);
 	TrackerState status = trackerState;
+
 	YerFace_MutexUnlock(myWrkMutex);
+
+	metrics->endClock();
 
 	return status;
 }
@@ -146,7 +144,6 @@ void FaceTracker::advanceWorkingToCompleted(void) {
 }
 
 void FaceTracker::performInitializationOfTracker(void) {
-	YerFace_MutexLock(myWrkMutex);
 	if(!working.classificationBox.set) {
 		throw invalid_argument("FaceTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
@@ -160,28 +157,22 @@ void FaceTracker::performInitializationOfTracker(void) {
 	working.trackingBox.set = true;
 
 	tracker->init(frameDerivatives->getWorkingFrame(), working.trackingBox.rect);
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 bool FaceTracker::performTracking(void) {
-	YerFace_MutexLock(myWrkMutex);
 	if(trackerState == TRACKING) {
 		bool trackSuccess = tracker->update(frameDerivatives->getWorkingFrame(), working.trackingBox.rect);
 		if(!trackSuccess) {
 			working.trackingBox.set = false;
-			YerFace_MutexUnlock(myWrkMutex);
 			return false;
 		}
 		working.trackingBox.set = true;
-		YerFace_MutexUnlock(myWrkMutex);
 		return true;
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 	return false;
 }
 
 bool FaceTracker::trackerDriftingExcessively(void) {
-	YerFace_MutexLock(myWrkMutex);
 	if(!working.classificationBox.set || !working.trackingBox.set) {
 		throw invalid_argument("FaceTracker::trackerDriftingExcessively() called while one or both of working.classificationBox.set or working.trackingBox.set are false");
 	}
@@ -189,15 +180,12 @@ bool FaceTracker::trackerDriftingExcessively(void) {
 	double maxDistance = std::sqrt(working.classificationBox.boxNormalSize.area()) * maxTrackerDriftPercentage;
 	if(actualDistance > maxDistance) {
 		logger->warn("Optical tracker drifting excessively! Resetting it.");
-		YerFace_MutexUnlock(myWrkMutex);
 		return true;
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 	return false;
 }
 
 void FaceTracker::doClassifyFace(void) {
-	YerFace_MutexLock(myWrkMutex);
 	working.classificationBox.set = false;
 	std::vector<dlib::rectangle> faces;
 
@@ -243,11 +231,9 @@ void FaceTracker::doClassifyFace(void) {
 		working.classificationBox.boxNormalSize = bestFaceBoxNormalSize;
 		working.classificationBox.set = true;
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void FaceTracker::assignFaceRect(void) {
-	YerFace_MutexLock(myWrkMutex);
 	working.faceRect.set = false;
 	Rect2d trackingBoxNormalSize;
 	if(working.trackingBox.set) {
@@ -271,14 +257,11 @@ void FaceTracker::assignFaceRect(void) {
 			logger->warn("Lost face completely! Will keep searching...");
 		}
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void FaceTracker::doIdentifyFeatures(void) {
-	YerFace_MutexLock(myWrkMutex);
 	working.facialFeatures.set = false;
 	if(!working.faceRect.set) {
-		YerFace_MutexUnlock(myWrkMutex);
 		return;
 	}
 	dlib::rectangle dlibClassificationBox = dlib::rectangle(
@@ -298,7 +281,6 @@ void FaceTracker::doIdentifyFeatures(void) {
 		part = result.part(featureIndex);
 		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint)) {
 			trackerState = LOST;
-			YerFace_MutexUnlock(myWrkMutex);
 			return;
 		}
 
@@ -353,14 +335,12 @@ void FaceTracker::doIdentifyFeatures(void) {
 	Point2d mouthTop;
 	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop)) {
 		trackerState = LOST;
-		YerFace_MutexUnlock(myWrkMutex);
 		return;
 	}
 	part = result.part(IDX_MOUTH_CENTER_INNER_BOTTOM);
 	Point2d mouthBottom;
 	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom)) {
 		trackerState = LOST;
-		YerFace_MutexUnlock(myWrkMutex);
 		return;
 	}
 	partPoint = (mouthTop + mouthBottom) * 0.5;
@@ -369,11 +349,9 @@ void FaceTracker::doIdentifyFeatures(void) {
 	working.facialFeatures.features3D.push_back(VERTEX_STOMMION);
 	working.facialFeatures.set = true;
 	working.facialFeatures.featuresExposed.set = true;
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void FaceTracker::doInitializeCameraModel(void) {
-	YerFace_MutexLock(myWrkMutex);
 	//Totally fake, idealized camera.
 	Size frameSize = frameDerivatives->getWorkingFrameSize();
 	double focalLength = frameSize.width;
@@ -381,13 +359,10 @@ void FaceTracker::doInitializeCameraModel(void) {
 	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
 	facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
 	facialCameraModel.set = true;
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void FaceTracker::doCalculateFacialTransformation(void) {
-	YerFace_MutexLock(myWrkMutex);
 	if(!working.facialFeatures.set) {
-		YerFace_MutexUnlock(myWrkMutex);
 		return;
 	}
 	if(!facialCameraModel.set) {
@@ -436,7 +411,6 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(working.facialPose.rotationMatrix);
 	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
