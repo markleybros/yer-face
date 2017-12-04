@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.8 FATAL_ERROR)
-project (yer-face LANGUAGES CXX CUDA)
+project (yer-face LANGUAGES CXX)
 set(EXECUTABLE_OUTPUT_PATH "bin")
 
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
@@ -35,6 +35,7 @@ include_directories("src")
 set( _OPENCV_REQUIRED_MODULES core tracking calib3d )
 
 if(USE_CUDA)
+	enable_language(CUDA)
 	list(APPEND _OPENCV_REQUIRED_MODULES cudaimgproc cudafilters )
 	add_definitions(-DHAVE_CUDA)
 	add_library( yer-face-cuda STATIC src/GPUUtils.cu )
