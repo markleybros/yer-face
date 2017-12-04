@@ -39,14 +39,16 @@ if (CMAKE_VERSION VERSION_LESS 2.8.11)
                         "${gmock_SOURCE_DIR}/include")
 endif()
 
-find_package( OpenCV REQUIRED )
+find_package( OpenCV REQUIRED core tracking calib3d )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 
-include_directories("src" ${SDL2_INCLUDE_DIRS})
+string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES)
+
+include_directories("src" ${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
 
 add_executable(yer-face src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
-target_link_libraries(yer-face ${OpenCV_LIBS} ${dlib_LIBS} ${SDL2_LIBRARIES})
+target_link_libraries(yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES})
 
 #Adapted from http://qrikko.blogspot.com/2016/05/cmake-and-how-to-copy-resources-during.html
 set (source "${CMAKE_SOURCE_DIR}/data")
