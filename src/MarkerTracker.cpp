@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -31,6 +31,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	if(faceMapper == NULL) {
 		throw invalid_argument("faceMapper cannot be NULL");
 	}
+	performOpticalTracking = myPerformOpticalTracking;
 	trackingBoxPercentage = myTrackingBoxPercentage;
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
@@ -88,19 +89,22 @@ MarkerType MarkerTracker::getMarkerType(void) {
 TrackerState MarkerTracker::processCurrentFrame(void) {
 	YerFace_MutexLock(myWrkMutex);
 
-	performTracking();
-
 	working.markerDetectedSet = false;
-	
-	performTrackToSeparatedCorrelation();
+
+	if(performOpticalTracking) {
+		performTracking();
+		performTrackToSeparatedCorrelation();
+	}
 
 	if(!working.markerDetectedSet) {
 		performDetection();
 	}
 
-	if(working.markerDetectedSet) {
-		if(!working.trackingBoxSet || trackerDriftingExcessively()) {
-			performInitializationOfTracker();
+	if(performOpticalTracking) {
+		if(working.markerDetectedSet) {
+			if(!working.trackingBoxSet || trackerDriftingExcessively()) {
+				performInitializationOfTracker();
+			}
 		}
 	}
 	

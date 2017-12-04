@@ -100,7 +100,7 @@ public:
 
 class FaceTracker {
 public:
-	FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
+	FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -125,6 +125,7 @@ private:
 	string modelFileName;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
+	bool performOpticalTracking;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 	int poseSmoothingBufferSize;

@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
+FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
 	modelFileName = myModelFileName;
 	trackerState = DETECTING;
 	working.classificationBox.set = false;
@@ -39,6 +39,7 @@ FaceTracker::FaceTracker(string myModelFileName, SDLDriver *mySDLDriver, FrameDe
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
+	performOpticalTracking = myPerformOpticalTracking;
 	trackingBoxPercentage = myTrackingBoxPercentage;
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
@@ -83,24 +84,28 @@ FaceTracker::~FaceTracker() {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 TrackerState FaceTracker::processCurrentFrame(void) {
+	metrics->startClock();
 
 	YerFace_MutexLock(myWrkMutex);
-	metrics->startClock();
 	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
 	dlibClassificationFrame = cv_image<bgr_pixel>(frameDerivatives->getClassificationFrame());
 	YerFace_MutexUnlock(myWrkMutex);
 
-	performTracking();
+	if(performOpticalTracking) {
+		performTracking();
+	}
 
 	doClassifyFace();
 
-	YerFace_MutexLock(myWrkMutex);
-	if(working.classificationBox.set) {
-		if(!working.trackingBox.set || trackerDriftingExcessively()) {
-			performInitializationOfTracker();
+	if(performOpticalTracking) {
+		YerFace_MutexLock(myWrkMutex);
+		if(working.classificationBox.set) {
+			if(!working.trackingBox.set || trackerDriftingExcessively()) {
+				performInitializationOfTracker();
+			}
 		}
+		YerFace_MutexUnlock(myWrkMutex);
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 
 	assignFaceRect();
 

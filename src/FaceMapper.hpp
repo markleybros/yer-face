@@ -40,7 +40,7 @@ public:
 
 class FaceMapper {
 public:
-	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
+	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, bool myPerformOpticalTracking = true);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -60,6 +60,7 @@ private:
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
+	bool performOpticalTracking;
 
 	Logger *logger;
 	SDL_mutex *myWrkMutex, *myCmpMutex;

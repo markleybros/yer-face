@@ -77,8 +77,8 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
-	faceTracker = new FaceTracker(dlib_shape_predictor, sdlDriver, frameDerivatives);
-	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker);
+	faceTracker = new FaceTracker(dlib_shape_predictor, sdlDriver, frameDerivatives, false);
+	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", true);
 
 	sdlWindowRenderer.window = NULL;

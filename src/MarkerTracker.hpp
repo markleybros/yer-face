@@ -49,7 +49,7 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -77,6 +77,7 @@ private:
 
 	MarkerType markerType;
 	FaceMapper *faceMapper;
+	bool performOpticalTracking;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 
