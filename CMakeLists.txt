@@ -43,7 +43,7 @@ else()
 	unset(CUDA_FOUND)
 endif()
 
-find_package( OpenCV REQUIRED ${_OPENCV_REQUIRED_MODULES} )
+find_package( OpenCV 3.3 REQUIRED ${_OPENCV_REQUIRED_MODULES} )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 

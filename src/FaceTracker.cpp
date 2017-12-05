@@ -148,11 +148,7 @@ void FaceTracker::performInitializationOfTracker(void) {
 		throw invalid_argument("FaceTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
 	trackerState = TRACKING;
-	#if (CV_MINOR_VERSION < 3)
-	tracker = Tracker::create("KCF");
-	#else
 	tracker = TrackerKCF::create();
-	#endif
 	working.trackingBox.rect = Rect(Utilities::insetBox(working.classificationBox.boxNormalSize, trackingBoxPercentage));
 	working.trackingBox.set = true;
 

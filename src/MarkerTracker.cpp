@@ -432,11 +432,7 @@ void MarkerTracker::performInitializationOfTracker(void) {
 		throw invalid_argument("MarkerTracker::performInitializationOfTracker() called while markerDetectedSet is false");
 	}
 	trackerState = TRACKING;
-	#if (CV_MINOR_VERSION < 3)
-	tracker = Tracker::create("KCF");
-	#else
 	tracker = TrackerKCF::create();
-	#endif
 	working.trackingBox = Rect(Utilities::insetBox(working.markerDetected.marker.boundingRect2f(), trackingBoxPercentage));
 	working.trackingBoxSet = true;
 
