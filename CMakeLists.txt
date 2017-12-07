@@ -1,5 +1,8 @@
 cmake_minimum_required (VERSION 3.8 FATAL_ERROR)
 project (yer-face LANGUAGES CXX)
+
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
+
 set(EXECUTABLE_OUTPUT_PATH "bin")
 
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
@@ -11,7 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 option(USE_CUDA "Use CUDA, default to true" 1)
 
-set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
+set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
 
 include(CTest)
 
@@ -46,14 +49,15 @@ endif()
 find_package( OpenCV 3.3 REQUIRED ${_OPENCV_REQUIRED_MODULES} )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
+find_package( FFmpeg REQUIRED )
 
 string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES)
 
-include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
 add_executable( yer-face ${YERFACE_MODULES} )
 
-target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES})
+target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVUTIL} )
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 

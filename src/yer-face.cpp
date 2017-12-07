@@ -11,6 +11,7 @@
 
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
+#include "FFmpegDriver.hpp"
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceMapper.hpp"
@@ -36,6 +37,7 @@ SDL_Thread *workerThread;
 
 Logger *logger;
 SDLDriver *sdlDriver;
+FFmpegDriver *ffmpegDriver;
 FrameDerivatives *frameDerivatives;
 FaceTracker *faceTracker;
 FaceMapper *faceMapper;
@@ -83,6 +85,7 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile);
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", true);
@@ -136,6 +139,7 @@ int main(int argc, const char** argv) {
 	delete faceMapper;
 	delete faceTracker;
 	delete frameDerivatives;
+	delete ffmpegDriver;
 	delete sdlDriver;
 	delete logger;
 	return 0;

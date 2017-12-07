@@ -68,6 +68,7 @@ SDLDriver::~SDLDriver() {
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	SDL_DestroyMutex(previewDebugDensityMutex);
 	SDL_DestroyMutex(onColorPickerCallbacksMutex);
+	delete logger;
 }
 
 SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height) {
