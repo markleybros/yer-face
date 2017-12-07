@@ -20,7 +20,14 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw invalid_argument("inputFilename must be a valid input filename");
 	}
 
+	formatContext = NULL;
+	videoDecoderContext = NULL;
+
+	av_log_set_level(AV_LOG_INFO);
+	av_log_set_callback(av_log_default_callback);
 	av_register_all();
+
+	logger->info("Opening media file %s...", inputFilename.c_str());
 
 	if(avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL) < 0) {
 		throw runtime_error("inputFilename could not be opened");
@@ -41,7 +48,9 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed allocating memory for decoded frame");
 	}
 
-	logger->debug("FFmpegDriver object constructed and ready to go! <'%s' %dx%d %s>", inputFilename.c_str(), width, height, av_get_pix_fmt_name(pixelFormat));
+	av_dump_format(formatContext, 0, inputFilename.c_str(), 0);
+
+	logger->debug("FFmpegDriver object constructed and ready to go!");
 }
 
 FFmpegDriver::~FFmpegDriver() {
