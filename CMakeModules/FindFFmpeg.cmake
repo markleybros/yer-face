@@ -8,8 +8,10 @@
 # FFMPEG_LIBAVDEVICE
 # FFMPEG_LIBAVFILTER
 # FFMPEG_LIBAVFORMAT
-# FFMPEG_LIBAVRESAMPLE
 # FFMPEG_LIBAVUTIL
+# FFMPEG_LIBPOSTPROC
+# FFMPEG_LIBSWRESAMPLE
+# FFMPEG_LIBSWSCALE
 #
 # Copyright (c) 2008 Andreas Schneider <mail@cynapses.org>
 # Modified for other libraries by Lasse Kärkkäinen <tronic>
@@ -32,8 +34,10 @@ else (FFMPEG_LIBRARIES AND FFMPEG_INCLUDE_DIR)
 		pkg_check_modules(_FFMPEG_AVDEVICE libavdevice)
 		pkg_check_modules(_FFMPEG_AVFILTER libavfilter)
 		pkg_check_modules(_FFMPEG_AVFORMAT libavformat)
-		pkg_check_modules(_FFMPEG_AVRESAMPLE libavresample)
 		pkg_check_modules(_FFMPEG_AVUTIL libavutil)
+		pkg_check_modules(_FFMPEG_POSTPROC libpostproc)
+		pkg_check_modules(_FFMPEG_SWRESAMPLE libswresample)
+		pkg_check_modules(_FFMPEG_SWSCALE libswscale)
 	endif (PKG_CONFIG_FOUND)
 
 	find_path(FFMPEG_AVCODEC_INCLUDE_DIR
@@ -62,14 +66,24 @@ else (FFMPEG_LIBRARIES AND FFMPEG_INCLUDE_DIR)
 		PATHS ${_FFMPEG_AVFORMAT_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
 	)
 
-	find_library(FFMPEG_LIBAVRESAMPLE
-		NAMES avresample
-		PATHS ${_FFMPEG_AVRESAMPLE_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
-	)
-
 	find_library(FFMPEG_LIBAVUTIL
 		NAMES avutil
 		PATHS ${_FFMPEG_AVUTIL_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
+	)
+
+	find_library(FFMPEG_LIBPOSTPROC
+		NAMES postproc
+		PATHS ${_FFMPEG_POSTPROC_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
+	)
+
+	find_library(FFMPEG_LIBSWRESAMPLE
+		NAMES swresample
+		PATHS ${_FFMPEG_SWRESAMPLE_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
+	)
+
+	find_library(FFMPEG_LIBSWSCALE
+		NAMES swscale
+		PATHS ${_FFMPEG_SWSCALE_LIBRARY_DIRS} /usr/lib /usr/local/lib /opt/local/lib /sw/lib
 	)
 
 	if (FFMPEG_LIBAVCODEC AND FFMPEG_LIBAVFORMAT)
@@ -84,8 +98,10 @@ else (FFMPEG_LIBRARIES AND FFMPEG_INCLUDE_DIR)
 			${FFMPEG_LIBAVDEVICE}
 			${FFMPEG_LIBAVFILTER}
 			${FFMPEG_LIBAVFORMAT}
-			${FFMPEG_LIBAVRESAMPLE}
 			${FFMPEG_LIBAVUTIL}
+			${FFMPEG_LIBPOSTPROC}
+			${FFMPEG_LIBSWRESAMPLE}
+			${FFMPEG_LIBSWSCALE}
 		)
 
 	endif (FFMPEG_FOUND)
