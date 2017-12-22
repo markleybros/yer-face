@@ -305,13 +305,13 @@ int FaceMapper::workerThreadFunction(void* data) {
 	thread->logger->verbose("%s Thread alive!", thread->name);
 	YerFace_MutexLock(thread->mutex);
 	while(thread->running) {
-		// thread->logger->debug("%s Thread going to sleep, waiting for work.", thread->name);
+		// thread->logger->verbose("%s Thread going to sleep, waiting for work.", thread->name);
 		if(SDL_CondWait(thread->condition, thread->mutex) < 0) {
 			throw runtime_error("Failed waiting on condition.");
 		}
-		// thread->logger->debug("%s Thread is awake now!", thread->name);
+		// thread->logger->verbose("%s Thread is awake now!", thread->name);
 		if(thread->working) {
-			// thread->logger->debug("%s Thread is getting to work...", thread->name);
+			// thread->logger->verbose("%s Thread is getting to work...", thread->name);
 			for(MarkerTracker *tracker : thread->trackers) {
 				tracker->processCurrentFrame();
 			}
