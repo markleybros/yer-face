@@ -26,7 +26,6 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	videoDecoderContext = NULL;
 	videoStream = NULL;
 	frame = NULL;
-	frameBGR = NULL;
 	swsContext = NULL;
 
 	av_log_set_level(AV_LOG_INFO);
@@ -56,11 +55,13 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 
 	av_dump_format(formatContext, 0, inputFilename.c_str(), 0);
 
+	pixelFormatBacking = AV_PIX_FMT_BGR24;
+	if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
+		throw runtime_error("failed creating software scaling context");
+	}
+
 	if(!(frame = av_frame_alloc())) {
 		throw runtime_error("failed allocating frame");
-	}
-	if(!(frameBGR = av_frame_alloc())) {
-		throw runtime_error("failed allocating frameBGR");
 	}
 
 	initializeDemuxerThread();
@@ -74,8 +75,12 @@ FFmpegDriver::~FFmpegDriver() {
 	avcodec_free_context(&videoDecoderContext);
 	avformat_close_input(&formatContext);
 	av_free(videoDestData[0]);
-	av_free(frame);
-	av_free(frameBGR);
+	av_frame_free(&frame);
+	for(VideoFrameBacking *backing : allocatedFrameBackings) {
+		av_frame_free(&backing->frameBGR);
+		av_free(backing->buffer);
+		delete backing;
+	}
 	delete logger;
 }
 
@@ -113,7 +118,63 @@ void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderCo
 }
 
 bool FFmpegDriver::getIsFrameBufferEmpty(void) {
-	return false;
+	YerFace_MutexLock(demuxerMutex);
+	bool status = (readyVideoFrameBuffer.size() < 1);
+	YerFace_MutexUnlock(demuxerMutex);
+	return status;
+}
+
+VideoFrame FFmpegDriver::getNextVideoFrame(void) {
+	YerFace_MutexLock(demuxerMutex);
+	VideoFrame result;
+	if(readyVideoFrameBuffer.size() > 0) {
+		result = readyVideoFrameBuffer.back();
+		readyVideoFrameBuffer.pop_back();
+	} else {
+		YerFace_MutexUnlock(demuxerMutex);
+		throw runtime_error("getNextVideoFrame() was called, but no video frames are pending");
+	}
+	YerFace_MutexUnlock(demuxerMutex);
+	return result;
+}
+
+void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
+	YerFace_MutexLock(demuxerMutex);
+	videoFrame.frameBacking->inUse = false;
+	YerFace_MutexUnlock(demuxerMutex);
+}
+
+VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
+	for(VideoFrameBacking *backing : allocatedFrameBackings) {
+		if(!backing->inUse) {
+			backing->inUse = true;
+			return backing;
+		}
+	}
+	logger->warn("Out of spare frames in the frame buffer! Allocating a new one."); //FIXME - should preallocate some number of these at startup
+	VideoFrameBacking *newBacking = allocateNewFrameBacking();
+	newBacking->inUse = true;
+	return newBacking;
+}
+
+VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
+	VideoFrameBacking *backing = new VideoFrameBacking();
+	backing->inUse = false;
+	if(!(backing->frameBGR = av_frame_alloc())) {
+		throw runtime_error("failed allocating backing frame");
+	}
+	int bufferSize = av_image_get_buffer_size(pixelFormatBacking, width, height, 1);
+	if((backing->buffer = (uint8_t *)av_malloc(bufferSize*sizeof(uint8_t))) == NULL) {
+		throw runtime_error("failed allocating buffer for backing frame");
+	}
+	if(av_image_fill_arrays(backing->frameBGR->data, backing->frameBGR->linesize, backing->buffer, pixelFormatBacking, width, height, 1) < 0) {
+		throw runtime_error("failed assigning buffer for backing frame");
+	}
+	backing->frameBGR->width = width;
+	backing->frameBGR->height = height;
+	backing->frameBGR->format = pixelFormat;
+	allocatedFrameBackings.push_front(backing);
+	return backing;
 }
 
 bool FFmpegDriver::decodePacket(const AVPacket *packet) {
@@ -130,16 +191,12 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
 				return false;
 			}
-			if((swsContext = sws_getCachedContext(swsContext, width, height, pixelFormat, width, height, AV_PIX_FMT_BGR24, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
-				logger->error("SWS Context failed!");
-				return false;
-			}
-			
-			// logger->verbose("dumping ffmpeg video frame into new opencv mat with wxh %dx%d and linesize %d", width, height, ((AVPicture *)frameBGR)->linesize);
-			// Mat frameCV = Mat(height, width, CV_8UC3);
-			// //sws_scale(swsContext, ((AVPicture*)frame)->data, ((AVPicture*)frame)->linesize, 0, height, ((AVPicture *)frameBGR)->data, ((AVPicture *)frameBGR)->linesize);
-			// const uint8_t *dst = frameCV.data;
-			// sws_scale(swsContext, ((AVPicture*)frame)->data, ((AVPicture*)frame)->linesize, 0, height, dst, ((AVPicture *)frameBGR)->linesize);
+
+			VideoFrame videoFrame;
+			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
+			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
+			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
+			readyVideoFrameBuffer.push_front(videoFrame);
 		}
         av_frame_unref(frame);
 	}
@@ -184,7 +241,6 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
 		while(driver->demuxerStillReading && driver->getIsFrameBufferEmpty()) {
-			driver->logger->verbose("Demuxer thread attempting to read an A/V packet out of the container!");
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
 				driver->logger->verbose("Demuxer thread encountered end of stream!");
 				driver->demuxerStillReading = false;

@@ -146,39 +146,33 @@ int main(int argc, const char** argv) {
 }
 
 int runCaptureLoop(void *ptr) {
-	//A couple of OpenCV classes.
-	VideoCapture capture;
-	Mat frame;
-
-	//Open the video stream.
-	capture.open(captureFile);
-	if(!capture.isOpened()) {
-		logger->error("Failed opening video stream");
-		sdlDriver->setIsRunning(false);
-		return -1;
-	}
+	VideoFrame videoFrame;
+	bool videoFrameWasSet = false;
 
 	bool didSetFrameSizeValid = false;
 	while(sdlDriver->getIsRunning()) {
 		if(!sdlDriver->getIsPaused()) {
-
-			if(!capture.read(frame)) {
-				logger->info("Capture is finished?");
-				sdlDriver->setIsRunning(false);
-				continue;
+			if(videoFrameWasSet) {
+				ffmpegDriver->releaseVideoFrame(videoFrame);
 			}
+
+			while(ffmpegDriver->getIsFrameBufferEmpty()) {
+				SDL_Delay(50);
+			}
+
+			videoFrame = ffmpegDriver->getNextVideoFrame();
 			workingFrameNumber++;
 
-			if(frame.empty()) {
-				logger->error("Breaking on no frame ready...");
-				YerFace_MutexUnlock(frameSizeMutex);
-				sdlDriver->setIsRunning(false);
-				return -1;
-			}
+			// if(videoFrame.frameCV.empty()) {
+			// 	logger->error("Breaking on no frame ready...");
+			// 	YerFace_MutexUnlock(frameSizeMutex);
+			// 	sdlDriver->setIsRunning(false);
+			// 	return -1;
+			// }
 			if(!didSetFrameSizeValid) {
 				YerFace_MutexLock(frameSizeMutex);
 				if(!frameSizeValid) {
-					frameSize = frame.size();
+					frameSize = videoFrame.frameCV.size();
 					frameSizeValid = true;
 					didSetFrameSizeValid = true;
 				}
@@ -188,7 +182,7 @@ int runCaptureLoop(void *ptr) {
 			// Start timer
 			metrics->startClock();
 
-			frameDerivatives->setWorkingFrame(frame);
+			frameDerivatives->setWorkingFrame(videoFrame.frameCV);
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
@@ -214,7 +208,6 @@ int runCaptureLoop(void *ptr) {
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
 	}
-	capture.release();
 
 	return 0;
 }
