@@ -14,6 +14,8 @@ extern "C" {
 
 namespace YerFace {
 
+#define YERFACE_INITIAL_BACKING_FRAMES 4
+
 class VideoFrameBacking {
 public:
 	AVFrame *frameBGR;
@@ -67,6 +69,7 @@ private:
 	int videoDestLineSize[4];
 	int videoDestBufSize;
 
+	SDL_mutex *videoFrameBufferMutex;
 	list<VideoFrame> readyVideoFrameBuffer;
 	list<VideoFrameBacking *> allocatedFrameBackings;
 };

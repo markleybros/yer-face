@@ -64,6 +64,13 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed allocating frame");
 	}
 
+	for(int i = 0; i < YERFACE_INITIAL_BACKING_FRAMES; i++) {
+		allocateNewFrameBacking();
+	}
+
+	if((videoFrameBufferMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating video frame buffer mutex!");
+	}
 	initializeDemuxerThread();
 
 	logger->debug("FFmpegDriver object constructed and ready to go!");
@@ -72,6 +79,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 FFmpegDriver::~FFmpegDriver() {
 	logger->debug("FFmpegDriver object destructing...");
 	destroyDemuxerThread();
+	SDL_DestroyMutex(videoFrameBufferMutex);
 	avcodec_free_context(&videoDecoderContext);
 	avformat_close_input(&formatContext);
 	av_free(videoDestData[0]);
@@ -125,8 +133,9 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			return false;
 		}
 
-		//Wait for the demuxer thread to generate more frames.
+		//Wait for the demuxer thread to generate more frames. In practice I have never actually seen this happen.
 		YerFace_MutexUnlock(demuxerMutex);
+		logger->warn("======== Caller is trapped in an expensive polling loop! ========");
 		SDL_Delay(50);
 		YerFace_MutexLock(demuxerMutex);
 	}
@@ -136,43 +145,49 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 }
 
 bool FFmpegDriver::getIsFrameBufferEmpty(void) {
-	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoFrameBufferMutex);
 	bool status = (readyVideoFrameBuffer.size() < 1);
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(videoFrameBufferMutex);
 	return status;
 }
 
 VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
 	if(readyVideoFrameBuffer.size() > 0) {
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
 		SDL_CondSignal(demuxerCond);
 	} else {
+		YerFace_MutexUnlock(videoFrameBufferMutex);
 		YerFace_MutexUnlock(demuxerMutex);
 		throw runtime_error("getNextVideoFrame() was called, but no video frames are pending");
 	}
+	YerFace_MutexUnlock(videoFrameBufferMutex);
 	YerFace_MutexUnlock(demuxerMutex);
 	return result;
 }
 
 void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
-	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoFrameBufferMutex);
 	videoFrame.frameBacking->inUse = false;
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(videoFrameBufferMutex);
 }
 
 VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
+	YerFace_MutexLock(videoFrameBufferMutex);
 	for(VideoFrameBacking *backing : allocatedFrameBackings) {
 		if(!backing->inUse) {
 			backing->inUse = true;
+			YerFace_MutexUnlock(videoFrameBufferMutex);
 			return backing;
 		}
 	}
-	logger->warn("Out of spare frames in the frame buffer! Allocating a new one."); //FIXME - should preallocate some number of these at startup
+	logger->warn("Out of spare frames in the frame buffer! Allocating a new one.");
 	VideoFrameBacking *newBacking = allocateNewFrameBacking();
 	newBacking->inUse = true;
+	YerFace_MutexUnlock(videoFrameBufferMutex);
 	return newBacking;
 }
 
@@ -198,14 +213,14 @@ VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
 
 bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 	if(packet->stream_index == videoStreamIndex) {
-		logger->verbose("Got video packet. Sending to codec...");
+		// logger->verbose("Got video packet. Sending to codec...");
 		if(avcodec_send_packet(videoDecoderContext, packet) < 0) {
 			logger->warn("Error decoding video frame");
 			return false;
 		}
 
 		while(avcodec_receive_frame(videoDecoderContext, frame) == 0) {
-			logger->verbose("Received decoded video frame!");
+			// logger->verbose("Received decoded video frame!");
 			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
 				return false;
@@ -215,7 +230,10 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
 			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
+
+			YerFace_MutexLock(videoFrameBufferMutex);
 			readyVideoFrameBuffer.push_front(videoFrame);
+			YerFace_MutexUnlock(videoFrameBufferMutex);
 		}
         av_frame_unref(frame);
 	}
@@ -227,7 +245,7 @@ void FFmpegDriver::initializeDemuxerThread(void) {
 	demuxerRunning = true;
 	
 	if((demuxerMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
+		throw runtime_error("Failed creating demuxer mutex!");
 	}
 	if((demuxerCond = SDL_CreateCond()) == NULL) {
 		throw runtime_error("Failed creating condition!");
@@ -251,7 +269,7 @@ void FFmpegDriver::destroyDemuxerThread(void) {
 
 int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	FFmpegDriver *driver = (FFmpegDriver *)ptr;
-	driver->logger->verbose("Demuxer Thread is alive!");
+	driver->logger->verbose("Demuxer Thread alive!");
 
 	AVPacket packet;
 	av_init_packet(&packet);
@@ -260,7 +278,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	while(driver->demuxerRunning) {
 		while(driver->getIsFrameBufferEmpty() && driver->demuxerRunning) {
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
-				driver->logger->verbose("Demuxer thread encountered end of stream!");
+				// driver->logger->verbose("Demuxer thread encountered end of stream!");
 				driver->demuxerRunning = false;
 			} else {
 				try {
@@ -277,11 +295,11 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 		}
 
 		if(driver->demuxerRunning) {
-			driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
+			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
 			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
 				throw runtime_error("Failed waiting on condition.");
 			}
-			driver->logger->verbose("Demuxer Thread is awake now!");
+			// driver->logger->verbose("Demuxer Thread is awake now!");
 		}
 	}
 	YerFace_MutexUnlock(driver->demuxerMutex);
