@@ -9,6 +9,8 @@
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 // alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
 
+// an example pipe: ffmpeg -framerate 30 -f video4linux2 -pixel_format mjpeg -video_size 1280x720 -i /dev/video0 -vcodec copy -f avi pipe:1 | build/bin/yer-face --captureFile=- --frameDrop
+
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
@@ -65,7 +67,7 @@ int main(int argc, const char** argv) {
 		"{help h||Usage message.}"
 		"{dlibFaceLandmarks|data/dlib-models/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
 		"{dlibFaceDetector|data/dlib-models/mmod_human_face_detector.dat|Model for dlib's DNN facial landmark detector or empty string (\"\") to default to the older HOG detector.}"
-		"{captureFile|/dev/video0|Video file or video capture device file to open.}"
+		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}");
 
@@ -80,6 +82,9 @@ int main(int argc, const char** argv) {
 		return 1;
 	}
 	captureFile = parser.get<string>("captureFile");
+	if(captureFile == "-") {
+		captureFile = "pipe:0";
+	}
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
 	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
