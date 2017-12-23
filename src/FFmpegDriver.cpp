@@ -225,7 +225,6 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 
 void FFmpegDriver::initializeDemuxerThread(void) {
 	demuxerRunning = true;
-	demuxerStillReading = true;
 	
 	if((demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -259,24 +258,31 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
-		while(driver->demuxerStillReading && driver->getIsFrameBufferEmpty()) {
+		while(driver->getIsFrameBufferEmpty() && driver->demuxerRunning) {
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
 				driver->logger->verbose("Demuxer thread encountered end of stream!");
-				driver->demuxerStillReading = false;
+				driver->demuxerRunning = false;
 			} else {
-				if(!driver->decodePacket(&packet)) {
-					driver->logger->warn("Demuxer thread encountered a corrupted packet in the stream!");
-						break;
+				try {
+					if(!driver->decodePacket(&packet)) {
+						driver->logger->warn("Demuxer thread encountered a corrupted packet in the stream!");
+					}
+				} catch(exception &e) {
+					driver->logger->critical("Caught Exception: %s", e.what());
+					driver->logger->critical("Going down in flames...");
+					driver->demuxerRunning = false;
 				}
 				av_packet_unref(&packet);
 			}
 		}
 
-		driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
-		if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
-			throw runtime_error("Failed waiting on condition.");
+		if(driver->demuxerRunning) {
+			driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
+			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
+				throw runtime_error("Failed waiting on condition.");
+			}
+			driver->logger->verbose("Demuxer Thread is awake now!");
 		}
-		driver->logger->verbose("Demuxer Thread is awake now!");
 	}
 	YerFace_MutexUnlock(driver->demuxerMutex);
 	driver->logger->verbose("Demuxer Thread quitting...");

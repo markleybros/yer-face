@@ -52,7 +52,7 @@ private:
 	SDL_mutex *demuxerMutex;
 	SDL_cond *demuxerCond;
 	SDL_Thread *demuxerThread;
-	bool demuxerRunning, demuxerStillReading;
+	bool demuxerRunning;
 
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
