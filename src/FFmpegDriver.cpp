@@ -10,7 +10,7 @@ using namespace std;
 
 namespace YerFace {
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
@@ -21,6 +21,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	if(inputFilename.length() < 1) {
 		throw invalid_argument("inputFilename must be a valid input filename");
 	}
+	frameDrop = myFrameDrop;
 
 	formatContext = NULL;
 	videoDecoderContext = NULL;
@@ -76,7 +77,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	}
 	initializeDemuxerThread();
 
-	logger->debug("FFmpegDriver object constructed and ready to go!");
+	logger->debug("FFmpegDriver object constructed and ready to go! Frame Drop is %s.", frameDrop ? "ENABLED" : "DISABLED");
 }
 
 FFmpegDriver::~FFmpegDriver() {
@@ -159,6 +160,15 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
 	if(readyVideoFrameBuffer.size() > 0) {
+		if(frameDrop) {
+			int dropCount = 0;
+			while(readyVideoFrameBuffer.size() > 1) {
+				releaseVideoFrame(readyVideoFrameBuffer.back());
+				readyVideoFrameBuffer.pop_back();
+				dropCount++;
+			}
+			logger->warn("Dropped %d frame(s)!", dropCount);
+		}
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
 		SDL_CondSignal(demuxerCond);
@@ -279,7 +289,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
-		while(driver->getIsFrameBufferEmpty() && driver->demuxerRunning) {
+		while((driver->getIsFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning) {
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
 				// driver->logger->verbose("Demuxer thread encountered end of stream!");
 				driver->demuxerRunning = false;
@@ -295,9 +305,15 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 				}
 				av_packet_unref(&packet);
 			}
+
+			if(driver->frameDrop) {
+				YerFace_MutexUnlock(driver->demuxerMutex);
+				SDL_Delay(0);
+				YerFace_MutexLock(driver->demuxerMutex);
+			}
 		}
 
-		if(driver->demuxerRunning) {
+		if(driver->demuxerRunning && !driver->frameDrop) {
 			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
 			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
 				throw runtime_error("Failed waiting on condition.");

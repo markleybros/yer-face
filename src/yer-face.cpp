@@ -30,7 +30,8 @@ String captureFile;
 String dlibFaceLandmarks;
 String dlibFaceDetector;
 String previewImgSeq;
-String window_name = "Performance Capture Tests";
+bool frameDrop;
+String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 SDLWindowRenderer sdlWindowRenderer;
 SDL_Thread *workerThread;
@@ -65,7 +66,8 @@ int main(int argc, const char** argv) {
 		"{dlibFaceLandmarks|data/dlib-models/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
 		"{dlibFaceDetector|data/dlib-models/mmod_human_face_detector.dat|Model for dlib's DNN facial landmark detector or empty string (\"\") to default to the older HOG detector.}"
 		"{captureFile|/dev/video0|Video file or video capture device file to open.}"
-		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}");
+		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
+		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -81,11 +83,12 @@ int main(int argc, const char** argv) {
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
 	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
+	frameDrop = parser.get<bool>("frameDrop");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	sdlDriver = new SDLDriver(frameDerivatives);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", true);

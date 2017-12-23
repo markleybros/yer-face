@@ -32,7 +32,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop = false);
 	~FFmpegDriver();
 	bool getIsFrameBufferEmpty(void);
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
@@ -49,6 +49,7 @@ private:
 
 	FrameDerivatives *frameDerivatives;
 	string inputFilename;
+	bool frameDrop;
 
 	Logger *logger;
 
