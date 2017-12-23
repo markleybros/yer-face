@@ -40,7 +40,7 @@ FrameDerivatives::~FrameDerivatives() {
 void FrameDerivatives::setWorkingFrame(Mat newFrame) {
 	YerFace_MutexLock(myMutex);
 	metrics->startClock();
-	workingFrame = newFrame;
+	workingFrame = newFrame.clone();
 
 	Size frameSize = workingFrame.size();
 

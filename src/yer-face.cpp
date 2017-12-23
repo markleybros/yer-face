@@ -147,28 +147,17 @@ int main(int argc, const char** argv) {
 
 int runCaptureLoop(void *ptr) {
 	VideoFrame videoFrame;
-	bool videoFrameWasSet = false;
 
 	bool didSetFrameSizeValid = false;
 	while(sdlDriver->getIsRunning()) {
 		if(!sdlDriver->getIsPaused()) {
-			if(videoFrameWasSet) {
-				ffmpegDriver->releaseVideoFrame(videoFrame);
+			if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
+				logger->info("FFmpeg Demuxer thread finished.");
+				sdlDriver->setIsRunning(false);
+				continue;
 			}
-
-			while(ffmpegDriver->getIsFrameBufferEmpty()) {
-				SDL_Delay(50);
-			}
-
-			videoFrame = ffmpegDriver->getNextVideoFrame();
 			workingFrameNumber++;
 
-			// if(videoFrame.frameCV.empty()) {
-			// 	logger->error("Breaking on no frame ready...");
-			// 	YerFace_MutexUnlock(frameSizeMutex);
-			// 	sdlDriver->setIsRunning(false);
-			// 	return -1;
-			// }
 			if(!didSetFrameSizeValid) {
 				YerFace_MutexLock(frameSizeMutex);
 				if(!frameSizeValid) {
@@ -183,6 +172,8 @@ int runCaptureLoop(void *ptr) {
 			metrics->startClock();
 
 			frameDerivatives->setWorkingFrame(videoFrame.frameCV);
+			ffmpegDriver->releaseVideoFrame(videoFrame);
+
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 

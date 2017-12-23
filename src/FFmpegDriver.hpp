@@ -32,6 +32,7 @@ public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename);
 	~FFmpegDriver();
 	bool getIsFrameBufferEmpty(void);
+	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	VideoFrame getNextVideoFrame(void);
 	void releaseVideoFrame(VideoFrame videoFrame);
 private:

@@ -117,6 +117,24 @@ void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderCo
 	*streamIndex = myStreamIndex;
 }
 
+bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
+	YerFace_MutexLock(demuxerMutex);
+	while(getIsFrameBufferEmpty()) {
+		if(!demuxerRunning) {
+			YerFace_MutexUnlock(demuxerMutex);
+			return false;
+		}
+
+		//Wait for the demuxer thread to generate more frames.
+		YerFace_MutexUnlock(demuxerMutex);
+		SDL_Delay(50);
+		YerFace_MutexLock(demuxerMutex);
+	}
+	*videoFrame = getNextVideoFrame();
+	YerFace_MutexUnlock(demuxerMutex);
+	return true;
+}
+
 bool FFmpegDriver::getIsFrameBufferEmpty(void) {
 	YerFace_MutexLock(demuxerMutex);
 	bool status = (readyVideoFrameBuffer.size() < 1);
@@ -130,6 +148,7 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	if(readyVideoFrameBuffer.size() > 0) {
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
+		SDL_CondSignal(demuxerCond);
 	} else {
 		YerFace_MutexUnlock(demuxerMutex);
 		throw runtime_error("getNextVideoFrame() was called, but no video frames are pending");
