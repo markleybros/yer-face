@@ -28,9 +28,12 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	frame = NULL;
 	swsContext = NULL;
 
+	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
 	av_log_set_callback(av_log_default_callback);
+	avdevice_register_all();
 	av_register_all();
+	avformat_network_init();
 
 	logger->info("Opening media file %s...", inputFilename.c_str());
 

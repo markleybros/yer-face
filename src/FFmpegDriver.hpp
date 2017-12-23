@@ -9,6 +9,7 @@
 extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavformat/avformat.h>
+#include <libavdevice/avdevice.h>
 #include <libswscale/swscale.h>
 }
 

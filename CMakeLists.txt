@@ -57,7 +57,7 @@ include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE
 
 add_executable( yer-face ${YERFACE_MODULES} )
 
-target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} )
+target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} )
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 
