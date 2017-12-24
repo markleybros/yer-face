@@ -39,6 +39,7 @@ public:
 	VideoFrame getNextVideoFrame(void);
 	void releaseVideoFrame(VideoFrame videoFrame);
 private:
+	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewFrameBacking(void);
@@ -58,14 +59,18 @@ private:
 	SDL_Thread *demuxerThread;
 	bool demuxerRunning;
 
+	int videoStreamIndex;
+	AVCodecContext *videoDecoderContext;
+	AVStream *videoStream;
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	AVFormatContext *formatContext;
-	AVCodecContext *videoDecoderContext;
-	AVStream *videoStream;
 	AVFrame *frame;
-	int videoStreamIndex;
 	struct SwsContext *swsContext;
+
+	int audioStreamIndex;
+	AVCodecContext *audioDecoderContext;
+	AVStream *audioStream;
 
 	uint8_t *videoDestData[4];
 	int videoDestLineSize[4];

@@ -46,8 +46,10 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed finding input stream information for inputFilename");
 	}
 
-	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
+	this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
+	audioStream = formatContext->streams[audioStreamIndex];
 
+	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
 	videoStream = formatContext->streams[videoStreamIndex];
 
 	width = videoDecoderContext->width;
@@ -188,6 +190,13 @@ void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
 	YerFace_MutexUnlock(videoFrameBufferMutex);
 }
 
+void FFmpegDriver::logAVErr(String msg, int err) {
+	char errbuf[128];
+	av_strerror(err, errbuf, 128);
+	logger->verbose("Got audio packet. Sending to codec...");
+	logger->error("%s AVERROR: (%d) %s", msg.c_str(), err, errbuf);
+}
+
 VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	for(VideoFrameBacking *backing : allocatedFrameBackings) {
@@ -225,6 +234,7 @@ VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
 }
 
 bool FFmpegDriver::decodePacket(const AVPacket *packet) {
+	int ret;
 	if(packet->stream_index == videoStreamIndex) {
 		// logger->verbose("Got video packet. Sending to codec...");
 		if(avcodec_send_packet(videoDecoderContext, packet) < 0) {
@@ -247,8 +257,20 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 			YerFace_MutexLock(videoFrameBufferMutex);
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
+
+			av_frame_unref(frame);
 		}
-        av_frame_unref(frame);
+	} else if(packet->stream_index == audioStreamIndex) {
+		logger->verbose("Got audio packet. Sending to codec...");
+		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
+			logAVErr("Sending packet to audio codec.", ret);
+			return false;
+		}
+
+		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
+			logger->verbose("Received decoded audio frame!");
+			av_frame_unref(frame);
+		}
 	}
 
 	return true;
