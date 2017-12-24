@@ -11,6 +11,7 @@ using namespace std;
 namespace YerFace {
 
 FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop) {
+	int ret;
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
@@ -38,11 +39,13 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 
 	logger->info("Opening media file %s...", inputFilename.c_str());
 
-	if(avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL) < 0) {
+	if((ret = avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL)) < 0) {
+		logAVErr("inputFilename could not be opened", ret);
 		throw runtime_error("inputFilename could not be opened");
 	}
 
-	if(avformat_find_stream_info(formatContext, NULL) < 0) {
+	if((ret = avformat_find_stream_info(formatContext, NULL)) < 0) {
+		logAVErr("failed finding input stream information for inputFilename", ret);
 		throw runtime_error("failed finding input stream information for inputFilename");
 	}
 
@@ -99,32 +102,35 @@ FFmpegDriver::~FFmpegDriver() {
 }
 
 void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type) {
-	int myStreamIndex;
+	int myStreamIndex, ret;
 	AVStream *stream;
 	AVCodec *decoder = NULL;
 	AVDictionary *options = NULL;
 
 	if((myStreamIndex = av_find_best_stream(myFormatContext, type, -1, -1, NULL, 0)) < 0) {
-		logger->critical("failed to find %s stream in input file", av_get_media_type_string(type));
+		logger->error("failed to find %s stream in input file", av_get_media_type_string(type));
+		logAVErr("Error was...", myStreamIndex);
 		throw runtime_error("failed to openCodecContext()");
 	}
 
 	stream = myFormatContext->streams[myStreamIndex];
 
 	if(!(decoder = avcodec_find_decoder(stream->codecpar->codec_id))) {
-		throw runtime_error("failed to find decoder codec");
+		throw runtime_error("failed to find decoder codec"); //FIXME AVERROR?
 	}
 
 	if(!(*decoderContext = avcodec_alloc_context3(decoder))) {
-		throw runtime_error("failed to allocate decoder context");
+		throw runtime_error("failed to allocate decoder context"); //FIXME AVERROR?
 	}
 
-	if(avcodec_parameters_to_context(*decoderContext, stream->codecpar) < 0) {
+	if((ret = avcodec_parameters_to_context(*decoderContext, stream->codecpar)) < 0) {
+		logAVErr("failed to copy codec parameters to decoder context", ret);
 		throw runtime_error("failed to copy codec parameters to decoder context");
 	}
 
 	av_dict_set(&options, "refcounted_frames", "1", 0);
-	if(avcodec_open2(*decoderContext, decoder, &options) < 0) {
+	if((ret = avcodec_open2(*decoderContext, decoder, &options)) < 0) {
+		logAVErr("failed to open codec", ret);
 		throw runtime_error("failed to open codec");
 	}
 
@@ -193,7 +199,6 @@ void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
 void FFmpegDriver::logAVErr(String msg, int err) {
 	char errbuf[128];
 	av_strerror(err, errbuf, 128);
-	logger->verbose("Got audio packet. Sending to codec...");
 	logger->error("%s AVERROR: (%d) %s", msg.c_str(), err, errbuf);
 }
 
