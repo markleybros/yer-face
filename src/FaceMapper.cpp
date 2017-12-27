@@ -244,6 +244,7 @@ void FaceMapper::calculateEyeRects(void) {
 	working.rightEye.set = false;
 
 	if(!working.features.set) {
+		YerFace_MutexUnlock(myWrkMutex);
 		return;
 	}
 
