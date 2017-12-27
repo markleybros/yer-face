@@ -27,6 +27,8 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	formatContext = NULL;
 	videoDecoderContext = NULL;
 	videoStream = NULL;
+	audioDecoderContext = NULL;
+	audioStream = NULL;
 	frame = NULL;
 	swsContext = NULL;
 
@@ -116,11 +118,11 @@ void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderCo
 	stream = myFormatContext->streams[myStreamIndex];
 
 	if(!(decoder = avcodec_find_decoder(stream->codecpar->codec_id))) {
-		throw runtime_error("failed to find decoder codec"); //FIXME AVERROR?
+		throw runtime_error("failed to find decoder codec");
 	}
 
 	if(!(*decoderContext = avcodec_alloc_context3(decoder))) {
-		throw runtime_error("failed to allocate decoder context"); //FIXME AVERROR?
+		throw runtime_error("failed to allocate decoder context");
 	}
 
 	if((ret = avcodec_parameters_to_context(*decoderContext, stream->codecpar)) < 0) {
@@ -238,10 +240,10 @@ VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
 	return backing;
 }
 
-bool FFmpegDriver::decodePacket(const AVPacket *packet) {
+bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 	int ret;
-	if(packet->stream_index == videoStreamIndex) {
-		// logger->verbose("Got video packet. Sending to codec...");
+	if(streamIndex == videoStreamIndex) {
+		logger->verbose("Got video %s. Sending to codec...", packet ? "packet" : "flush call");
 		if(avcodec_send_packet(videoDecoderContext, packet) < 0) {
 			logger->warn("Error decoding video frame");
 			return false;
@@ -265,8 +267,8 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 
 			av_frame_unref(frame);
 		}
-	} else if(packet->stream_index == audioStreamIndex) {
-		logger->verbose("Got audio packet. Sending to codec...");
+	} else if(streamIndex == audioStreamIndex) {
+		logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
 		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
 			return false;
@@ -283,6 +285,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet) {
 
 void FFmpegDriver::initializeDemuxerThread(void) {
 	demuxerRunning = true;
+	demuxerDraining = false;
 	
 	if((demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
@@ -298,6 +301,7 @@ void FFmpegDriver::initializeDemuxerThread(void) {
 void FFmpegDriver::destroyDemuxerThread(void) {
 	YerFace_MutexLock(demuxerMutex);
 	demuxerRunning = false;
+	demuxerDraining = true;
 	SDL_CondSignal(demuxerCond);
 	YerFace_MutexUnlock(demuxerMutex);
 
@@ -316,13 +320,15 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
-		while((driver->getIsFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning) {
+		while((driver->getIsFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning && !driver->demuxerDraining) {
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
-				// driver->logger->verbose("Demuxer thread encountered end of stream!");
-				driver->demuxerRunning = false;
+				driver->logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
+				driver->demuxerDraining = true;
+				driver->decodePacket(NULL, driver->videoStreamIndex);
+				driver->decodePacket(NULL, driver->audioStreamIndex);
 			} else {
 				try {
-					if(!driver->decodePacket(&packet)) {
+					if(!driver->decodePacket(&packet, packet.stream_index)) {
 						driver->logger->warn("Demuxer thread encountered a corrupted packet in the stream!");
 					}
 				} catch(exception &e) {
@@ -340,14 +346,26 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 			}
 		}
 
+		if(driver->demuxerDraining && driver->getIsFrameBufferEmpty()) {
+			driver->logger->verbose("Draining complete. Demuxer thread terminating...");
+			driver->demuxerRunning = false;
+		}
+		
+		if(driver->frameDrop) {
+			YerFace_MutexUnlock(driver->demuxerMutex);
+			SDL_Delay(0);
+			YerFace_MutexLock(driver->demuxerMutex);
+		}
+		
 		if(driver->demuxerRunning && !driver->frameDrop) {
-			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
+			driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
 			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
 				throw runtime_error("Failed waiting on condition.");
 			}
 			// driver->logger->verbose("Demuxer Thread is awake now!");
 		}
 	}
+
 	YerFace_MutexUnlock(driver->demuxerMutex);
 	driver->logger->verbose("Demuxer Thread quitting...");
 	return 0;

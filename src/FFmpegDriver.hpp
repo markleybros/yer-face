@@ -43,7 +43,7 @@ private:
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewFrameBacking(void);
-	bool decodePacket(const AVPacket *packet);
+	bool decodePacket(const AVPacket *packet, int streamIndex);
 	void initializeDemuxerThread(void);
 	void destroyDemuxerThread(void);
 	static int runDemuxerLoop(void *ptr);
@@ -57,7 +57,7 @@ private:
 	SDL_mutex *demuxerMutex;
 	SDL_cond *demuxerCond;
 	SDL_Thread *demuxerThread;
-	bool demuxerRunning;
+	bool demuxerRunning, demuxerDraining;
 
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
