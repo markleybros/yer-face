@@ -11,8 +11,33 @@ using namespace cv;
 
 namespace YerFace {
 
+//#define YERFACE_MUTEX_DEBUG
+
+#ifdef YERFACE_MUTEX_DEBUG
+
+#include "pthread.h"
+
+#define YerFace_MutexLock(X) do {						\
+	fprintf(stderr, "%s:%d: THREAD %lu ATTEMPTING MUTEX LOCK %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
+	if(SDL_LockMutex(X) != 0) {							\
+		throw runtime_error("Failed to lock mutex.");	\
+	}													\
+	fprintf(stderr, "%s:%d: THREAD %lu SUCCESSFULLY LOCKED MUTEX %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
+} while(0)
+
+#define YerFace_MutexUnlock(X) do {						\
+	fprintf(stderr, "%s:%d: THREAD %lu UNLOCKING MUTEX %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
+	if(SDL_UnlockMutex(X) != 0) {						\
+		throw runtime_error("Failed to unlock mutex.");	\
+	}													\
+} while(0)
+
+#else
+
 #define YerFace_MutexLock(X) do { if(SDL_LockMutex(X) != 0) { throw runtime_error("Failed to lock mutex."); } } while(0)
 #define YerFace_MutexUnlock(X) do { if(SDL_UnlockMutex(X) != 0) { throw runtime_error("Failed to unlock mutex."); } } while(0)
+
+#endif
 
 class Utilities {
 public:
