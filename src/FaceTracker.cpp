@@ -410,6 +410,9 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
+	if(!working.facialPose.set) {
+		return;
+	}
 	working.facialPose.planePoint = Point3d(working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
 	planeNormalMat = working.facialPose.rotationMatrix * planeNormalMat;
