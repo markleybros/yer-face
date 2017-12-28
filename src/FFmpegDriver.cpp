@@ -51,8 +51,12 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed finding input stream information for inputFilename");
 	}
 
-	this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
-	audioStream = formatContext->streams[audioStreamIndex];
+	try {
+		this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
+		audioStream = formatContext->streams[audioStreamIndex];
+	} catch(exception &e) {
+		logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
+	}
 
 	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
 	videoStream = formatContext->streams[videoStreamIndex];
@@ -267,7 +271,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 
 			av_frame_unref(frame);
 		}
-	} else if(streamIndex == audioStreamIndex) {
+	} else if(audioStream != NULL && streamIndex == audioStreamIndex) {
 		logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
 		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
@@ -325,7 +329,9 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 				driver->logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
 				driver->demuxerDraining = true;
 				driver->decodePacket(NULL, driver->videoStreamIndex);
-				driver->decodePacket(NULL, driver->audioStreamIndex);
+				if(driver->audioStream != NULL) {
+					driver->decodePacket(NULL, driver->audioStreamIndex);
+				}
 			} else {
 				try {
 					if(!driver->decodePacket(&packet, packet.stream_index)) {
