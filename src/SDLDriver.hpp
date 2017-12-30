@@ -26,6 +26,13 @@ public:
 	SDL_Renderer *renderer;
 };
 
+class SDLAudioDevice {
+public:
+	SDL_AudioSpec desired, obtained;
+	SDL_AudioDeviceID deviceID;
+	bool opened;
+};
+
 class SDLDriver {
 public:
 	SDLDriver(FrameDerivatives *myFrameDerivatives);
@@ -47,6 +54,7 @@ public:
 	void setPreviewDebugDensity(int newDensity);
 	int incrementPreviewDebugDensity(void);
 	int getPreviewDebugDensity(void);
+	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 private:
 	void invokeAll(vector<function<void(void)>> callbacks);
 
@@ -65,6 +73,8 @@ private:
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
+
+	SDLAudioDevice audioDevice;
 
 	SDL_mutex *onColorPickerCallbacksMutex;
 	vector<function<void(void)>> onColorPickerCallbacks;

@@ -47,16 +47,38 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
 
-	if(SDL_Init(SDL_INIT_VIDEO) != 0) {
+	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { //FIXME - make audio optional
 		logger->error("Unable to initialize SDL: %s", SDL_GetError());
 	}
 	atexit(SDL_Quit);
+
+	audioDevice.opened = false;
+	//FIXME - make audio optional
+	SDL_zero(audioDevice.desired);
+	audioDevice.desired.freq = 44100;
+	audioDevice.desired.format = AUDIO_S16LSB;
+	audioDevice.desired.channels = 2;
+	audioDevice.desired.samples = 4096;
+	audioDevice.desired.userdata = (void *)this;
+	audioDevice.desired.callback = SDLDriver::SDLAudioCallback;
+	audioDevice.deviceID = SDL_OpenAudioDevice(NULL, 0, &audioDevice.desired, &audioDevice.obtained, SDL_AUDIO_ALLOW_ANY_CHANGE);
+	if(audioDevice.deviceID == 0) {
+		logger->error("SDL error opening audio device: %s", SDL_GetError());
+		throw runtime_error("failed opening audio device!");
+	}
+	audioDevice.opened = true;
+	logger->info("Opened Audio Output <%d hz, %d channels, %d-bit %s %s %s samples>", (int)audioDevice.obtained.freq, (int)audioDevice.obtained.channels, (int)SDL_AUDIO_BITSIZE(audioDevice.obtained.format), SDL_AUDIO_ISSIGNED(audioDevice.obtained.format) ? "signed" : "unsigned", SDL_AUDIO_ISBIGENDIAN(audioDevice.obtained.format) ? "big-endian" : "little-endian", SDL_AUDIO_ISFLOAT(audioDevice.obtained.format) ? "float" : "int");
+	logger->info("silence value is %d", (int)audioDevice.obtained.silence);
+	SDL_PauseAudioDevice(audioDevice.deviceID, 0);
 
 	logger->debug("SDLDriver object constructed and ready to go!");
 }
 
 SDLDriver::~SDLDriver() {
 	logger->debug("SDLDriver object destructing...");
+	if(audioDevice.opened) {
+		SDL_CloseAudioDevice(audioDevice.deviceID);
+	}
 	if(previewWindow.window != NULL) {
 		SDL_DestroyWindow(previewWindow.window);
 	}
@@ -290,6 +312,11 @@ void SDLDriver::invokeAll(vector<function<void(void)>> callbacks) {
 		callback();
 	}
 	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
+}
+
+void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
+	SDLDriver *self = (SDLDriver *)userdata;
+	memset(stream, self->audioDevice.obtained.silence, len);
 }
 
 }; //namespace YerFace
