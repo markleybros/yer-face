@@ -97,7 +97,7 @@ int main(int argc, const char** argv) {
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
-	metrics = new Metrics("YerFace", true);
+	metrics = new Metrics("YerFace", frameDerivatives, true);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;

@@ -26,7 +26,7 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	completedPreviewFrameSet = false;
 	workingFrameSizeSet = false;
 	classificationScaleFactor = myClassificationScaleFactor;
-	metrics = new Metrics("FrameDerivatives");
+	metrics = new Metrics("FrameDerivatives", this);
 	logger->debug("FrameDerivatives constructed and ready to go!");
 }
 

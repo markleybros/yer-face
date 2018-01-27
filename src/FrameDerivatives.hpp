@@ -12,6 +12,8 @@ using namespace cv;
 
 namespace YerFace {
 
+class Metrics;
+
 class FrameDerivatives {
 public:
 	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);

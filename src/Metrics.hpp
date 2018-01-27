@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+#include "FrameDerivatives.hpp"
 
 #include "SDL.h"
 
@@ -20,9 +21,11 @@ public:
 	double frameTimestamp;
 };
 
+class FrameDerivatives;
+
 class Metrics {
 public:
-	Metrics(const char *myName, bool myMetricIsFrames = false, unsigned int mySampleBufferSize = 30);
+	Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false, double myAverageOverSeconds = 1.0, double myReportEverySeconds = 0.0);
 	~Metrics();
 	void startClock(void);
 	void endClock(void);
@@ -33,8 +36,10 @@ public:
 	std::string getFPSString(void);
 private:
 	string name;
+	FrameDerivatives *frameDerivatives;
 	bool metricIsFrames;
-	unsigned int sampleBufferSize;
+	double averageOverSeconds, reportEverySeconds;
+	double lastReport;
 
 	Logger *logger;
 	SDL_mutex *myMutex;

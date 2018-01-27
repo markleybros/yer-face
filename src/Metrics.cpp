@@ -7,10 +7,16 @@ using namespace cv;
 
 namespace YerFace {
 
-Metrics::Metrics(const char *myName, bool myMetricIsFrames, unsigned int mySampleBufferSize) {
+Metrics::Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames, double myAverageOverSeconds, double myReportEverySeconds) {
 	name = (string)myName;
 	metricIsFrames = myMetricIsFrames;
-	sampleBufferSize = mySampleBufferSize;
+	frameDerivatives = myFrameDerivatives;
+	if(frameDerivatives == NULL) {
+		throw invalid_argument("frameDerivatives cannot be NULL");
+	}
+	averageOverSeconds = myAverageOverSeconds;
+	reportEverySeconds = myReportEverySeconds;
+	lastReport = -1.0 - myReportEverySeconds;
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
 	fps = 0.0;
@@ -42,12 +48,18 @@ void Metrics::endClock(void) {
 	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount();
 
-	size_t numEntries = entries.size();
+	double frameTimestamp = frameDerivatives->getWorkingFrameTimestamp();
 
 	entries.front().runTime = (now - entries.front().startTime) / getTickFrequency();
+	entries.front().frameTimestamp = frameTimestamp;
+
+	while(entries.back().frameTimestamp <= (frameTimestamp - averageOverSeconds)) {
+		entries.pop_back();
+	}
 
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
+	size_t numEntries = entries.size();
 	for(MetricEntry entry : entries) {
 		averageTimeSeconds = averageTimeSeconds + entry.runTime;
 		if(entry.runTime > worstTimeSeconds) {
@@ -59,9 +71,6 @@ void Metrics::endClock(void) {
 	if(metricIsFrames) {
 		fps = 1.0 / (((now - entries.back().startTime) / getTickFrequency()) / numEntries);
 		snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
-	}
-	while(entries.size() > sampleBufferSize) {
-		entries.pop_back();
 	}
 
 	if(metricIsFrames) {
