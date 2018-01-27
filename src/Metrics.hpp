@@ -13,6 +13,13 @@ using namespace std;
 
 namespace YerFace {
 
+class MetricEntry {
+public:
+	double startTime;
+	double runTime;
+	double frameTimestamp;
+};
+
 class Metrics {
 public:
 	Metrics(const char *myName, bool myMetricIsFrames = false, unsigned int mySampleBufferSize = 30);
@@ -31,9 +38,7 @@ private:
 
 	Logger *logger;
 	SDL_mutex *myMutex;
-	double timer;
-	list<double> processRunTimes;
-	list<double> tickStartTimes;
+	list<MetricEntry> entries;
 	double averageTimeSeconds;
 	double worstTimeSeconds;
 	double fps;

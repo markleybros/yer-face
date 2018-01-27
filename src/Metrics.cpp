@@ -32,37 +32,36 @@ Metrics::~Metrics() {
 
 void Metrics::startClock(void) {
 	YerFace_MutexLock(myMutex);
-	timer = (double)getTickCount();
-	tickStartTimes.push_front(timer);
+	MetricEntry entry;
+	entry.startTime = (double)getTickCount();
+	entries.push_front(entry);
 	YerFace_MutexUnlock(myMutex);
 }
 
 void Metrics::endClock(void) {
 	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount();
-	timer = (now - timer) / getTickFrequency();
-	processRunTimes.push_front(timer);
+
+	size_t numEntries = entries.size();
+
+	entries.front().runTime = (now - entries.front().startTime) / getTickFrequency();
+
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
-	int numTimes = 0;
-	for(double frameTime : processRunTimes) {
-		averageTimeSeconds = averageTimeSeconds + frameTime;
-		if(frameTime > worstTimeSeconds) {
-			worstTimeSeconds = frameTime;
+	for(MetricEntry entry : entries) {
+		averageTimeSeconds = averageTimeSeconds + entry.runTime;
+		if(entry.runTime > worstTimeSeconds) {
+			worstTimeSeconds = entry.runTime;
 		}
-		numTimes++;
 	}
-	averageTimeSeconds = averageTimeSeconds / (double)numTimes;
+	averageTimeSeconds = averageTimeSeconds / (double)numEntries;
 	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
 	if(metricIsFrames) {
-		fps = 1.0 / (((now - tickStartTimes.back()) / getTickFrequency()) / tickStartTimes.size());
+		fps = 1.0 / (((now - entries.back().startTime) / getTickFrequency()) / numEntries);
 		snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
 	}
-	while(processRunTimes.size() > sampleBufferSize) {
-		processRunTimes.pop_back();
-	}
-	while(tickStartTimes.size() > sampleBufferSize) {
-		tickStartTimes.pop_back();
+	while(entries.size() > sampleBufferSize) {
+		entries.pop_back();
 	}
 
 	if(metricIsFrames) {
