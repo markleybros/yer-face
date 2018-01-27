@@ -60,6 +60,9 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame) {
 		reportedScale = true;
 	}
 
+	workingFrameSize = frameSize;
+	workingFrameSizeSet = true;
+
 	workingFrameSet = true;
 	workingPreviewFrameSet = false;
 
@@ -154,12 +157,8 @@ double FrameDerivatives::getClassificationScaleFactor(void) {
 Size FrameDerivatives::getWorkingFrameSize(void) {
 	YerFace_MutexLock(myMutex);
 	if(!workingFrameSizeSet) {
-		if(!workingFrameSet) {
-			YerFace_MutexUnlock(myMutex);
-			throw runtime_error("getWorkingFrameSize() called, but no working frame set and no cached size");
-		}
-		workingFrameSize = workingFrame.size();
-		workingFrameSizeSet = true;
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getWorkingFrameSize() called, but no cached working frame size");
 	}
 	Size size = workingFrameSize;
 	YerFace_MutexUnlock(myMutex);
