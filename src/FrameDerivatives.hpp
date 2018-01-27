@@ -16,7 +16,7 @@ class FrameDerivatives {
 public:
 	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);
 	~FrameDerivatives();
-	void setWorkingFrame(Mat newFrame); //Expected to be in BGR format, at the native resolution of the input.
+	void setWorkingFrame(Mat newFrame, double timestamp); //Expected to be in BGR format, at the native resolution of the input. Timestamp is in seconds.
 	Mat getWorkingFrame(void);
 	void advanceWorkingFrameToCompleted(void);
 	Mat getClassificationFrame(void);
@@ -25,6 +25,7 @@ public:
 	void resetCompletedPreviewFrame(void);
 	double getClassificationScaleFactor(void);
 	Size getWorkingFrameSize(void);
+	double getWorkingFrameTimestamp(void);
 	bool getCompletedFrameSet(void);
 
 private:
@@ -40,6 +41,8 @@ private:
 	bool workingPreviewFrameSet, completedPreviewFrameSet;
 	Size workingFrameSize;
 	bool workingFrameSizeSet;
+	double workingFrameTimestamp;
+	bool workingFrameTimestampSet;
 };
 
 }; //namespace YerFace

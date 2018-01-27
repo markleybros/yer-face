@@ -180,7 +180,7 @@ int runCaptureLoop(void *ptr) {
 			// Start timer
 			metrics->startClock();
 
-			frameDerivatives->setWorkingFrame(videoFrame.frameCV);
+			frameDerivatives->setWorkingFrame(videoFrame.frameCV, videoFrame.timestamp);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
 			faceTracker->processCurrentFrame();

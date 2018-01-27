@@ -26,6 +26,7 @@ public:
 
 class VideoFrame {
 public:
+	double timestamp;
 	VideoFrameBacking *frameBacking;
 	Mat frameCV;
 };

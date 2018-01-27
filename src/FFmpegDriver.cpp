@@ -265,6 +265,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			}
 
 			VideoFrame videoFrame;
+			videoFrame.timestamp = (double)frame->pts * videoStreamTimeBase;
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
 			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);

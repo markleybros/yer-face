@@ -37,12 +37,18 @@ FrameDerivatives::~FrameDerivatives() {
 	delete logger;
 }
 
-void FrameDerivatives::setWorkingFrame(Mat newFrame) {
+void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
 	YerFace_MutexLock(myMutex);
 	metrics->startClock();
 	workingFrame = newFrame.clone();
 
 	Size frameSize = workingFrame.size();
+
+	workingFrameSize = frameSize;
+	workingFrameSizeSet = true;
+
+	workingFrameTimestamp = timestamp;
+	workingFrameTimestampSet = true;
 
 	if(classificationBoundingBox > 0) {
 		if(frameSize.width >= frameSize.height) {
@@ -60,8 +66,6 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame) {
 		reportedScale = true;
 	}
 
-	workingFrameSize = frameSize;
-	workingFrameSizeSet = true;
 
 	workingFrameSet = true;
 	workingPreviewFrameSet = false;
@@ -163,6 +167,17 @@ Size FrameDerivatives::getWorkingFrameSize(void) {
 	Size size = workingFrameSize;
 	YerFace_MutexUnlock(myMutex);
 	return size;
+}
+
+double FrameDerivatives::getWorkingFrameTimestamp(void) {
+	YerFace_MutexLock(myMutex);
+	if(!workingFrameTimestampSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getWorkingFrameTimestamp() called, but no cached working frame timestamp");
+	}
+	double timestamp = workingFrameTimestamp;
+	YerFace_MutexUnlock(myMutex);
+	return timestamp;
 }
 
 bool FrameDerivatives::getCompletedFrameSet(void) {
