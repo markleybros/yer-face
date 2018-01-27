@@ -54,12 +54,16 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	try {
 		this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
 		audioStream = formatContext->streams[audioStreamIndex];
+		audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
+		logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
 	} catch(exception &e) {
 		logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
 	}
 
 	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
 	videoStream = formatContext->streams[videoStreamIndex];
+	videoStreamTimeBase = (double)videoStream->time_base.num / (double)videoStream->time_base.den;
+	logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
 
 	width = videoDecoderContext->width;
 	height = videoDecoderContext->height;
@@ -254,7 +258,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 		}
 
 		while(avcodec_receive_frame(videoDecoderContext, frame) == 0) {
-			// logger->verbose("Received decoded video frame!");
+			logger->verbose("Received decoded video frame with timestamp %.04lf (%ld units)!", frame->pts * videoStreamTimeBase, frame->pts);
 			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
 				return false;
@@ -279,7 +283,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 		}
 
 		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
-			logger->verbose("Received decoded audio frame!");
+			logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", frame->pts * audioStreamTimeBase, frame->pts);
 			av_frame_unref(frame);
 		}
 	}

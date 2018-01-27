@@ -62,6 +62,7 @@ private:
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
 	AVStream *videoStream;
+	double videoStreamTimeBase;
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	AVFormatContext *formatContext;
@@ -71,6 +72,7 @@ private:
 	int audioStreamIndex;
 	AVCodecContext *audioDecoderContext;
 	AVStream *audioStream;
+	double audioStreamTimeBase;
 
 	uint8_t *videoDestData[4];
 	int videoDestLineSize[4];
