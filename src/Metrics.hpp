@@ -25,7 +25,7 @@ class FrameDerivatives;
 
 class Metrics {
 public:
-	Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false, double myAverageOverSeconds = 1.0, double myReportEverySeconds = 0.0);
+	Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false, double myAverageOverSeconds = 1.0, double myReportEverySeconds = 10.0);
 	~Metrics();
 	void startClock(void);
 	void endClock(void);

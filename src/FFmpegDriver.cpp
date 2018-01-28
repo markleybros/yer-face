@@ -251,14 +251,14 @@ VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
 bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 	int ret;
 	if(streamIndex == videoStreamIndex) {
-		logger->verbose("Got video %s. Sending to codec...", packet ? "packet" : "flush call");
+		// logger->verbose("Got video %s. Sending to codec...", packet ? "packet" : "flush call");
 		if(avcodec_send_packet(videoDecoderContext, packet) < 0) {
 			logger->warn("Error decoding video frame");
 			return false;
 		}
 
 		while(avcodec_receive_frame(videoDecoderContext, frame) == 0) {
-			logger->verbose("Received decoded video frame with timestamp %.04lf (%ld units)!", frame->pts * videoStreamTimeBase, frame->pts);
+			// logger->verbose("Received decoded video frame with timestamp %.04lf (%ld units)!", frame->pts * videoStreamTimeBase, frame->pts);
 			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
 				return false;
@@ -277,14 +277,14 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			av_frame_unref(frame);
 		}
 	} else if(audioStream != NULL && streamIndex == audioStreamIndex) {
-		logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
+		// logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
 		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
 			return false;
 		}
 
 		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
-			logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", frame->pts * audioStreamTimeBase, frame->pts);
+			// logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", frame->pts * audioStreamTimeBase, frame->pts);
 			av_frame_unref(frame);
 		}
 	}
@@ -369,7 +369,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 		}
 		
 		if(driver->demuxerRunning && !driver->frameDrop) {
-			driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
+			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
 			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
 				throw runtime_error("Failed waiting on condition.");
 			}

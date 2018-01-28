@@ -39,18 +39,18 @@ Metrics::~Metrics() {
 void Metrics::startClock(void) {
 	YerFace_MutexLock(myMutex);
 	MetricEntry entry;
-	entry.startTime = (double)getTickCount();
+	entry.startTime = (double)getTickCount() / (double)getTickFrequency();
 	entries.push_front(entry);
 	YerFace_MutexUnlock(myMutex);
 }
 
 void Metrics::endClock(void) {
 	YerFace_MutexLock(myMutex);
-	double now = (double)getTickCount();
+	double now = (double)getTickCount() / (double)getTickFrequency();
 
 	double frameTimestamp = frameDerivatives->getWorkingFrameTimestamp();
 
-	entries.front().runTime = (now - entries.front().startTime) / getTickFrequency();
+	entries.front().runTime = now - entries.front().startTime;
 	entries.front().frameTimestamp = frameTimestamp;
 
 	while(entries.back().frameTimestamp <= (frameTimestamp - averageOverSeconds)) {
@@ -69,14 +69,17 @@ void Metrics::endClock(void) {
 	averageTimeSeconds = averageTimeSeconds / (double)numEntries;
 	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
 	if(metricIsFrames) {
-		fps = 1.0 / (((now - entries.back().startTime) / getTickFrequency()) / numEntries);
+		fps = 1.0 / ((now - entries.back().startTime) / numEntries);
 		snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
 	}
 
-	if(metricIsFrames) {
-		logger->verbose("%s %s", fpsString, timesString);
-	} else {
-		logger->verbose("%s", timesString);
+	if(lastReport + reportEverySeconds <= now) {
+		if(metricIsFrames) {
+			logger->verbose("%s %s", fpsString, timesString);
+		} else {
+			logger->verbose("%s", timesString);
+		}
+		lastReport = now;
 	}
 	YerFace_MutexUnlock(myMutex);
 }
