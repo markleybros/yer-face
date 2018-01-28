@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, int myPoseSmoothingBufferSize, float myPoseSmoothingExponent) {
+FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, double myPoseSmoothingOverSeconds, double myPoseSmoothingExponent) {
 	featureDetectionModelFileName = myFeatureDetectionModelFileName;
 	faceDetectionModelFileName = myFaceDetectionModelFileName;
 	trackerState = DETECTING;
@@ -49,9 +49,9 @@ FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDe
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
 	}
-	poseSmoothingBufferSize = myPoseSmoothingBufferSize;
-	if(poseSmoothingBufferSize <= 0) {
-		throw invalid_argument("poseSmoothingBufferSize cannot be less than or equal to zero.");
+	poseSmoothingOverSeconds = myPoseSmoothingOverSeconds;
+	if(poseSmoothingOverSeconds <= 0.0) {
+		throw invalid_argument("poseSmoothingOverSeconds cannot be less than or equal to zero.");
 	}
 	poseSmoothingExponent = myPoseSmoothingExponent;
 	if(poseSmoothingExponent <= 0.0) {
@@ -365,7 +365,9 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		doInitializeCameraModel();
 	}
 
+	double frameTimestamp = frameDerivatives->getWorkingFrameTimestamp();
 	FacialPose tempPose;
+	tempPose.timestamp = frameTimestamp;
 	tempPose.set = false;
 	Mat tempRotationVector;
 
@@ -377,7 +379,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	tempPose.translationVector = tempPose.translationVector + translationOffset;
 
 	facialPoseSmoothingBuffer.push_back(tempPose);
-	while(facialPoseSmoothingBuffer.size() > (unsigned int)poseSmoothingBufferSize) {
+	while(facialPoseSmoothingBuffer.front().timestamp <= (frameTimestamp - poseSmoothingOverSeconds)) {
 		facialPoseSmoothingBuffer.pop_front();
 	}
 
@@ -387,11 +389,10 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 			0.0, 0.0, 0.0,
 			0.0, 0.0, 0.0);
 
-	unsigned long numBufferEntries = facialPoseSmoothingBuffer.size();
 	double combinedWeights = 0.0;
-	int i = 0;
 	for(FacialPose pose : facialPoseSmoothingBuffer) {
-		double weight = std::pow((double)(i + 1) / (double)numBufferEntries, (double)poseSmoothingExponent) - combinedWeights;
+		double progress = (pose.timestamp - (frameTimestamp - poseSmoothingOverSeconds)) / poseSmoothingOverSeconds;
+		double weight = std::pow(progress, (double)poseSmoothingExponent) - combinedWeights;
 		combinedWeights += weight;
 		for(int j = 0; j < 3; j++) {
 			tempPose.translationVector.at<double>(j) += pose.translationVector.at<double>(j) * weight;
@@ -399,7 +400,6 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		for(int j = 0; j < 9; j++) {
 			tempPose.rotationMatrix.at<double>(j) += pose.rotationMatrix.at<double>(j) * weight;
 		}
-		i++;
 	}
 
 	working.facialPose = tempPose;

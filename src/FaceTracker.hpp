@@ -54,6 +54,7 @@ public:
 	Mat translationVector, rotationMatrix;
 	Point3d planePoint;
 	Vec3d planeNormal;
+	double timestamp;
 	bool set;
 };
 
@@ -110,7 +111,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, int myPoseSmoothingBufferSize = 6, float myPoseSmoothingExponent = 1.75);
+	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.5, double myPoseSmoothingExponent = 3);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -138,8 +139,8 @@ private:
 	bool performOpticalTracking;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
-	int poseSmoothingBufferSize;
-	float poseSmoothingExponent;
+	double poseSmoothingOverSeconds;
+	double poseSmoothingExponent;
 
 	Logger *logger;
 	Metrics *metrics;
