@@ -306,7 +306,7 @@ void SDLDriver::onColorPickerEvent(function<void(void)> callback) {
 	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
 }
 
-void SDLDriver::invokeAll(vector<function<void(void)>> callbacks) {
+void SDLDriver::invokeAll(std::vector<function<void(void)>> callbacks) {
 	YerFace_MutexLock(onColorPickerCallbacksMutex);
 	for(auto callback : callbacks) {
 		callback();

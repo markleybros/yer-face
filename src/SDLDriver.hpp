@@ -56,7 +56,7 @@ public:
 	int getPreviewDebugDensity(void);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 private:
-	void invokeAll(vector<function<void(void)>> callbacks);
+	void invokeAll(std::vector<function<void(void)>> callbacks);
 
 	FrameDerivatives *frameDerivatives;
 
@@ -77,7 +77,7 @@ private:
 	SDLAudioDevice audioDevice;
 
 	SDL_mutex *onColorPickerCallbacksMutex;
-	vector<function<void(void)>> onColorPickerCallbacks;
+	std::vector<function<void(void)>> onColorPickerCallbacks;
 };
 
 }; //namespace YerFace

@@ -55,7 +55,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
 		audioStream = formatContext->streams[audioStreamIndex];
 		audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
-		logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
+		// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
 	} catch(exception &e) {
 		logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
 	}
@@ -63,7 +63,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
 	videoStream = formatContext->streams[videoStreamIndex];
 	videoStreamTimeBase = (double)videoStream->time_base.num / (double)videoStream->time_base.den;
-	logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
+	// logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
 
 	width = videoDecoderContext->width;
 	height = videoDecoderContext->height;
@@ -83,13 +83,22 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed allocating frame");
 	}
 
-	for(int i = 0; i < YERFACE_INITIAL_BACKING_FRAMES; i++) {
-		allocateNewFrameBacking();
+	for(int i = 0; i < YERFACE_INITIAL_VIDEO_BACKING_FRAMES; i++) {
+		allocateNewVideoFrameBacking();
 	}
-
 	if((videoFrameBufferMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating video frame buffer mutex!");
 	}
+
+	if(audioStream != NULL) {
+		for(int i = 0; i < YERFACE_INITIAL_AUDIO_BACKING_FRAMES; i++) {
+			allocateNewAudioFrameBacking();
+		}
+	}
+	if((audioFrameBufferMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating audio frame buffer mutex!");
+	}
+
 	initializeDemuxerThread();
 
 	logger->debug("FFmpegDriver object constructed and ready to go! Frame Drop is %s.", frameDrop ? "ENABLED" : "DISABLED");
@@ -103,7 +112,7 @@ FFmpegDriver::~FFmpegDriver() {
 	avformat_close_input(&formatContext);
 	av_free(videoDestData[0]);
 	av_frame_free(&frame);
-	for(VideoFrameBacking *backing : allocatedFrameBackings) {
+	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		av_frame_free(&backing->frameBGR);
 		av_free(backing->buffer);
 		delete backing;
@@ -149,7 +158,7 @@ void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderCo
 
 bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 	YerFace_MutexLock(demuxerMutex);
-	while(getIsFrameBufferEmpty()) {
+	while(getIsVideoFrameBufferEmpty()) {
 		if(!demuxerRunning) {
 			YerFace_MutexUnlock(demuxerMutex);
 			return false;
@@ -166,7 +175,7 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 	return true;
 }
 
-bool FFmpegDriver::getIsFrameBufferEmpty(void) {
+bool FFmpegDriver::getIsVideoFrameBufferEmpty(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	bool status = (readyVideoFrameBuffer.size() < 1);
 	YerFace_MutexUnlock(videoFrameBufferMutex);
@@ -206,6 +215,13 @@ void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
 	YerFace_MutexUnlock(videoFrameBufferMutex);
 }
 
+void FFmpegDriver::releaseAudioFrame(AudioFrame audioFrame) {
+	YerFace_MutexLock(audioFrameBufferMutex);
+	av_frame_unref(audioFrame.frameBacking->frame);
+	audioFrame.frameBacking->inUse = false;
+	YerFace_MutexUnlock(audioFrameBufferMutex);
+}
+
 void FFmpegDriver::logAVErr(String msg, int err) {
 	char errbuf[128];
 	av_strerror(err, errbuf, 128);
@@ -214,37 +230,63 @@ void FFmpegDriver::logAVErr(String msg, int err) {
 
 VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
-	for(VideoFrameBacking *backing : allocatedFrameBackings) {
+	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		if(!backing->inUse) {
 			backing->inUse = true;
 			YerFace_MutexUnlock(videoFrameBufferMutex);
 			return backing;
 		}
 	}
-	logger->warn("Out of spare frames in the frame buffer! Allocating a new one.");
-	VideoFrameBacking *newBacking = allocateNewFrameBacking();
+	logger->warn("Out of spare frames in the video frame buffer! Allocating a new one.");
+	VideoFrameBacking *newBacking = allocateNewVideoFrameBacking();
 	newBacking->inUse = true;
 	YerFace_MutexUnlock(videoFrameBufferMutex);
 	return newBacking;
 }
 
-VideoFrameBacking *FFmpegDriver::allocateNewFrameBacking(void) {
+VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
 	VideoFrameBacking *backing = new VideoFrameBacking();
 	backing->inUse = false;
 	if(!(backing->frameBGR = av_frame_alloc())) {
-		throw runtime_error("failed allocating backing frame");
+		throw runtime_error("failed allocating backing video frame");
 	}
 	int bufferSize = av_image_get_buffer_size(pixelFormatBacking, width, height, 1);
 	if((backing->buffer = (uint8_t *)av_malloc(bufferSize*sizeof(uint8_t))) == NULL) {
-		throw runtime_error("failed allocating buffer for backing frame");
+		throw runtime_error("failed allocating buffer for backing video frame");
 	}
 	if(av_image_fill_arrays(backing->frameBGR->data, backing->frameBGR->linesize, backing->buffer, pixelFormatBacking, width, height, 1) < 0) {
-		throw runtime_error("failed assigning buffer for backing frame");
+		throw runtime_error("failed assigning buffer for backing video frame");
 	}
 	backing->frameBGR->width = width;
 	backing->frameBGR->height = height;
 	backing->frameBGR->format = pixelFormat;
-	allocatedFrameBackings.push_front(backing);
+	allocatedVideoFrameBackings.push_front(backing);
+	return backing;
+}
+
+AudioFrameBacking *FFmpegDriver::getNextAvailableAudioFrameBacking(void) {
+	YerFace_MutexLock(audioFrameBufferMutex);
+	for(AudioFrameBacking *backing : allocatedAudioFrameBackings) {
+		if(!backing->inUse) {
+			backing->inUse = true;
+			YerFace_MutexUnlock(audioFrameBufferMutex);
+			return backing;
+		}
+	}
+	logger->warn("Out of spare frames in the audio frame buffer! Allocating a new one.");
+	AudioFrameBacking *newBacking = allocateNewAudioFrameBacking();
+	newBacking->inUse = true;
+	YerFace_MutexUnlock(audioFrameBufferMutex);
+	return newBacking;
+}
+
+AudioFrameBacking *FFmpegDriver::allocateNewAudioFrameBacking(void) {
+	AudioFrameBacking *backing = new AudioFrameBacking();
+	backing->inUse = false;
+	if(!(backing->frame = av_frame_alloc())) {
+		throw runtime_error("failed allocating backing audio frame");
+	}
+	allocatedAudioFrameBackings.push_front(backing);
 	return backing;
 }
 
@@ -277,16 +319,31 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			av_frame_unref(frame);
 		}
 	} else if(audioStream != NULL && streamIndex == audioStreamIndex) {
-		// logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
+		logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
 		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
 			return false;
 		}
 
-		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
-			// logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", frame->pts * audioStreamTimeBase, frame->pts);
-			av_frame_unref(frame);
-		}
+		int audioFrameReceived = -1;
+		do {
+			AudioFrameBacking *backing = getNextAvailableAudioFrameBacking();
+			audioFrameReceived = avcodec_receive_frame(audioDecoderContext, backing->frame);
+			if(audioFrameReceived != 0) {
+				YerFace_MutexLock(audioFrameBufferMutex);
+				backing->inUse = false;
+				YerFace_MutexUnlock(audioFrameBufferMutex);
+			} else {
+				logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", backing->frame->pts * audioStreamTimeBase, backing->frame->pts);
+				AudioFrame audioFrame;
+				audioFrame.timestamp = (double)backing->frame->pts * audioStreamTimeBase;
+				audioFrame.frameBacking = backing;
+
+				YerFace_MutexLock(audioFrameBufferMutex);
+				readyAudioFrameBuffer.push_front(audioFrame);
+				YerFace_MutexUnlock(audioFrameBufferMutex);
+			}
+		} while(audioFrameReceived == 0);
 	}
 
 	return true;
@@ -329,7 +386,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
-		while((driver->getIsFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning && !driver->demuxerDraining) {
+		while((driver->getIsVideoFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning && !driver->demuxerDraining) {
 			if(av_read_frame(driver->formatContext, &packet) < 0) {
 				driver->logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
 				driver->demuxerDraining = true;
@@ -357,7 +414,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 			}
 		}
 
-		if(driver->demuxerDraining && driver->getIsFrameBufferEmpty()) {
+		if(driver->demuxerDraining && driver->getIsVideoFrameBufferEmpty()) {
 			driver->logger->verbose("Draining complete. Demuxer thread terminating...");
 			driver->demuxerRunning = false;
 		}

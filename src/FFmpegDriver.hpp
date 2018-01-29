@@ -15,7 +15,8 @@ extern "C" {
 
 namespace YerFace {
 
-#define YERFACE_INITIAL_BACKING_FRAMES 4
+#define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
+#define YERFACE_INITIAL_AUDIO_BACKING_FRAMES 10
 
 class VideoFrameBacking {
 public:
@@ -31,19 +32,34 @@ public:
 	Mat frameCV;
 };
 
+class AudioFrameBacking {
+public:
+	AVFrame *frame;
+	bool inUse;
+};
+
+class AudioFrame {
+public:
+	double timestamp;
+	AudioFrameBacking *frameBacking;
+};
+
 class FFmpegDriver {
 public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop = false);
 	~FFmpegDriver();
-	bool getIsFrameBufferEmpty(void);
+	bool getIsVideoFrameBufferEmpty(void);
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	VideoFrame getNextVideoFrame(void);
 	void releaseVideoFrame(VideoFrame videoFrame);
+	void releaseAudioFrame(AudioFrame audioFrame);
 private:
 	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
-	VideoFrameBacking *allocateNewFrameBacking(void);
+	VideoFrameBacking *allocateNewVideoFrameBacking(void);
+	AudioFrameBacking *getNextAvailableAudioFrameBacking(void);
+	AudioFrameBacking *allocateNewAudioFrameBacking(void);
 	bool decodePacket(const AVPacket *packet, int streamIndex);
 	void initializeDemuxerThread(void);
 	void destroyDemuxerThread(void);
@@ -81,7 +97,11 @@ private:
 
 	SDL_mutex *videoFrameBufferMutex;
 	list<VideoFrame> readyVideoFrameBuffer;
-	list<VideoFrameBacking *> allocatedFrameBackings;
+	list<VideoFrameBacking *> allocatedVideoFrameBackings;
+
+	SDL_mutex *audioFrameBufferMutex;
+	list<AudioFrame> readyAudioFrameBuffer;
+	list<AudioFrameBacking *> allocatedAudioFrameBackings;
 };
 
 }; //namespace YerFace
