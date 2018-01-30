@@ -2,6 +2,9 @@
 
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
+#include "FFmpegDriver.hpp"
+
+#include <list>
 
 namespace YerFace {
 
@@ -33,9 +36,20 @@ public:
 	bool opened;
 };
 
+class SDLAudioFrame {
+public:
+	uint8_t *buf;
+	int pos;
+	int audioSamples;
+	int audioBytes;
+	int bufferSize;
+	double timestamp;
+	bool inUse;
+};
+
 class SDLDriver {
 public:
-	SDLDriver(FrameDerivatives *myFrameDerivatives);
+	SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -55,10 +69,13 @@ public:
 	int incrementPreviewDebugDensity(void);
 	int getPreviewDebugDensity(void);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
+	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
 private:
 	void invokeAll(std::vector<function<void(void)>> callbacks);
+	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
 	FrameDerivatives *frameDerivatives;
+	FFmpegDriver *ffmpegDriver;
 
 	Logger *logger;
 
@@ -75,6 +92,10 @@ private:
 	SDL_Texture *previewTexture;
 
 	SDLAudioDevice audioDevice;
+
+	SDL_mutex *audioFramesMutex;
+	list<SDLAudioFrame *> audioFrameQueue;
+	list<SDLAudioFrame *> audioFramesAllocated;
 
 	SDL_mutex *onColorPickerCallbacksMutex;
 	std::vector<function<void(void)>> onColorPickerCallbacks;

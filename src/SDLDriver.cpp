@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
+SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -27,6 +27,9 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((previewDebugDensityMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((audioFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((onColorPickerCallbacksMutex = SDL_CreateMutex()) == NULL) {
@@ -46,6 +49,10 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
+	ffmpegDriver = myFFmpegDriver;
+	if(ffmpegDriver == NULL) {
+		throw invalid_argument("ffmpegDriver cannot be NULL");
+	}
 
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { //FIXME - make audio optional
 		logger->error("Unable to initialize SDL: %s", SDL_GetError());
@@ -56,7 +63,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	//FIXME - make audio optional
 	SDL_zero(audioDevice.desired);
 	audioDevice.desired.freq = 44100;
-	audioDevice.desired.format = AUDIO_S16LSB;
+	audioDevice.desired.format = AUDIO_S16SYS;
 	audioDevice.desired.channels = 2;
 	audioDevice.desired.samples = 4096;
 	audioDevice.desired.userdata = (void *)this;
@@ -70,6 +77,28 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives) {
 	logger->info("Opened Audio Output << %d hz, %d channels, %d-bit %s %s %s samples >>", (int)audioDevice.obtained.freq, (int)audioDevice.obtained.channels, (int)SDL_AUDIO_BITSIZE(audioDevice.obtained.format), SDL_AUDIO_ISSIGNED(audioDevice.obtained.format) ? "signed" : "unsigned", SDL_AUDIO_ISBIGENDIAN(audioDevice.obtained.format) ? "big-endian" : "little-endian", SDL_AUDIO_ISFLOAT(audioDevice.obtained.format) ? "float" : "int");
 	logger->info("silence value is %d", (int)audioDevice.obtained.silence);
 	SDL_PauseAudioDevice(audioDevice.deviceID, 0);
+
+	AudioFrameCallback audioFrameCallback;
+	audioFrameCallback.userdata = (void *)this;
+	if(audioDevice.obtained.channels == 1) {
+		audioFrameCallback.channelLayout = AV_CH_LAYOUT_MONO;
+	} else if(audioDevice.obtained.channels == 2) {
+		audioFrameCallback.channelLayout = AV_CH_LAYOUT_STEREO;
+	} else {
+		throw runtime_error("encountered unsupported audio channel layout");
+	}
+	if(audioDevice.obtained.format == AUDIO_U8) {
+		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_U8;
+	} else if(audioDevice.obtained.format == AUDIO_S16SYS) {
+		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S16;
+	} else if(audioDevice.obtained.format == AUDIO_S32SYS) {
+		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S32;
+	} else {
+		throw runtime_error("encountered unsupported audio sample format");
+	}
+	audioFrameCallback.sampleRate = audioDevice.obtained.freq;
+	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
+	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 
 	logger->debug("SDLDriver object constructed and ready to go!");
 }
@@ -314,9 +343,80 @@ void SDLDriver::invokeAll(std::vector<function<void(void)>> callbacks) {
 	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
 }
 
+SDLAudioFrame *SDLDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
+	YerFace_MutexLock(audioFramesMutex);
+	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
+		if(!audioFrame->inUse) {
+			if(audioFrame->bufferSize < desiredBufferSize) {
+				//Not using realloc because it does not support alignment.
+				av_freep(&audioFrame->buf);
+				if((audioFrame->buf = (uint8_t *)av_malloc(desiredBufferSize)) == NULL) {
+					throw runtime_error("unable to allocate memory for audio frame");
+				}
+				audioFrame->bufferSize = desiredBufferSize;
+			}
+			audioFrame->pos = 0;
+			audioFrame->inUse = true;
+			YerFace_MutexUnlock(audioFramesMutex);
+			return audioFrame;
+		}
+	}
+	SDLAudioFrame *audioFrame = new SDLAudioFrame();
+	if((audioFrame->buf = (uint8_t *)av_malloc(desiredBufferSize)) == NULL) {
+		throw runtime_error("unable to allocate memory for audio frame");
+	}
+	audioFrame->bufferSize = desiredBufferSize;
+	audioFrame->pos = 0;
+	audioFrame->inUse = true;
+	YerFace_MutexUnlock(audioFramesMutex);
+	return audioFrame;
+}
+
 void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	SDLDriver *self = (SDLDriver *)userdata;
-	memset(stream, self->audioDevice.obtained.silence, len);
+	YerFace_MutexLock(self->audioFramesMutex);
+	int streamPos = 0;
+	// self->logger->verbose("Audio Callback Fired");
+	while(len - streamPos > 0) {
+		int remaining = len - streamPos;
+		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d", len, streamPos, remaining);
+		// FIXME - we need to align our frames to the main video processing loop, so audio frames are previewed within the correct time span
+		if(self->audioFrameQueue.size() > 0) {
+			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
+			int consumeBytes = remaining;
+			int frameRemainingBytes = self->audioFrameQueue.back()->audioBytes - self->audioFrameQueue.back()->pos;
+			if(frameRemainingBytes < consumeBytes) {
+				consumeBytes = frameRemainingBytes;
+				// self->logger->verbose("This frame won't fill our whole buffer...");
+			}
+			memcpy(stream + streamPos, self->audioFrameQueue.back()->buf + self->audioFrameQueue.back()->pos, consumeBytes);
+			self->audioFrameQueue.back()->pos += consumeBytes;
+			if(self->audioFrameQueue.back()->pos >= self->audioFrameQueue.back()->audioBytes) {
+				// self->logger->verbose("Popped audio frame off the back of the queue.");
+				self->audioFrameQueue.back()->inUse = false;
+				self->audioFrameQueue.pop_back();
+			}
+			streamPos += consumeBytes;
+		} else {
+			// self->logger->verbose("Filling the rest of the buffer with silence.");
+			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
+			streamPos += remaining;
+		}
+	}
+	YerFace_MutexUnlock(self->audioFramesMutex);
+}
+
+void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
+	SDLDriver *self = (SDLDriver *)userdata;
+	// self->logger->verbose("AudioFrameCallback fired!");
+	YerFace_MutexLock(self->audioFramesMutex);
+	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
+	memcpy(audioFrame->buf, buf, audioBytes);
+	audioFrame->audioSamples = audioSamples;
+	audioFrame->audioBytes = audioBytes;
+	audioFrame->timestamp = timestamp;
+	self->audioFrameQueue.push_front(audioFrame);
+	YerFace_MutexUnlock(self->audioFramesMutex);
 }
 
 }; //namespace YerFace

@@ -90,15 +90,6 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("Failed creating video frame buffer mutex!");
 	}
 
-	if(audioStream != NULL) {
-		for(int i = 0; i < YERFACE_INITIAL_AUDIO_BACKING_FRAMES; i++) {
-			allocateNewAudioFrameBacking();
-		}
-	}
-	if((audioFrameBufferMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating audio frame buffer mutex!");
-	}
-
 	initializeDemuxerThread();
 
 	logger->debug("FFmpegDriver object constructed and ready to go! Frame Drop is %s.", frameDrop ? "ENABLED" : "DISABLED");
@@ -116,6 +107,16 @@ FFmpegDriver::~FFmpegDriver() {
 		av_frame_free(&backing->frameBGR);
 		av_free(backing->buffer);
 		delete backing;
+	}
+	for(AudioFrameHandler *handler : audioFrameHandlers) {
+		if(handler->resampler.bufferArray != NULL) {
+			av_freep(&handler->resampler.bufferArray[0]);
+			av_freep(&handler->resampler.bufferArray);
+		}
+		if(handler->resampler.swrContext != NULL) {
+			swr_free(&handler->resampler.swrContext);
+		}
+		delete handler;
 	}
 	delete logger;
 }
@@ -156,25 +157,6 @@ void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderCo
 	*streamIndex = myStreamIndex;
 }
 
-bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
-	YerFace_MutexLock(demuxerMutex);
-	while(getIsVideoFrameBufferEmpty()) {
-		if(!demuxerRunning) {
-			YerFace_MutexUnlock(demuxerMutex);
-			return false;
-		}
-
-		//Wait for the demuxer thread to generate more frames. In practice I have never actually seen this happen.
-		YerFace_MutexUnlock(demuxerMutex);
-		logger->warn("======== Caller is trapped in an expensive polling loop! ========");
-		SDL_Delay(50);
-		YerFace_MutexLock(demuxerMutex);
-	}
-	*videoFrame = getNextVideoFrame();
-	YerFace_MutexUnlock(demuxerMutex);
-	return true;
-}
-
 bool FFmpegDriver::getIsVideoFrameBufferEmpty(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	bool status = (readyVideoFrameBuffer.size() < 1);
@@ -209,17 +191,42 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	return result;
 }
 
+bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
+	YerFace_MutexLock(demuxerMutex);
+	while(getIsVideoFrameBufferEmpty()) {
+		if(!demuxerRunning) {
+			YerFace_MutexUnlock(demuxerMutex);
+			return false;
+		}
+
+		//Wait for the demuxer thread to generate more frames. In practice I have never actually seen this happen.
+		YerFace_MutexUnlock(demuxerMutex);
+		logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
+		SDL_Delay(50);
+		YerFace_MutexLock(demuxerMutex);
+	}
+	*videoFrame = getNextVideoFrame();
+	YerFace_MutexUnlock(demuxerMutex);
+	return true;
+}
+
 void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	videoFrame.frameBacking->inUse = false;
 	YerFace_MutexUnlock(videoFrameBufferMutex);
 }
 
-void FFmpegDriver::releaseAudioFrame(AudioFrame audioFrame) {
-	YerFace_MutexLock(audioFrameBufferMutex);
-	av_frame_unref(audioFrame.frameBacking->frame);
-	audioFrame.frameBacking->inUse = false;
-	YerFace_MutexUnlock(audioFrameBufferMutex);
+void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallback) {
+	YerFace_MutexLock(demuxerMutex);
+
+	AudioFrameHandler *handler = new AudioFrameHandler();
+	handler->callback = audioFrameCallback;
+	handler->resampler.swrContext = NULL;
+	handler->resampler.bufferArray = NULL;
+	handler->resampler.bufferSamples = 0;
+	audioFrameHandlers.push_back(handler);
+
+	YerFace_MutexUnlock(demuxerMutex);
 }
 
 void FFmpegDriver::logAVErr(String msg, int err) {
@@ -264,32 +271,6 @@ VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
 	return backing;
 }
 
-AudioFrameBacking *FFmpegDriver::getNextAvailableAudioFrameBacking(void) {
-	YerFace_MutexLock(audioFrameBufferMutex);
-	for(AudioFrameBacking *backing : allocatedAudioFrameBackings) {
-		if(!backing->inUse) {
-			backing->inUse = true;
-			YerFace_MutexUnlock(audioFrameBufferMutex);
-			return backing;
-		}
-	}
-	logger->warn("Out of spare frames in the audio frame buffer! Allocating a new one.");
-	AudioFrameBacking *newBacking = allocateNewAudioFrameBacking();
-	newBacking->inUse = true;
-	YerFace_MutexUnlock(audioFrameBufferMutex);
-	return newBacking;
-}
-
-AudioFrameBacking *FFmpegDriver::allocateNewAudioFrameBacking(void) {
-	AudioFrameBacking *backing = new AudioFrameBacking();
-	backing->inUse = false;
-	if(!(backing->frame = av_frame_alloc())) {
-		throw runtime_error("failed allocating backing audio frame");
-	}
-	allocatedAudioFrameBackings.push_front(backing);
-	return backing;
-}
-
 bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 	int ret;
 	if(streamIndex == videoStreamIndex) {
@@ -325,25 +306,71 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			return false;
 		}
 
-		int audioFrameReceived = -1;
-		do {
-			AudioFrameBacking *backing = getNextAvailableAudioFrameBacking();
-			audioFrameReceived = avcodec_receive_frame(audioDecoderContext, backing->frame);
-			if(audioFrameReceived != 0) {
-				YerFace_MutexLock(audioFrameBufferMutex);
-				backing->inUse = false;
-				YerFace_MutexUnlock(audioFrameBufferMutex);
-			} else {
-				logger->verbose("Received decoded audio frame with timestamp %.04lf (%ld units)!", backing->frame->pts * audioStreamTimeBase, backing->frame->pts);
-				AudioFrame audioFrame;
-				audioFrame.timestamp = (double)backing->frame->pts * audioStreamTimeBase;
-				audioFrame.frameBacking = backing;
-
-				YerFace_MutexLock(audioFrameBufferMutex);
-				readyAudioFrameBuffer.push_front(audioFrame);
-				YerFace_MutexUnlock(audioFrameBufferMutex);
+		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
+			double frameTimestamp = frame->pts * audioStreamTimeBase;
+			int frameNumSamples = frame->nb_samples * frame->channels;
+			logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
+			logger->verbose("Audio Stream channels: %d, Frame channels: %d", audioStream->codecpar->channels, frame->channels);
+			if(audioFrameHandlers.size() < 1) {
+				//FIXME - This is a blatant race condition. We should be able to hold demuxing until all handlers are registered.
+				logger->error("Decoded an audio frame, but nobody was registered to hear it!");
 			}
-		} while(audioFrameReceived == 0);
+			for(AudioFrameHandler *handler : audioFrameHandlers) {
+				if(handler->resampler.swrContext == NULL) {
+					int inputChannelLayout = audioStream->codecpar->channel_layout;
+					if(inputChannelLayout == 0) {
+						if(audioStream->codecpar->channels == 1) {
+							inputChannelLayout = AV_CH_LAYOUT_MONO;
+						} else if(audioStream->codecpar->channels == 2) {
+							inputChannelLayout = AV_CH_LAYOUT_STEREO;
+						} else {
+							throw runtime_error("Unsupported number of channels and/or channel layout!");
+						}
+					}
+					handler->resampler.swrContext = swr_alloc_set_opts(NULL, handler->callback.channelLayout, handler->callback.sampleFormat, handler->callback.sampleRate, inputChannelLayout, (enum AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->sample_rate, 0, NULL);
+					if(handler->resampler.swrContext == NULL) {
+						throw runtime_error("Failed generating a swr context!");
+					}
+					if(swr_init(handler->resampler.swrContext) < 0) {
+						throw runtime_error("Failed initializing swr context!");
+					}
+					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->callback.channelLayout);
+				}
+				int expectedOutputSamples = swr_get_out_samples(handler->resampler.swrContext, frameNumSamples);
+				if(expectedOutputSamples < 0) {
+					throw runtime_error("Internal error in FFmpeg software resampler!");
+					return false;
+				}
+				if(handler->resampler.bufferArray == NULL || handler->resampler.bufferSamples < expectedOutputSamples) {
+					handler->resampler.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, audioStream->codecpar->sample_rate) + frameNumSamples, handler->callback.sampleRate, audioStream->codecpar->sample_rate, AV_ROUND_UP);
+					handler->resampler.bufferSamples += YERFACE_RESAMPLE_BUFFER_HEADROOM;
+
+					if(handler->resampler.bufferArray != NULL) {
+						av_freep(&handler->resampler.bufferArray[0]);
+						av_freep(&handler->resampler.bufferArray);
+					}
+
+					if(av_samples_alloc_array_and_samples(&handler->resampler.bufferArray, &handler->resampler.bufferLineSize, handler->resampler.numChannels, handler->resampler.bufferSamples, handler->callback.sampleFormat, 1) < 0) {
+						throw runtime_error("Failed allocating audio buffer!");
+					}
+
+					logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
+				}
+
+				int audioSamples;
+				if((audioSamples = swr_convert(handler->resampler.swrContext, handler->resampler.bufferArray, handler->resampler.bufferSamples, (const uint8_t **)frame->data, frame->nb_samples)) < 0) {
+					throw runtime_error("Failed running swr_convert() for audio resampling");
+				}
+
+				int audioBytes;
+				if((audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioSamples, handler->callback.sampleFormat, 0)) < 0) {
+					throw runtime_error("Failed calculating output buffer size");
+				}
+				
+				handler->callback.callback(handler->callback.userdata, handler->resampler.bufferArray[0], audioSamples, audioBytes, handler->resampler.bufferLineSize, frameTimestamp);
+			}
+			av_frame_unref(frame);
+		}
 	}
 
 	return true;

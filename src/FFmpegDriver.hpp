@@ -11,12 +11,16 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavdevice/avdevice.h>
 #include <libswscale/swscale.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/samplefmt.h>
+#include <libswresample/swresample.h>
 }
 
 namespace YerFace {
 
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
 #define YERFACE_INITIAL_AUDIO_BACKING_FRAMES 10
+#define YERFACE_RESAMPLE_BUFFER_HEADROOM 8192
 
 class VideoFrameBacking {
 public:
@@ -32,16 +36,27 @@ public:
 	Mat frameCV;
 };
 
-class AudioFrameBacking {
+class AudioFrameCallback {
 public:
-	AVFrame *frame;
-	bool inUse;
+	int64_t channelLayout;
+	enum AVSampleFormat sampleFormat;
+	int sampleRate;
+	void *userdata;
+	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp)> callback;
 };
 
-class AudioFrame {
+class AudioFrameResampler {
 public:
-	double timestamp;
-	AudioFrameBacking *frameBacking;
+	int numChannels;
+	SwrContext *swrContext;
+	uint8_t **bufferArray;
+	int bufferSamples, bufferLineSize;
+};
+
+class AudioFrameHandler {
+public:
+	AudioFrameResampler resampler;
+	AudioFrameCallback callback;
 };
 
 class FFmpegDriver {
@@ -49,17 +64,15 @@ public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop = false);
 	~FFmpegDriver();
 	bool getIsVideoFrameBufferEmpty(void);
-	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	VideoFrame getNextVideoFrame(void);
+	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	void releaseVideoFrame(VideoFrame videoFrame);
-	void releaseAudioFrame(AudioFrame audioFrame);
+	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
 private:
 	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
-	AudioFrameBacking *getNextAvailableAudioFrameBacking(void);
-	AudioFrameBacking *allocateNewAudioFrameBacking(void);
 	bool decodePacket(const AVPacket *packet, int streamIndex);
 	void initializeDemuxerThread(void);
 	void destroyDemuxerThread(void);
@@ -99,9 +112,7 @@ private:
 	list<VideoFrame> readyVideoFrameBuffer;
 	list<VideoFrameBacking *> allocatedVideoFrameBackings;
 
-	SDL_mutex *audioFrameBufferMutex;
-	list<AudioFrame> readyAudioFrameBuffer;
-	list<AudioFrameBacking *> allocatedAudioFrameBackings;
+	std::vector<AudioFrameHandler *> audioFrameHandlers;
 };
 
 }; //namespace YerFace

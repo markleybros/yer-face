@@ -96,8 +96,8 @@ int main(int argc, const char** argv) {
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
-	sdlDriver = new SDLDriver(frameDerivatives);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
+	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver);
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
