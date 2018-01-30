@@ -118,7 +118,14 @@ SDLDriver::~SDLDriver() {
 	SDL_DestroyMutex(isPausedMutex);
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	SDL_DestroyMutex(previewDebugDensityMutex);
+	SDL_DestroyMutex(audioFramesMutex);
 	SDL_DestroyMutex(onColorPickerCallbacksMutex);
+	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
+		if(audioFrame->buf != NULL) {
+			av_freep(&audioFrame->buf);
+		}
+		delete audioFrame;
+	}
 	delete logger;
 }
 
@@ -348,7 +355,7 @@ SDLAudioFrame *SDLDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(!audioFrame->inUse) {
 			if(audioFrame->bufferSize < desiredBufferSize) {
-				//Not using realloc because it does not support alignment.
+				//Not using realloc because it does not support guaranteed buffer alignment.
 				av_freep(&audioFrame->buf);
 				if((audioFrame->buf = (uint8_t *)av_malloc(desiredBufferSize)) == NULL) {
 					throw runtime_error("unable to allocate memory for audio frame");
