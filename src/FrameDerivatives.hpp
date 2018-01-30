@@ -3,6 +3,8 @@
 #include "Metrics.hpp"
 #include "Logger.hpp"
 
+#include <list>
+
 #include "SDL.h"
 
 #include "opencv2/imgproc.hpp"
@@ -11,6 +13,15 @@ using namespace std;
 using namespace cv;
 
 namespace YerFace {
+
+#define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
+
+class FrameTimestamps {
+public:
+	double startTimestamp;
+	double estimatedEndTimestamp;
+	bool set;
+};
 
 class Metrics;
 
@@ -27,10 +38,13 @@ public:
 	void resetCompletedPreviewFrame(void);
 	double getClassificationScaleFactor(void);
 	Size getWorkingFrameSize(void);
-	double getWorkingFrameTimestamp(void);
+	FrameTimestamps getWorkingFrameTimestamps(void);
+	FrameTimestamps getCompletedFrameTimestamps(void);
 	bool getCompletedFrameSet(void);
 
 private:
+	double calculateEstimatedEndTimestamp(double startTimestamp);
+	
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;
@@ -43,8 +57,10 @@ private:
 	bool workingPreviewFrameSet, completedPreviewFrameSet;
 	Size workingFrameSize;
 	bool workingFrameSizeSet;
-	double workingFrameTimestamp;
-	bool workingFrameTimestampSet;
+	FrameTimestamps workingFrameTimestamps;
+	FrameTimestamps completedFrameTimestamps;
+
+	std::list<double> frameStartTimes;
 };
 
 }; //namespace YerFace

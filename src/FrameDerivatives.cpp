@@ -26,6 +26,8 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	completedPreviewFrameSet = false;
 	workingFrameSizeSet = false;
 	classificationScaleFactor = myClassificationScaleFactor;
+	workingFrameTimestamps.set = false;
+	completedFrameTimestamps.set = false;
 	metrics = new Metrics("FrameDerivatives", this);
 	logger->debug("FrameDerivatives constructed and ready to go!");
 }
@@ -47,8 +49,10 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
 	workingFrameSize = frameSize;
 	workingFrameSizeSet = true;
 
-	workingFrameTimestamp = timestamp;
-	workingFrameTimestampSet = true;
+	workingFrameTimestamps.startTimestamp = timestamp;
+	workingFrameTimestamps.estimatedEndTimestamp = calculateEstimatedEndTimestamp(timestamp);
+	workingFrameTimestamps.set = true;
+	// logger->verbose("Set Working Frame Timestamps... Start: %.04lf, Estimated End: %.04lf", workingFrameTimestamps.startTimestamp, workingFrameTimestamps.estimatedEndTimestamp);
 
 	if(classificationBoundingBox > 0) {
 		if(frameSize.width >= frameSize.height) {
@@ -65,7 +69,6 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
 		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, classificationFrame.size().width, classificationFrame.size().height);
 		reportedScale = true;
 	}
-
 
 	workingFrameSet = true;
 	workingPreviewFrameSet = false;
@@ -94,6 +97,7 @@ void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 	completedFrame = workingFrame;
 	completedFrameSet = true;
 	workingFrameSet = false;
+	completedFrameTimestamps = workingFrameTimestamps;
 	if(workingPreviewFrameSet) {
 		completedPreviewFrameSource = workingPreviewFrame;
 	} else {
@@ -169,15 +173,26 @@ Size FrameDerivatives::getWorkingFrameSize(void) {
 	return size;
 }
 
-double FrameDerivatives::getWorkingFrameTimestamp(void) {
+FrameTimestamps FrameDerivatives::getWorkingFrameTimestamps(void) {
 	YerFace_MutexLock(myMutex);
-	if(!workingFrameTimestampSet) {
+	if(!workingFrameTimestamps.set) {
 		YerFace_MutexUnlock(myMutex);
-		throw runtime_error("getWorkingFrameTimestamp() called, but no cached working frame timestamp");
+		throw runtime_error("getWorkingFrameTimestamps() called, but no working frame timestamps available");
 	}
-	double timestamp = workingFrameTimestamp;
+	FrameTimestamps timestamps = workingFrameTimestamps;
 	YerFace_MutexUnlock(myMutex);
-	return timestamp;
+	return timestamps;
+}
+
+FrameTimestamps FrameDerivatives::getCompletedFrameTimestamps(void) {
+	YerFace_MutexLock(myMutex);
+	if(!completedFrameTimestamps.set) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getCompletedFrameTimestamps() called, but no timestamps set");
+	}
+	FrameTimestamps timestamps = completedFrameTimestamps;
+	YerFace_MutexUnlock(myMutex);
+	return timestamps;
 }
 
 bool FrameDerivatives::getCompletedFrameSet(void) {
@@ -187,5 +202,26 @@ bool FrameDerivatives::getCompletedFrameSet(void) {
 	return status;
 }
 
+double FrameDerivatives::calculateEstimatedEndTimestamp(double startTimestamp) {
+	frameStartTimes.push_back(startTimestamp);
+	while(frameStartTimes.size() > YERFACE_FRAME_DURATION_ESTIMATE_BUFFER) {
+		frameStartTimes.pop_front();
+	}
+	int count = 0, deltaCount = 0;
+	double lastTimestamp, delta, accum = 0.0;
+	for(double timestamp : frameStartTimes) {
+		if(count > 0) {
+			delta = (timestamp - lastTimestamp);
+			accum += delta;
+			deltaCount++;
+		}
+		lastTimestamp = timestamp;
+		count++;
+	}
+	if(deltaCount == 0) {
+		return startTimestamp;
+	}
+	return startTimestamp + (accum / (double)deltaCount);
+}
 
 }; //namespace YerFace

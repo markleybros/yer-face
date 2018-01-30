@@ -300,7 +300,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			av_frame_unref(frame);
 		}
 	} else if(audioStream != NULL && streamIndex == audioStreamIndex) {
-		logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
+		// logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
 		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
 			return false;
@@ -309,8 +309,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
 			double frameTimestamp = frame->pts * audioStreamTimeBase;
 			int frameNumSamples = frame->nb_samples * frame->channels;
-			logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
-			logger->verbose("Audio Stream channels: %d, Frame channels: %d", audioStream->codecpar->channels, frame->channels);
+			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
 			if(audioFrameHandlers.size() < 1) {
 				//FIXME - This is a blatant race condition. We should be able to hold demuxing until all handlers are registered.
 				logger->error("Decoded an audio frame, but nobody was registered to hear it!");

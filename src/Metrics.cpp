@@ -48,7 +48,8 @@ void Metrics::endClock(void) {
 	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount() / (double)getTickFrequency();
 
-	double frameTimestamp = frameDerivatives->getWorkingFrameTimestamp();
+	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	double frameTimestamp = frameTimestamps.startTimestamp;
 
 	entries.front().runTime = now - entries.front().startTime;
 	entries.front().frameTimestamp = frameTimestamp;

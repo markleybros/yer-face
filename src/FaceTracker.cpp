@@ -365,7 +365,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		doInitializeCameraModel();
 	}
 
-	double frameTimestamp = frameDerivatives->getWorkingFrameTimestamp();
+	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	double frameTimestamp = frameTimestamps.startTimestamp;
 	FacialPose tempPose;
 	tempPose.timestamp = frameTimestamp;
 	tempPose.set = false;
