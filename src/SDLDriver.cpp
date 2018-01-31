@@ -384,11 +384,23 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	YerFace_MutexLock(self->audioFramesMutex);
 	int streamPos = 0;
 	// self->logger->verbose("Audio Callback Fired");
+	FrameTimestamps frameTimestamps;
+	try {
+		frameTimestamps = self->frameDerivatives->getCompletedFrameTimestamps();
+	} catch(exception e) {
+		frameTimestamps.startTimestamp = 0.0;
+		frameTimestamps.estimatedEndTimestamp = 0.0;
+	}
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
 		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d", len, streamPos, remaining);
-		// FIXME - we need to align our frames to the main video processing loop, so audio frames are previewed within the correct time span
 		if(self->audioFrameQueue.size() > 0) {
+			while(self->audioFrameQueue.back()->timestamp < frameTimestamps.startTimestamp) {
+				self->audioFrameQueue.back()->inUse = false;
+				self->audioFrameQueue.pop_back();
+			}
+		}
+		if(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
 			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
 			int consumeBytes = remaining;
 			int frameRemainingBytes = self->audioFrameQueue.back()->audioBytes - self->audioFrameQueue.back()->pos;
