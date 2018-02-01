@@ -12,6 +12,8 @@ set(CMAKE_CXX_FLAGS "-Wall ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
+set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/lib/pkgconfig:/opt/local/lib/pkgconfig:/sw/lib/pkgconfig")
+
 option(USE_CUDA "Use CUDA, default to true" 1)
 
 set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
@@ -50,14 +52,17 @@ find_package( OpenCV 3.3 REQUIRED ${_OPENCV_REQUIRED_MODULES} )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 find_package( FFmpeg REQUIRED )
+find_package( PocketSphinx REQUIRED )
 
-string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES)
+string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES )
 
-include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIR} ${POCKETSPHINX_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR} )
+
+link_directories(${POCKETSPHINX_LIBRARY_DIRS})
 
 add_executable( yer-face ${YERFACE_MODULES} )
 
-target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} ${FFMPEG_LIBSWRESAMPLE} )
+target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} ${FFMPEG_LIBSWRESAMPLE} ${POCKETSPHINX_LIBRARIES} )
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 
