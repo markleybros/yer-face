@@ -66,7 +66,6 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 
 	audioDevice.opened = false;
 	if(audioPreview) {
-		//FIXME - make audio optional
 		SDL_zero(audioDevice.desired);
 		audioDevice.desired.freq = 44100;
 		audioDevice.desired.format = AUDIO_S16SYS;
