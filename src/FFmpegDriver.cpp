@@ -311,7 +311,6 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			int frameNumSamples = frame->nb_samples * frame->channels;
 			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
 			if(audioFrameHandlers.size() < 1) {
-				//FIXME - This is a blatant race condition. We should be able to hold demuxing until all handlers are registered.
 				logger->error("Decoded an audio frame, but nobody was registered to hear it!");
 			}
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
@@ -378,6 +377,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 void FFmpegDriver::initializeDemuxerThread(void) {
 	demuxerRunning = true;
 	demuxerDraining = false;
+	demuxerThread = NULL;
 	
 	if((demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
@@ -385,9 +385,19 @@ void FFmpegDriver::initializeDemuxerThread(void) {
 	if((demuxerCond = SDL_CreateCond()) == NULL) {
 		throw runtime_error("Failed creating condition!");
 	}
+}
+
+void FFmpegDriver::rollDemuxerThread(void) {
+	YerFace_MutexLock(demuxerMutex);
+	if(demuxerThread != NULL) {
+		YerFace_MutexUnlock(demuxerMutex);
+		throw runtime_error("rollDemuxerThread was called, but demuxer was already set rolling!");
+	}
 	if((demuxerThread = SDL_CreateThread(FFmpegDriver::runDemuxerLoop, "DemuxerLoop", (void *)this)) == NULL) {
+		YerFace_MutexUnlock(demuxerMutex);
 		throw runtime_error("Failed starting thread!");
 	}
+	YerFace_MutexUnlock(demuxerMutex);
 }
 
 void FFmpegDriver::destroyDemuxerThread(void) {

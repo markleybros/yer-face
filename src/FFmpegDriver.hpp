@@ -63,6 +63,7 @@ class FFmpegDriver {
 public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop = false);
 	~FFmpegDriver();
+	void rollDemuxerThread(void);
 	bool getIsVideoFrameBufferEmpty(void);
 	VideoFrame getNextVideoFrame(void);
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
