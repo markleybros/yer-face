@@ -37,6 +37,7 @@ String dlibFaceLandmarks;
 String dlibFaceDetector;
 String previewImgSeq;
 bool frameDrop;
+bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 SDLWindowRenderer sdlWindowRenderer;
@@ -73,7 +74,8 @@ int main(int argc, const char** argv) {
 		"{dlibFaceDetector|data/dlib-models/mmod_human_face_detector.dat|Model for dlib's DNN facial landmark detector or empty string (\"\") to default to the older HOG detector.}"
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
-		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}");
+		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
+		"{audioPreview||If true, will preview processed audio out the computer's sound device.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -93,11 +95,12 @@ int main(int argc, const char** argv) {
 	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
 	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
 	frameDrop = parser.get<bool>("frameDrop");
+	audioPreview = parser.get<bool>("audioPreview");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
-	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver);
+	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview);
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);

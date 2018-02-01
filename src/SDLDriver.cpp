@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
+SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -53,52 +53,59 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	if(ffmpegDriver == NULL) {
 		throw invalid_argument("ffmpegDriver cannot be NULL");
 	}
+	audioPreview = myAudioPreview;
 
-	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) { //FIXME - make audio optional
+	Uint32 sdlInitFlags = SDL_INIT_VIDEO;
+	if(audioPreview) {
+		sdlInitFlags |= SDL_INIT_AUDIO;
+	}
+	if(SDL_Init(sdlInitFlags) != 0) {
 		logger->error("Unable to initialize SDL: %s", SDL_GetError());
 	}
 	atexit(SDL_Quit);
 
 	audioDevice.opened = false;
-	//FIXME - make audio optional
-	SDL_zero(audioDevice.desired);
-	audioDevice.desired.freq = 44100;
-	audioDevice.desired.format = AUDIO_S16SYS;
-	audioDevice.desired.channels = 2;
-	audioDevice.desired.samples = 4096;
-	audioDevice.desired.userdata = (void *)this;
-	audioDevice.desired.callback = SDLDriver::SDLAudioCallback;
-	audioDevice.deviceID = SDL_OpenAudioDevice(NULL, 0, &audioDevice.desired, &audioDevice.obtained, SDL_AUDIO_ALLOW_ANY_CHANGE);
-	if(audioDevice.deviceID == 0) {
-		logger->error("SDL error opening audio device: %s", SDL_GetError());
-		throw runtime_error("failed opening audio device!");
-	}
-	audioDevice.opened = true;
-	logger->info("Opened Audio Output << %d hz, %d channels, %d-bit %s %s %s samples >>", (int)audioDevice.obtained.freq, (int)audioDevice.obtained.channels, (int)SDL_AUDIO_BITSIZE(audioDevice.obtained.format), SDL_AUDIO_ISSIGNED(audioDevice.obtained.format) ? "signed" : "unsigned", SDL_AUDIO_ISBIGENDIAN(audioDevice.obtained.format) ? "big-endian" : "little-endian", SDL_AUDIO_ISFLOAT(audioDevice.obtained.format) ? "float" : "int");
-	logger->info("silence value is %d", (int)audioDevice.obtained.silence);
-	SDL_PauseAudioDevice(audioDevice.deviceID, 0);
+	if(audioPreview) {
+		//FIXME - make audio optional
+		SDL_zero(audioDevice.desired);
+		audioDevice.desired.freq = 44100;
+		audioDevice.desired.format = AUDIO_S16SYS;
+		audioDevice.desired.channels = 2;
+		audioDevice.desired.samples = 4096;
+		audioDevice.desired.userdata = (void *)this;
+		audioDevice.desired.callback = SDLDriver::SDLAudioCallback;
+		audioDevice.deviceID = SDL_OpenAudioDevice(NULL, 0, &audioDevice.desired, &audioDevice.obtained, SDL_AUDIO_ALLOW_ANY_CHANGE);
+		if(audioDevice.deviceID == 0) {
+			logger->error("SDL error opening audio device: %s", SDL_GetError());
+			throw runtime_error("failed opening audio device!");
+		}
+		audioDevice.opened = true;
+		logger->info("Opened Audio Output << %d hz, %d channels, %d-bit %s %s %s samples >>", (int)audioDevice.obtained.freq, (int)audioDevice.obtained.channels, (int)SDL_AUDIO_BITSIZE(audioDevice.obtained.format), SDL_AUDIO_ISSIGNED(audioDevice.obtained.format) ? "signed" : "unsigned", SDL_AUDIO_ISBIGENDIAN(audioDevice.obtained.format) ? "big-endian" : "little-endian", SDL_AUDIO_ISFLOAT(audioDevice.obtained.format) ? "float" : "int");
+		logger->info("silence value is %d", (int)audioDevice.obtained.silence);
+		SDL_PauseAudioDevice(audioDevice.deviceID, 0);
 
-	AudioFrameCallback audioFrameCallback;
-	audioFrameCallback.userdata = (void *)this;
-	if(audioDevice.obtained.channels == 1) {
-		audioFrameCallback.channelLayout = AV_CH_LAYOUT_MONO;
-	} else if(audioDevice.obtained.channels == 2) {
-		audioFrameCallback.channelLayout = AV_CH_LAYOUT_STEREO;
-	} else {
-		throw runtime_error("encountered unsupported audio channel layout");
+		AudioFrameCallback audioFrameCallback;
+		audioFrameCallback.userdata = (void *)this;
+		if(audioDevice.obtained.channels == 1) {
+			audioFrameCallback.channelLayout = AV_CH_LAYOUT_MONO;
+		} else if(audioDevice.obtained.channels == 2) {
+			audioFrameCallback.channelLayout = AV_CH_LAYOUT_STEREO;
+		} else {
+			throw runtime_error("encountered unsupported audio channel layout");
+		}
+		if(audioDevice.obtained.format == AUDIO_U8) {
+			audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_U8;
+		} else if(audioDevice.obtained.format == AUDIO_S16SYS) {
+			audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S16;
+		} else if(audioDevice.obtained.format == AUDIO_S32SYS) {
+			audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S32;
+		} else {
+			throw runtime_error("encountered unsupported audio sample format");
+		}
+		audioFrameCallback.sampleRate = audioDevice.obtained.freq;
+		audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
+		ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 	}
-	if(audioDevice.obtained.format == AUDIO_U8) {
-		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_U8;
-	} else if(audioDevice.obtained.format == AUDIO_S16SYS) {
-		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S16;
-	} else if(audioDevice.obtained.format == AUDIO_S32SYS) {
-		audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S32;
-	} else {
-		throw runtime_error("encountered unsupported audio sample format");
-	}
-	audioFrameCallback.sampleRate = audioDevice.obtained.freq;
-	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
-	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 
 	logger->debug("SDLDriver object constructed and ready to go!");
 }

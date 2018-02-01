@@ -49,7 +49,7 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
+	SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -76,6 +76,7 @@ private:
 
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
+	bool audioPreview;
 
 	Logger *logger;
 
