@@ -36,6 +36,8 @@ String captureFile;
 String dlibFaceLandmarks;
 String dlibFaceDetector;
 String previewImgSeq;
+String hiddenMarkovModel;
+String allPhoneLM;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
@@ -75,7 +77,9 @@ int main(int argc, const char** argv) {
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
-		"{audioPreview||If true, will preview processed audio out the computer's sound device.}");
+		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
+		"{hiddenMarkovModel|data/sphinx-models/en-us/en-us|Hidden Markov Model used by PocketSphinx for lip synchronization.}"
+		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}");
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -94,13 +98,15 @@ int main(int argc, const char** argv) {
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
 	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
+	hiddenMarkovModel = parser.get<string>("hiddenMarkovModel");
+	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
-	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview);
+	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);

@@ -475,4 +475,8 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	return 0;
 }
 
+bool FFmpegDriver::getIsAudioInputPresent(void) {
+	return (audioStream != NULL);
+}
+
 }; //namespace YerFace
