@@ -43,6 +43,7 @@ bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 SDLWindowRenderer sdlWindowRenderer;
+bool windowInitializationFailed;
 SDL_Thread *workerThread;
 
 Logger *logger;
@@ -114,6 +115,7 @@ int main(int argc, const char** argv) {
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
+	windowInitializationFailed = false;
 
 	//Create locks.
 	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
@@ -132,19 +134,27 @@ int main(int argc, const char** argv) {
 	while(sdlDriver->getIsRunning()) {
 		SDL_Delay(10);
 
-		if(sdlWindowRenderer.window == NULL) {
+		if(sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
 			if(!frameSizeValid) {
 				YerFace_MutexUnlock(frameSizeMutex);
 				continue;
 			}
-			sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+			try {
+				sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+			} catch(exception &e) {
+				windowInitializationFailed = true;
+				logger->error("Uh oh, failed to create a preview window! Got exception: %s", e.what());
+				logger->warn("Continuing despite the lack of a preview window.");
+			}
 			YerFace_MutexUnlock(frameSizeMutex);
 		}
 
 		if(frameDerivatives->getCompletedFrameSet()) {
 			doRenderPreviewFrame();
-			sdlDriver->doRenderPreviewFrame();
+			if(sdlWindowRenderer.window != NULL) {
+				sdlDriver->doRenderPreviewFrame();
+			}
 		}
 
 		sdlDriver->doHandleEvents();

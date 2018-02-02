@@ -393,7 +393,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	FrameTimestamps frameTimestamps;
 	try {
 		frameTimestamps = self->frameDerivatives->getCompletedFrameTimestamps();
-	} catch(exception e) {
+	} catch(exception &e) {
 		frameTimestamps.startTimestamp = 0.0;
 		frameTimestamps.estimatedEndTimestamp = 0.0;
 	}
