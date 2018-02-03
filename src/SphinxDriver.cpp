@@ -25,7 +25,10 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 	timestampOffsetSet = false;
 	utteranceRestarted = false;
 	inSpeech = false;
-	if((myMutex = SDL_CreateMutex()) == NULL) {
+	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	
@@ -39,6 +42,7 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 		throw runtime_error("Failed to create PocketSphinx speech recognizer!");
 	}
 	
+	utteranceIndex = 1;
 	if(ps_start_utt(pocketSphinx) != 0) {
 		throw runtime_error("Failed to start PocketSphinx utterance");
 	}
@@ -62,13 +66,14 @@ SphinxDriver::~SphinxDriver() {
 	destroyRecognitionThread();
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
-	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
 	delete logger;
 }
 
 void SphinxDriver::initializeRecognitionThread(void) {
 	recognizerRunning = true;
-	if((myCond = SDL_CreateCond()) == NULL) {
+	if((myWrkCond = SDL_CreateCond()) == NULL) {
 		throw runtime_error("Failed creating condition!");
 	}
 	if((recognizerThread = SDL_CreateThread(SphinxDriver::runRecognitionLoop, "SphinxLoop", (void *)this)) == NULL) {
@@ -77,23 +82,100 @@ void SphinxDriver::initializeRecognitionThread(void) {
 }
 
 void SphinxDriver::destroyRecognitionThread(void) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	recognizerRunning = false;
-	SDL_CondSignal(myCond);
-	YerFace_MutexUnlock(myMutex);
+	SDL_CondSignal(myWrkCond);
+	YerFace_MutexUnlock(myWrkMutex);
 
 	SDL_WaitThread(recognizerThread, NULL);
 
-	SDL_DestroyCond(myCond);
+	SDL_DestroyCond(myWrkCond);
+}
+
+void SphinxDriver::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myCmpMutex);
+	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
+	logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+	updateRecognizedPhonemes();
+	//FIXME - do stuff
+	YerFace_MutexUnlock(myCmpMutex);
+	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void SphinxDriver::renderPreviewHUD(void) {
+	YerFace_MutexLock(myCmpMutex);
+	// Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	//FIXME - do stuff
+	YerFace_MutexUnlock(myCmpMutex);
+}
+
+void SphinxDriver::updateRecognizedPhonemes(void) {
+	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
+	int32 earliestStartFrame = -1;
+	if(recognizedPhonemes.size() > 0) {
+		earliestStartFrame = recognizedPhonemes.front()->startFrame;
+	}
+
+	list<SphinxPhoneme *>::iterator phonemeIterator = recognizedPhonemes.begin();
+	while(phonemeIterator != recognizedPhonemes.end() && (*phonemeIterator)->utteranceIndex < utteranceIndex) {
+		++phonemeIterator;
+	}
+
+	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
+	while(segmentIterator != NULL) {
+		int32 startFrame, endFrame;
+		double startTime, endTime;
+		string symbol = ps_seg_word(segmentIterator);
+		ps_seg_frames(segmentIterator, &startFrame, &endFrame);
+		startTime = ((double)startFrame / (double)frameRate) + timestampOffset;
+		endTime = ((double)endFrame / (double)frameRate) + timestampOffset;
+
+		if(phonemeIterator == recognizedPhonemes.end()) {
+			SphinxPhoneme *newPhoneme = new SphinxPhoneme();
+			newPhoneme->symbol = symbol;
+			newPhoneme->startFrame = startFrame;
+			newPhoneme->startTime = startTime;
+			newPhoneme->endFrame = endFrame;
+			newPhoneme->endTime = endTime;
+			newPhoneme->used = false;
+			newPhoneme->utteranceIndex = utteranceIndex;
+			recognizedPhonemes.push_back(newPhoneme);
+		} else if(startFrame >= earliestStartFrame) {
+			if(!(*phonemeIterator)->used) {
+				if((*phonemeIterator)->symbol != symbol) {
+					(*phonemeIterator)->symbol = symbol;
+				}
+				if((*phonemeIterator)->startFrame != startFrame) {
+					(*phonemeIterator)->startFrame = startFrame;
+					(*phonemeIterator)->startTime = startTime;
+				}
+				if((*phonemeIterator)->endFrame != endFrame) {
+					(*phonemeIterator)->endFrame = endFrame;
+					(*phonemeIterator)->endTime = endTime;
+				}
+			}
+		}
+
+		segmentIterator = ps_seg_next(segmentIterator);
+		if(phonemeIterator != recognizedPhonemes.end()) {
+			++phonemeIterator;
+		}
+	}
+
+	logger->verbose("======== AFTER UPDATING PHONEME LIST:");
+	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
+		logger->verbose("    %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d %s\n", phoneme->symbol.c_str(), phoneme->startTime, phoneme->startFrame, phoneme->endTime, phoneme->endFrame, phoneme->utteranceIndex, phoneme->used ? "-USED-" : " ");
+	}
 }
 
 int SphinxDriver::runRecognitionLoop(void *ptr) {
 	SphinxDriver *self = (SphinxDriver *)ptr;
 	self->logger->verbose("Speech Recognition Thread alive!");
 
-	YerFace_MutexLock(self->myMutex);
+	YerFace_MutexLock(self->myWrkMutex);
 	while(self->recognizerRunning) {
-		if(SDL_CondWait(self->myCond, self->myMutex) < 0) {
+		if(SDL_CondWait(self->myWrkCond, self->myWrkMutex) < 0) {
 			throw runtime_error("Failed waiting on condition.");
 		}
 		if(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
@@ -112,7 +194,9 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 					throw runtime_error("Failed to end PocketSphinx utterance");
 				}
 				hypothesis = ps_get_hyp(self->pocketSphinx, NULL);
-				self->logger->verbose("Utterance: %s", hypothesis);
+				self->logger->verbose("======== Utterance Ended. Hypothesis: %s", hypothesis);
+				self->updateRecognizedPhonemes();
+				self->utteranceIndex++;
 				if(ps_start_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to start PocketSphinx utterance");
 				}
@@ -121,13 +205,13 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 		}
 	}
 
-	YerFace_MutexUnlock(self->myMutex);
+	YerFace_MutexUnlock(self->myWrkMutex);
 	self->logger->verbose("Speech Recognition Thread quitting...");
 	return 0;
 }
 
 SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myWrkMutex);
 	for(SphinxAudioFrame *audioFrame : audioFramesAllocated) {
 		if(!audioFrame->inUse) {
 			if(audioFrame->bufferSize < desiredBufferSize) {
@@ -140,7 +224,7 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 			}
 			audioFrame->pos = 0;
 			audioFrame->inUse = true;
-			YerFace_MutexUnlock(myMutex);
+			YerFace_MutexUnlock(myWrkMutex);
 			return audioFrame;
 		}
 	}
@@ -151,13 +235,13 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 	audioFrame->bufferSize = desiredBufferSize;
 	audioFrame->pos = 0;
 	audioFrame->inUse = true;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myWrkMutex);
 	return audioFrame;
 }
 
 void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
 	SphinxDriver *self = (SphinxDriver *)userdata;
-	YerFace_MutexLock(self->myMutex);
+	YerFace_MutexLock(self->myWrkMutex);
 	if(!self->timestampOffsetSet) {
 		self->timestampOffset = timestamp;
 		self->timestampOffsetSet = true;
@@ -169,8 +253,8 @@ void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, 
 	audioFrame->audioBytes = audioBytes;
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
-	SDL_CondSignal(self->myCond);
-	YerFace_MutexUnlock(self->myMutex);
+	SDL_CondSignal(self->myWrkCond);
+	YerFace_MutexUnlock(self->myWrkMutex);
 }
 
 } //namespace YerFace

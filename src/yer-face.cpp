@@ -224,6 +224,9 @@ int runCaptureLoop(void *ptr) {
 			frameDerivatives->advanceWorkingFrameToCompleted();
 			faceTracker->advanceWorkingToCompleted();
 			faceMapper->advanceWorkingToCompleted();
+			if(sphinxDriver != NULL) {
+				sphinxDriver->advanceWorkingToCompleted();
+			}
 
 			//If requested, write image sequence.
 			if(previewImgSeq.length() > 0) {
@@ -250,6 +253,9 @@ void doRenderPreviewFrame(void) {
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
+	if(sphinxDriver != NULL) {
+		sphinxDriver->renderPreviewHUD();
+	}
 
 	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 

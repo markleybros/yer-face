@@ -80,7 +80,6 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 		}
 		audioDevice.opened = true;
 		logger->info("Opened Audio Output << %d hz, %d channels, %d-bit %s %s %s samples >>", (int)audioDevice.obtained.freq, (int)audioDevice.obtained.channels, (int)SDL_AUDIO_BITSIZE(audioDevice.obtained.format), SDL_AUDIO_ISSIGNED(audioDevice.obtained.format) ? "signed" : "unsigned", SDL_AUDIO_ISBIGENDIAN(audioDevice.obtained.format) ? "big-endian" : "little-endian", SDL_AUDIO_ISFLOAT(audioDevice.obtained.format) ? "float" : "int");
-		logger->info("silence value is %d", (int)audioDevice.obtained.silence);
 		SDL_PauseAudioDevice(audioDevice.deviceID, 0);
 
 		AudioFrameCallback audioFrameCallback;

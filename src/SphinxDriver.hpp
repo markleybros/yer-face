@@ -8,7 +8,7 @@ namespace PocketSphinx {
 extern "C" {
 #include <pocketsphinx.h>
 }
-} //Namespace PS
+} //Namespace PocketSphinx
 
 using namespace std;
 
@@ -25,13 +25,25 @@ public:
 	bool inUse;
 };
 
+class SphinxPhoneme {
+public:
+	string symbol;
+	bool used;
+	PocketSphinx::int32 startFrame, endFrame;
+	double startTime, endTime;
+	int utteranceIndex;
+};
+
 class SphinxDriver {
 public:
 	SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
 	~SphinxDriver();
+	void advanceWorkingToCompleted(void);
+	void renderPreviewHUD(void);
 private:
 	void initializeRecognitionThread(void);
 	void destroyRecognitionThread(void);
+	void updateRecognizedPhonemes(void);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
@@ -45,17 +57,20 @@ private:
 	PocketSphinx::ps_decoder_t *pocketSphinx;
 	PocketSphinx::cmd_ln_t *pocketSphinxConfig;
 	
-	SDL_mutex *myMutex;
-	SDL_cond *myCond;
+	SDL_mutex *myWrkMutex, *myCmpMutex;
+	SDL_cond *myWrkCond;
 	SDL_Thread *recognizerThread;
 
 	bool recognizerRunning;
 	bool utteranceRestarted, inSpeech;
+	int utteranceIndex;
 	double timestampOffset;
 	bool timestampOffsetSet;
 
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
+
+	list<SphinxPhoneme *> recognizedPhonemes;
 };
 
 }; //namespace YerFace
