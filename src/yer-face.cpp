@@ -23,6 +23,7 @@
 #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
+#include "SphinxDriver.hpp"
 
 #include <iostream>
 #include <cstdio>
@@ -46,13 +47,14 @@ SDLWindowRenderer sdlWindowRenderer;
 bool windowInitializationFailed;
 SDL_Thread *workerThread;
 
-Logger *logger;
-SDLDriver *sdlDriver;
-FFmpegDriver *ffmpegDriver;
-FrameDerivatives *frameDerivatives;
-FaceTracker *faceTracker;
-FaceMapper *faceMapper;
-Metrics *metrics;
+Logger *logger = NULL;
+SDLDriver *sdlDriver = NULL;
+FFmpegDriver *ffmpegDriver = NULL;
+FrameDerivatives *frameDerivatives = NULL;
+FaceTracker *faceTracker = NULL;
+FaceMapper *faceMapper = NULL;
+Metrics *metrics = NULL;
+SphinxDriver *sphinxDriver = NULL;
 
 unsigned long workingFrameNumber = 0;
 SDL_mutex *flipWorkingCompletedMutex;
@@ -111,6 +113,9 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
+	if(ffmpegDriver->getIsAudioInputPresent()) {
+		sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
+	}
 	ffmpegDriver->rollDemuxerThread();
 
 	sdlWindowRenderer.window = NULL;
@@ -167,6 +172,9 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
+	if(sphinxDriver != NULL) {
+		delete sphinxDriver;
+	}
 	delete metrics;
 	delete faceMapper;
 	delete faceTracker;

@@ -10,9 +10,9 @@
 
 using namespace std;
 
-#define METRICS_STRING_LENGTH 256
-
 namespace YerFace {
+
+#define METRICS_STRING_LENGTH 256
 
 class MetricEntry {
 public:
