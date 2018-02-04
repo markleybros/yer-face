@@ -310,9 +310,6 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 			double frameTimestamp = frame->pts * audioStreamTimeBase;
 			int frameNumSamples = frame->nb_samples * frame->channels;
 			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
-			if(audioFrameHandlers.size() < 1) {
-				logger->error("Decoded an audio frame, but nobody was registered to hear it!");
-			}
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
 				if(handler->resampler.swrContext == NULL) {
 					int inputChannelLayout = audioStream->codecpar->channel_layout;
