@@ -68,6 +68,9 @@ SphinxDriver::~SphinxDriver() {
 	cmd_ln_free_r(pocketSphinxConfig);
 	SDL_DestroyMutex(myWrkMutex);
 	SDL_DestroyMutex(myCmpMutex);
+	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
+		delete phoneme;
+	}
 	delete logger;
 }
 
@@ -96,8 +99,8 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
 	YerFace_MutexLock(myCmpMutex);
 	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
-	logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 	updateRecognizedPhonemes();
+	logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 	//FIXME - do stuff
 	YerFace_MutexUnlock(myCmpMutex);
 	YerFace_MutexUnlock(myWrkMutex);
