@@ -530,7 +530,7 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	if(!working.markerPoint.set) {
 		return;
 	}
-	FacialPose facialPose = faceTracker->getFacialPose();
+	FacialPose facialPose = faceTracker->getWorkingFacialPose();
 	FacialCameraModel cameraModel = faceTracker->getFacialCameraModel();
 	if(!facialPose.set || !cameraModel.set) {
 		return;

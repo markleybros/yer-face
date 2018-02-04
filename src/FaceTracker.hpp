@@ -120,7 +120,8 @@ public:
 	FacialRect getFacialBoundingBox(void);
 	FacialFeatures getFacialFeatures(void);
 	FacialCameraModel getFacialCameraModel(void);
-	FacialPose getFacialPose(void);
+	FacialPose getWorkingFacialPose(void);
+	FacialPose getCompletedFacialPose(void);
 private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);

@@ -504,10 +504,17 @@ FacialCameraModel FaceTracker::getFacialCameraModel(void) {
 	return val;
 }
 
-FacialPose FaceTracker::getFacialPose(void) {
+FacialPose FaceTracker::getWorkingFacialPose(void) {
 	YerFace_MutexLock(myWrkMutex);
 	FacialPose val = working.facialPose;
 	YerFace_MutexUnlock(myWrkMutex);
+	return val;
+}
+
+FacialPose FaceTracker::getCompletedFacialPose(void) {
+	YerFace_MutexLock(myCmpMutex);
+	FacialPose val = complete.facialPose;
+	YerFace_MutexUnlock(myCmpMutex);
 	return val;
 }
 
