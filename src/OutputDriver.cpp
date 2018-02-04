@@ -3,6 +3,13 @@
 #include "Utilities.hpp"
 
 #include "json.hpp"
+#include <cstring>
+
+//FIXME - get rid of this please (we don't want to use named pipes ultimately -- this is just a thin slice to get our data into blender quickly)
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sstream>
+#include <iostream>
 
 using json = nlohmann::json;
 using namespace cv;
@@ -17,6 +24,9 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
+	}
+	if((pipeHandle = open(OUTPUTDRIVER_NAMED_PIPE, O_WRONLY)) == -1) {
+		throw runtime_error("tried to open named pipe " OUTPUTDRIVER_NAMED_PIPE " for writing but failed!");
 	}
 	autoBasisTransmitted = false;
 	logger = new Logger("OutputDriver");
@@ -69,7 +79,22 @@ void OutputDriver::handleCompletedFrame(void) {
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
 
-	logger->verbose("Completed frame... %s", frame.dump().c_str());
+
+	string jsonString = frame.dump(-1, ' ', true) + "\n";
+	const char *jsonStringC = jsonString.c_str();
+	// logger->verbose("Completed frame... %s", jsonStringC);
+	//FIXME - get rid of this please (we don't want to use named pipes ultimately -- this is just a thin slice to get our data into blender quickly)
+	size_t jsonStringLen = strlen(jsonStringC);
+	ssize_t writeRet;
+	size_t wrote = 0;
+	while(wrote < jsonStringLen) {
+		writeRet = write(pipeHandle, jsonStringC + wrote, jsonStringLen - wrote);
+		if(writeRet < 0) {
+			throw runtime_error("failed writing to named pipe " OUTPUTDRIVER_NAMED_PIPE);
+		} else {
+			wrote += writeRet;
+		}
+	}
 }
 
 }; //namespace YerFace
