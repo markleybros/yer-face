@@ -56,7 +56,8 @@ public:
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	TrackerState getTrackerState(void);
-	MarkerPoint getMarkerPoint(void);
+	MarkerPoint getWorkingMarkerPoint(void);
+	MarkerPoint getCompletedMarkerPoint(void);
 	static vector<MarkerTracker *> getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);

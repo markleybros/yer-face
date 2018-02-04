@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
+#include "MarkerTracker.hpp"
 
 using namespace std;
 
@@ -17,6 +18,8 @@ private:
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	Logger *logger;
+
+	bool autoBasisTransmitted;
 };
 
 }; //namespace YerFace

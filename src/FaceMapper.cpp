@@ -186,7 +186,7 @@ void FaceMapper::renderPreviewHUD() {
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
 		for(MarkerTracker *markerTracker : markerTrackers) {
-			MarkerPoint markerPoint = markerTracker->getMarkerPoint();
+			MarkerPoint markerPoint = markerTracker->getCompletedMarkerPoint();
 			Point2d previewPoint = Point2d(
 					(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
 					(markerPoint.point3d.y * previewPointScale) + previewCenter.y);

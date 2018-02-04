@@ -263,7 +263,7 @@ void MarkerTracker::performDetection(void) {
 				return;
 			}
 
-			MarkerPoint eyeBrowPoint = eyebrowTracker->getMarkerPoint();
+			MarkerPoint eyeBrowPoint = eyebrowTracker->getWorkingMarkerPoint();
 			if(!eyeBrowPoint.set) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
@@ -354,7 +354,7 @@ void MarkerTracker::performDetection(void) {
 			return;
 		}
 		
-		MarkerPoint jawPoint = jawTracker->getMarkerPoint();
+		MarkerPoint jawPoint = jawTracker->getWorkingMarkerPoint();
 		if(!jawPoint.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
@@ -372,7 +372,7 @@ void MarkerTracker::performDetection(void) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
 			}
-			cheekPoint = cheekTracker->getMarkerPoint();
+			cheekPoint = cheekTracker->getWorkingMarkerPoint();
 			if(!cheekPoint.set) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
@@ -388,7 +388,7 @@ void MarkerTracker::performDetection(void) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
 			}
-			cheekPoint = cheekTracker->getMarkerPoint();
+			cheekPoint = cheekTracker->getWorkingMarkerPoint();
 			if(!cheekPoint.set) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
@@ -640,10 +640,17 @@ TrackerState MarkerTracker::getTrackerState(void) {
 	return val;
 }
 
-MarkerPoint MarkerTracker::getMarkerPoint(void) {
+MarkerPoint MarkerTracker::getWorkingMarkerPoint(void) {
 	YerFace_MutexLock(myWrkMutex);
 	MarkerPoint val = working.markerPoint;
 	YerFace_MutexUnlock(myWrkMutex);
+	return val;
+}
+
+MarkerPoint MarkerTracker::getCompletedMarkerPoint(void) {
+	YerFace_MutexLock(myCmpMutex);
+	MarkerPoint val = complete.markerPoint;
+	YerFace_MutexUnlock(myCmpMutex);
 	return val;
 }
 
