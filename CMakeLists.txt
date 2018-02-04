@@ -16,7 +16,7 @@ set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/lib/pkgconfig:/opt/lo
 
 option(USE_CUDA "Use CUDA, default to true" 1)
 
-set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/SphinxDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
+set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/OutputDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/MarkerSeparator.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
 
 include(CTest)
 
@@ -29,13 +29,19 @@ download_project(PROJ	googletest
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
+download_project(PROJ	jsoncpp
+	GIT_REPOSITORY	https://github.com/nlohmann/json.git
+	GIT_TAG	master
+	${UPDATE_DISCONNECTED_IF_AVAILABLE}
+)
+
 # Prevent GoogleTest from overriding our compiler/linker options
 # when building with Visual Studio
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
-include_directories("src")
+include_directories("src" "${jsoncpp_SOURCE_DIR}/single_include/nlohmann")
 
 set( _OPENCV_REQUIRED_MODULES core tracking calib3d )
 
@@ -52,17 +58,17 @@ find_package( OpenCV 3.3 REQUIRED ${_OPENCV_REQUIRED_MODULES} )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 find_package( FFmpeg REQUIRED )
-find_package( PocketSphinx REQUIRED )
+# find_package( PocketSphinx REQUIRED )
 
 string(STRIP ${SDL2_LIBRARIES} _STRIPPED_SDL2_LIBRARIES )
 
-include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIR} ${POCKETSPHINX_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR} )
+include_directories(${OpenCV_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS} ${FFMPEG_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR} )
 
-link_directories(${POCKETSPHINX_LIBRARY_DIRS})
+# link_directories(${POCKETSPHINX_LIBRARY_DIRS})
 
 add_executable( yer-face ${YERFACE_MODULES} )
 
-target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} ${FFMPEG_LIBSWRESAMPLE} ${POCKETSPHINX_LIBRARIES} )
+target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} ${FFMPEG_LIBSWRESAMPLE} )
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 

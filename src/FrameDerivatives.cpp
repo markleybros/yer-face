@@ -26,6 +26,7 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	completedPreviewFrameSet = false;
 	workingFrameSizeSet = false;
 	classificationScaleFactor = myClassificationScaleFactor;
+	workingFrameTimestamps.frameNumber = 0;
 	workingFrameTimestamps.set = false;
 	completedFrameTimestamps.set = false;
 	metrics = new Metrics("FrameDerivatives", this);
@@ -49,6 +50,7 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
 	workingFrameSize = frameSize;
 	workingFrameSizeSet = true;
 
+	workingFrameTimestamps.frameNumber++;
 	workingFrameTimestamps.startTimestamp = timestamp;
 	workingFrameTimestamps.estimatedEndTimestamp = calculateEstimatedEndTimestamp(timestamp);
 	workingFrameTimestamps.set = true;

@@ -23,6 +23,7 @@
 #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
+#include "OutputDriver.hpp"
 // #include "SphinxDriver.hpp"
 
 #include <iostream>
@@ -54,6 +55,7 @@ FrameDerivatives *frameDerivatives = NULL;
 FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
+OutputDriver *outputDriver = NULL;
 // SphinxDriver *sphinxDriver = NULL;
 
 unsigned long workingFrameNumber = 0;
@@ -113,6 +115,7 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
+	outputDriver = new OutputDriver(frameDerivatives);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
 	// }
@@ -175,6 +178,7 @@ int main(int argc, const char** argv) {
 	// if(sphinxDriver != NULL) {
 	// 	delete sphinxDriver;
 	// }
+	delete outputDriver;
 	delete metrics;
 	delete faceMapper;
 	delete faceTracker;
@@ -227,6 +231,8 @@ int runCaptureLoop(void *ptr) {
 			// if(sphinxDriver != NULL) {
 			// 	sphinxDriver->advanceWorkingToCompleted();
 			// }
+
+			outputDriver->handleCompletedFrame();
 
 			//If requested, write image sequence.
 			if(previewImgSeq.length() > 0) {

@@ -20,6 +20,7 @@ class FrameTimestamps {
 public:
 	double startTimestamp;
 	double estimatedEndTimestamp;
+	signed long frameNumber;
 	bool set;
 };
 
