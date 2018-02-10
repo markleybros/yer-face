@@ -38,8 +38,6 @@ enum DlibFeatureIndexes {
 };
 
 //Unit millimeters. Values roughly taken from https://en.wikipedia.org/wiki/Human_head
-//Coordinate system is: +X Points Right (relative to the viewer), +Y Points Down (relative to the viewer), +Z Points toward the camera
-//This was all chosen to match Blender. (Except for the tiny unit size, which was chosen to help stabilize solvePnP().)
 #define VERTEX_NOSE_SELLION Point3d(0.0, 0.0, 0.0)
 #define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-65.5, 5.0, -20.0)
 #define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(65.5, 5.0, -20.0)
