@@ -57,6 +57,7 @@ public:
 	void doRenderPreviewFrame(void);
 	void doHandleEvents(void);
 	void onColorPickerEvent(function<void(void)> callback);
+	void onBasisFlagEvent(function<void(void)> callback);
 	void setIsRunning(bool newisRunning);
 	bool getIsRunning(void);
 	void setIsPaused(bool newIsPaused);
@@ -100,6 +101,9 @@ private:
 
 	SDL_mutex *onColorPickerCallbacksMutex;
 	std::vector<function<void(void)>> onColorPickerCallbacks;
+
+	SDL_mutex *onBasisFlagCallbacksMutex;
+	std::vector<function<void(void)>> onBasisFlagCallbacks;
 };
 
 }; //namespace YerFace

@@ -16,7 +16,7 @@ using namespace cv;
 
 namespace YerFace {
 
-OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
+OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -25,10 +25,19 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
+	sdlDriver = mySDLDriver;
+	if(sdlDriver == NULL) {
+		throw invalid_argument("sdlDriver cannot be NULL");
+	}
 	if((pipeHandle = open(OUTPUTDRIVER_NAMED_PIPE, O_WRONLY)) == -1) {
 		throw runtime_error("tried to open named pipe " OUTPUTDRIVER_NAMED_PIPE " for writing but failed!");
 	}
 	autoBasisTransmitted = false;
+	basisFlagged = false;
+	sdlDriver->onBasisFlagEvent([this] (void) -> void {
+		this->logger->info("Got a Basis Flag event. Handling...");
+		this->basisFlagged = true;
+	});
 	logger = new Logger("OutputDriver");
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
@@ -73,12 +82,17 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["trackers"] = trackers;
 	}
 
-	if(allPropsSet && !autoBasisTransmitted) {
+	if(allPropsSet && autoBasisTransmitted) {
 		autoBasisTransmitted = true;
 		frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
-
+	if(basisFlagged) {
+		autoBasisTransmitted = true;
+		basisFlagged = false;
+		frame["meta"]["basis"] = true;
+		logger->info("Transmitting basis flag based on received basis event.");
+	}
 
 	string jsonString = frame.dump(-1, ' ', true) + "\n";
 	const char *jsonStringC = jsonString.c_str();

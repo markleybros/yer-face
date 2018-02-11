@@ -4,6 +4,7 @@
 #include "FrameDerivatives.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
+#include "SDLDriver.hpp"
 
 using namespace std;
 
@@ -14,15 +15,16 @@ namespace YerFace {
 
 class OutputDriver {
 public:
-	OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
+	OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
 	void handleCompletedFrame(void);
 private:
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
+	SDLDriver *sdlDriver;
 	Logger *logger;
 
-	bool autoBasisTransmitted;
+	bool autoBasisTransmitted, basisFlagged;
 
 	int pipeHandle;
 };
