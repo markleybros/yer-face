@@ -82,7 +82,7 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["trackers"] = trackers;
 	}
 
-	if(allPropsSet && autoBasisTransmitted) {
+	if(allPropsSet && !autoBasisTransmitted) {
 		autoBasisTransmitted = true;
 		frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
