@@ -33,6 +33,7 @@ class MarkerPoint {
 public:
 	Point2d point;
 	Point3d point3d;
+	double timestamp;
 	bool set;
 };
 
@@ -49,7 +50,7 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 1.5, float myMaxTrackerDriftPercentage = 0.75);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, double myTrackingBoxPercentage = 1.5, double myMaxTrackerDriftPercentage = 0.75, double myPointSmoothingOverSeconds = 0.25, double myPointSmoothingExponent = 3);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -71,6 +72,7 @@ private:
 	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList);
 	void assignMarkerPoint(void);
 	void calculate3dMarkerPoint(void);
+	void performMarkerPointSmoothing(void);
 	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;
@@ -79,8 +81,10 @@ private:
 	MarkerType markerType;
 	FaceMapper *faceMapper;
 	bool performOpticalTracking;
-	float trackingBoxPercentage;
-	float maxTrackerDriftPercentage;
+	double trackingBoxPercentage;
+	double maxTrackerDriftPercentage;
+	double pointSmoothingOverSeconds;
+	double pointSmoothingExponent;
 
 	Logger *logger;
 	SDL_mutex *myWrkMutex, *myCmpMutex;
@@ -88,6 +92,8 @@ private:
 	FrameDerivatives *frameDerivatives;
 	MarkerSeparator *markerSeparator;
 	FaceTracker *faceTracker;
+
+	list<MarkerPoint> markerPointSmoothingBuffer;
 
 	Ptr<Tracker> tracker;
 	vector<MarkerSeparated> *markerList;

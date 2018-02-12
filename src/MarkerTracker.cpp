@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, double myTrackingBoxPercentage, double myMaxTrackerDriftPercentage, double myPointSmoothingOverSeconds, double myPointSmoothingExponent) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -39,6 +39,14 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	maxTrackerDriftPercentage = myMaxTrackerDriftPercentage;
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
+	}
+	pointSmoothingOverSeconds = myPointSmoothingOverSeconds;
+	if(pointSmoothingOverSeconds <= 0.0) {
+		throw invalid_argument("pointSmoothingOverSeconds cannot be less than or equal to zero");
+	}
+	pointSmoothingExponent = myPointSmoothingExponent;
+	if(pointSmoothingExponent <= 0.0) {
+		throw invalid_argument("pointSmoothingExponent cannot be less than or equal to zero");
 	}
 
 	sdlDriver = faceMapper->getSDLDriver();
@@ -111,6 +119,8 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 	assignMarkerPoint();
 
 	calculate3dMarkerPoint();
+
+	performMarkerPointSmoothing();
 
 	YerFace_MutexUnlock(myWrkMutex);
 
@@ -549,6 +559,36 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	markerMat = facialPose.rotationMatrix.inv() * markerMat;
 	working.markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
 	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
+}
+
+void MarkerTracker::performMarkerPointSmoothing(void) {
+	if(!working.markerPoint.set) {
+		return;
+	}
+	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	double frameTimestamp = frameTimestamps.startTimestamp;
+	working.markerPoint.timestamp = frameTimestamp;
+	markerPointSmoothingBuffer.push_back(working.markerPoint);
+	while(markerPointSmoothingBuffer.front().timestamp <= (frameTimestamp - pointSmoothingOverSeconds)) {
+		markerPointSmoothingBuffer.pop_front();
+	}
+
+	MarkerPoint tempPoint = working.markerPoint;
+	tempPoint.point3d.x = 0;
+	tempPoint.point3d.y = 0;
+	tempPoint.point3d.z = 0;
+
+	double combinedWeights = 0.0;
+	for(MarkerPoint point : markerPointSmoothingBuffer) {
+		double progress = (point.timestamp - (frameTimestamp - pointSmoothingOverSeconds)) / pointSmoothingOverSeconds;
+		double weight = std::pow(progress, (double)pointSmoothingExponent) - combinedWeights;
+		combinedWeights += weight;
+		tempPoint.point3d.x += point.point3d.x * weight;
+		tempPoint.point3d.y += point.point3d.y * weight;
+		tempPoint.point3d.z += point.point3d.z * weight;
+	}
+
+	working.markerPoint = tempPoint;
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {
