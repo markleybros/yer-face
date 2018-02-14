@@ -170,7 +170,7 @@ void MarkerTracker::performDetection(void) {
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
-		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.1);
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.07);
 		EyeRect eyeRect;
 		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
 			eyeRect = faceMapper->getLeftEyeRect();
