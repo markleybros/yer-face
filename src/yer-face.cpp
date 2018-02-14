@@ -246,6 +246,10 @@ int runCaptureLoop(void *ptr) {
 
 			metrics->endClock();
 
+			while(sdlDriver->getIsPaused() && sdlDriver->getIsRunning()) {
+				SDL_Delay(100);
+			}
+
 			YerFace_MutexLock(flipWorkingCompletedMutex);
 
 			frameDerivatives->advanceWorkingFrameToCompleted();
