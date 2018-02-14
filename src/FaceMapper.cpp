@@ -234,6 +234,16 @@ EyeRect FaceMapper::getRightEyeRect(void) {
 	return val;
 }
 
+ExclusionRadius FaceMapper::exclusionRadiusFromPercentageOfFace(double facePercentage) {
+	YerFace_MutexLock(myWrkMutex);
+	ExclusionRadius rad;
+	rad.eyeLineLength = working.eyeLineLength;
+	rad.exclusionRadius = facePercentage * working.eyeLineLength;
+	rad.set = working.features.set;
+	YerFace_MutexUnlock(myWrkMutex);
+	return rad;
+}
+
 void FaceMapper::calculateEyeRects(void) {
 	YerFace_MutexLock(myWrkMutex);
 
@@ -267,6 +277,8 @@ void FaceMapper::calculateEyeRects(void) {
 	working.rightEye.rect.height = dist;
 	working.rightEye.rect = Utilities::insetBox(working.rightEye.rect, 1.25); // FIXME - magic numbers
 	working.rightEye.set = true;
+
+	working.eyeLineLength = Utilities::lineDistance(working.features.eyeLeftOuterCorner, working.features.eyeRightOuterCorner);
 
 	YerFace_MutexUnlock(myWrkMutex);
 }

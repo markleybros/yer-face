@@ -161,6 +161,7 @@ void MarkerTracker::performDetection(void) {
 		markerSeparator->unlockWorkingMarkerList();
 		return;
 	}
+	double proposedExclusionRadius = 0.0;
 	int xDirection;
 	list<MarkerCandidate> markerCandidateList;
 
@@ -169,27 +170,25 @@ void MarkerTracker::performDetection(void) {
 	Rect2d boundingRect;
 
 	if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom || markerType.type == EyelidRightTop || markerType.type == EyelidRightBottom) {
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.1);
 		EyeRect eyeRect;
 		if(markerType.type == EyelidLeftTop || markerType.type == EyelidLeftBottom) {
 			eyeRect = faceMapper->getLeftEyeRect();
 		} else {
 			eyeRect = faceMapper->getRightEyeRect();
 		}
-		if(!eyeRect.set) {
+		if(!eyeRect.set || !exclusionRadius.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
 		Point2d eyeRectCenter = Utilities::centerRect(eyeRect.rect);
+		proposedExclusionRadius = exclusionRadius.exclusionRadius;
 
-		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect.rect);
+		generateMarkerCandidateList(&markerCandidateList, eyeRectCenter, &eyeRect.rect, proposedExclusionRadius, true);
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		
 		if(markerCandidateList.size() == 1) {
-			if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom) {
-				markerSeparator->unlockWorkingMarkerList();
-				return;
-			}
-			if(!claimMarkerCandidate(markerCandidateList.front())) {
+			if(!claimMarkerCandidate(markerCandidateList.front(), proposedExclusionRadius)) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
 			}
@@ -200,24 +199,24 @@ void MarkerTracker::performDetection(void) {
 			MarkerCandidate markerCandidateB = *markerCandidateIterator;
 			if(markerCandidateB.marker.center.y < markerCandidateA.marker.center.y) {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					if(!claimMarkerCandidate(markerCandidateB)) {
+					if(!claimMarkerCandidate(markerCandidateB, proposedExclusionRadius)) {
 						markerSeparator->unlockWorkingMarkerList();
 						return;
 					}
 				} else {
-					if(!claimMarkerCandidate(markerCandidateA)) {
+					if(!claimMarkerCandidate(markerCandidateA, proposedExclusionRadius)) {
 						markerSeparator->unlockWorkingMarkerList();
 						return;
 					}
 				}
 			} else {
 				if(markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
-					if(!claimMarkerCandidate(markerCandidateA)) {
+					if(!claimMarkerCandidate(markerCandidateA, proposedExclusionRadius)) {
 						markerSeparator->unlockWorkingMarkerList();
 						return;
 					}
 				} else {
-					if(!claimMarkerCandidate(markerCandidateB)) {
+					if(!claimMarkerCandidate(markerCandidateB, proposedExclusionRadius)) {
 						markerSeparator->unlockWorkingMarkerList();
 						return;
 					}
@@ -227,10 +226,13 @@ void MarkerTracker::performDetection(void) {
 		markerSeparator->unlockWorkingMarkerList();
 		return;
 	} else if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter || markerType.type == EyebrowRightInner || markerType.type == EyebrowRightMiddle || markerType.type == EyebrowRightOuter) {
-		if(!facialFeatures.set) {
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.05);
+		if(!facialFeatures.set || !exclusionRadius.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
+		proposedExclusionRadius = exclusionRadius.exclusionRadius;
+
 		xDirection = -1;
 		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowLeftMiddle || markerType.type == EyebrowLeftOuter) {
 			xDirection = 1;
@@ -247,7 +249,7 @@ void MarkerTracker::performDetection(void) {
 		}
 
 		if(markerType.type == EyebrowLeftInner || markerType.type == EyebrowRightInner) {
-			generateMarkerCandidateList(&markerCandidateList, facialFeatures.noseSellion, &boundingRect);
+			generateMarkerCandidateList(&markerCandidateList, facialFeatures.noseSellion, &boundingRect, proposedExclusionRadius);
 			if(markerCandidateList.size() < 1) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
@@ -286,7 +288,7 @@ void MarkerTracker::performDetection(void) {
 				boundingRect.width = frameSize.width - eyeBrowPoint.point.x;
 			}
 
-			generateMarkerCandidateList(&markerCandidateList, eyeBrowPoint.point, &boundingRect);
+			generateMarkerCandidateList(&markerCandidateList, eyeBrowPoint.point, &boundingRect, proposedExclusionRadius);
 			if(markerCandidateList.size() < 1) {
 				markerSeparator->unlockWorkingMarkerList();
 				return;
@@ -294,10 +296,12 @@ void MarkerTracker::performDetection(void) {
 			markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 		}
 	} else if(markerType.type == CheekLeft || markerType.type == CheekRight) {
-		if(!facialFeatures.set) {
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.075);
+		if(!facialFeatures.set || !exclusionRadius.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
+		proposedExclusionRadius = exclusionRadius.exclusionRadius;
 
 		xDirection = -1;
 		if(markerType.type == CheekLeft) {
@@ -328,7 +332,7 @@ void MarkerTracker::performDetection(void) {
 			boundingRect.x = facialFeatures.noseSellion.x;
 			boundingRect.width = facialFeatures.jawLeftTop.x - facialFeatures.noseSellion.x;
 		}
-		generateMarkerCandidateList(&markerCandidateList, cheekPoI, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, cheekPoI, &boundingRect, proposedExclusionRadius);
 
 		if(markerCandidateList.size() < 1) {
 			markerSeparator->unlockWorkingMarkerList();
@@ -336,26 +340,31 @@ void MarkerTracker::performDetection(void) {
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == Jaw) {
-		if(!facialFeatures.set) {
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.125);
+		if(!facialFeatures.set || !exclusionRadius.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
+		proposedExclusionRadius = exclusionRadius.exclusionRadius;
+
 		boundingRect.x = facialFeatures.eyeRightOuterCorner.x;
 		boundingRect.width = facialFeatures.eyeLeftOuterCorner.x - boundingRect.x;
 		boundingRect.y = facialFeatures.noseTip.y;
 		boundingRect.height = frameSize.height - boundingRect.y;
 
-		generateMarkerCandidateList(&markerCandidateList, facialFeatures.menton, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, facialFeatures.menton, &boundingRect, proposedExclusionRadius);
 		if(markerCandidateList.size() < 1) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	} else if(markerType.type == LipsLeftCorner || markerType.type == LipsRightCorner || markerType.type == LipsLeftTop || markerType.type == LipsRightTop || markerType.type == LipsLeftBottom || markerType.type == LipsRightBottom) {
-		if(!facialFeatures.set) {
+		ExclusionRadius exclusionRadius = faceMapper->exclusionRadiusFromPercentageOfFace(0.05);
+		if(!facialFeatures.set || !exclusionRadius.set) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
 		}
+		proposedExclusionRadius = exclusionRadius.exclusionRadius;
 
 		MarkerTracker *jawTracker;
 		jawTracker = MarkerTracker::getMarkerTrackerByType(MarkerType(Jaw));
@@ -424,7 +433,7 @@ void MarkerTracker::performDetection(void) {
 			lipPointOfInterest = jawPoint.point;
 		}
 
-		generateMarkerCandidateList(&markerCandidateList, lipPointOfInterest, &boundingRect);
+		generateMarkerCandidateList(&markerCandidateList, lipPointOfInterest, &boundingRect, proposedExclusionRadius);
 		if(markerCandidateList.size() < 1) {
 			markerSeparator->unlockWorkingMarkerList();
 			return;
@@ -432,7 +441,7 @@ void MarkerTracker::performDetection(void) {
 		markerCandidateList.sort(sortMarkerCandidatesByDistanceFromPointOfInterest);
 	}
 	if(markerCandidateList.size() > 0) {
-		claimFirstAvailableMarkerCandidate(&markerCandidateList);
+		claimFirstAvailableMarkerCandidate(&markerCandidateList, proposedExclusionRadius);
 	}
 	markerSeparator->unlockWorkingMarkerList();
 }
@@ -475,7 +484,7 @@ bool MarkerTracker::trackerDriftingExcessively(void) {
 	return false;
 }
 
-bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate) {
+bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate, double setExclusionRadius) {
 	size_t markerListCount = (*markerList).size();
 	if(markerCandidate.markerListIndex >= markerListCount) {
 		throw invalid_argument("MarkerTracker::claimMarkerCandidate() called with a markerCandidate whose index is outside the bounds of markerList");
@@ -484,18 +493,19 @@ bool MarkerTracker::claimMarkerCandidate(MarkerCandidate markerCandidate) {
 	if(markerSeparatedCandidate->assignedType.type != NoMarkerAssigned) {
 		return false;
 	}
+	markerSeparatedCandidate->exclusionRadius = setExclusionRadius;
 	markerSeparatedCandidate->assignedType.type = markerType.type;
 	working.markerDetected = markerCandidate;
 	working.markerDetectedSet = true;
 	return true;
 }
 
-bool MarkerTracker::claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList) {
+bool MarkerTracker::claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList, double setExclusionRadius) {
 	if(markerCandidateList == NULL) {
 		throw invalid_argument("MarkerTracker::claimFirstAvailableMarkerCandidate() called with NULL markerCandidateList");
 	}
 	for(list<MarkerCandidate>::iterator iterator = markerCandidateList->begin(); iterator != markerCandidateList->end(); ++iterator) {
-		if(claimMarkerCandidate(*iterator)) {
+		if(claimMarkerCandidate(*iterator, setExclusionRadius)) {
 			return true;
 		}
 	}
@@ -591,7 +601,7 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 	working.markerPoint = tempPoint;
 }
 
-void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, bool debug) {
+void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, double proposedExclusionRadius, bool overrideExclusionZone, bool debug) {
 	if(markerCandidateList == NULL) {
 		throw invalid_argument("MarkerTracker::generateMarkerCandidateList() called with NULL markerCandidateList");
 	}
@@ -609,9 +619,28 @@ void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCan
 		if(!markerSeparated.active) {
 			continue;
 		}
+		if(markerSeparated.assignedType.type != NoMarkerAssigned) {
+			continue;
+		}
 		RotatedRect marker = markerSeparated.marker;
 		Rect2d markerRect = Rect(marker.boundingRect2f());
 		if(boundingRect == NULL || (markerRect & (*boundingRect)).area() > 0) {
+			if(!overrideExclusionZone) {
+				bool excluded = false;
+				for(MarkerSeparated markerCompare : (*markerList)) {
+					if(markerCompare.active && markerCompare.assignedType.type != NoMarkerAssigned && markerCompare.exclusionRadius > 0.0) {
+						double markerDistance = Utilities::lineDistance(markerSeparated.marker.center, markerCompare.marker.center);
+						if(markerDistance <= (proposedExclusionRadius + markerCompare.exclusionRadius)) {
+							excluded = true;
+							break;
+						}
+					}
+				}
+				if(excluded) {
+					continue;
+				}
+			}
+
 			markerCandidate.marker = marker;
 			markerCandidate.markerListIndex = i;
 			markerCandidate.distanceFromPointOfInterest = Utilities::lineDistance(pointOfInterest, markerCandidate.marker.center);

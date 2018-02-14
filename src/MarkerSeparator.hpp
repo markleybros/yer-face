@@ -23,6 +23,7 @@ class MarkerSeparated {
 public:
 	RotatedRect marker;
 	MarkerType assignedType;
+	double exclusionRadius;
 	bool active;
 };
 

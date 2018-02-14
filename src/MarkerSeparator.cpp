@@ -171,6 +171,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 			markerCandidate.center = markerCandidate.center;
 			MarkerSeparated markerSeparated;
 			markerSeparated.active = true;
+			markerSeparated.exclusionRadius = 0.0;
 			markerSeparated.marker = markerCandidate;
 			working.markerList.push_back(markerSeparated);
 		}
@@ -254,6 +255,10 @@ void MarkerSeparator::renderPreviewHUD(void) {
 		for(auto marker : complete.markerList) {
 			if(marker.active) {
 				Utilities::drawRotatedRectOutline(frame, marker.marker, Scalar(255,255,0), 3);
+
+				if(marker.exclusionRadius > 0.0) {
+					circle(frame, marker.marker.center, marker.exclusionRadius, Scalar(255,255,0), 2);
+				}
 			}
 		}
 	}
@@ -262,7 +267,7 @@ void MarkerSeparator::renderPreviewHUD(void) {
 
 vector<MarkerSeparated> *MarkerSeparator::getWorkingMarkerList(void) {
 	//No mutex needed because the pointer does not change.
-	//Watch out, however! The contents will change suddenly. (FIXME lock working marker list???)
+	//Watch out, however! The contents will change suddenly. (See lockWorkingMarkerList() and unlockWorkingMarkerList())
 	return &working.markerList;
 }
 

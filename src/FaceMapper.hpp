@@ -21,10 +21,18 @@ public:
 	bool set;
 };
 
+class ExclusionRadius {
+public:
+	double eyeLineLength;
+	double exclusionRadius;
+	bool set;
+};
+
 class FaceMapperWorkingVariables {
 public:
 	FacialFeatures features;
 	EyeRect leftEye, rightEye;
+	double eyeLineLength;
 };
 
 class FaceMapperWorkerThread {
@@ -51,6 +59,7 @@ public:
 	MarkerSeparator *getMarkerSeparator(void);
 	EyeRect getLeftEyeRect(void);
 	EyeRect getRightEyeRect(void);
+	ExclusionRadius exclusionRadiusFromPercentageOfFace(double facePercentage);
 private:
 	void calculateEyeRects(void);
 	void initializeWorkerThread(FaceMapperWorkerThread *thread, const char *name);
