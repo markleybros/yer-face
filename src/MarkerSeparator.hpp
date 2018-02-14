@@ -33,7 +33,7 @@ public:
 
 class MarkerSeparator {
 public:
-	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage = 1.5, float myMinTargetMarkerAreaPercentage = 0.00001, float myMaxTargetMarkerAreaPercentage = 0.01, float myMarkerBoxInflatePixels = 1.5);
+	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, double myFaceSizePercentageX = 1.5, double myFaceSizePercentageY = 2.0, double myMinTargetMarkerAreaPercentage = 0.00001, double myMaxTargetMarkerAreaPercentage = 0.01, double myMarkerBoxInflatePixels = 1.5);
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(bool debug = false);
@@ -48,9 +48,9 @@ private:
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
-	float faceSizePercentage;
-	float minTargetMarkerAreaPercentage;
-	float maxTargetMarkerAreaPercentage;
+	double faceSizePercentageX, faceSizePercentageY;
+	double minTargetMarkerAreaPercentage;
+	double maxTargetMarkerAreaPercentage;
 	double markerBoxInflatePixels;
 
 	Logger *logger;

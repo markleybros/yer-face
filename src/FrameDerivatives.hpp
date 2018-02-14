@@ -28,7 +28,7 @@ class Metrics;
 
 class FrameDerivatives {
 public:
-	FrameDerivatives(int myClassificationBoundingBox = 640, double myClassificationScaleFactor = 0.0);
+	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);
 	~FrameDerivatives();
 	void setWorkingFrame(Mat newFrame, double timestamp); //Expected to be in BGR format, at the native resolution of the input. Timestamp is in seconds.
 	Mat getWorkingFrame(void);

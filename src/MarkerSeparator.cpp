@@ -18,7 +18,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, float myFaceSizePercentage, float myMinTargetMarkerAreaPercentage, float myMaxTargetMarkerAreaPercentage, float myMarkerBoxInflatePixels) {
+MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, double myFaceSizePercentageX, double myFaceSizePercentageY, double myMinTargetMarkerAreaPercentage, double myMaxTargetMarkerAreaPercentage, double myMarkerBoxInflatePixels) {
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
@@ -39,9 +39,13 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	if(maxTargetMarkerAreaPercentage <= 0.0 || maxTargetMarkerAreaPercentage > 1.0) {
 		throw invalid_argument("maxTargetMarkerAreaPercentage is out of range.");
 	}
-	faceSizePercentage = myFaceSizePercentage;
-	if(faceSizePercentage <= 0.0 || faceSizePercentage > 2.0) {
-		throw invalid_argument("faceSizePercentage is out of range.");
+	faceSizePercentageX = myFaceSizePercentageX;
+	if(faceSizePercentageX <= 0.0 || faceSizePercentageX > 2.0) {
+		throw invalid_argument("faceSizePercentageX is out of range.");
+	}
+	faceSizePercentageY = myFaceSizePercentageY;
+	if(faceSizePercentageY <= 0.0 || faceSizePercentageY > 2.0) {
+		throw invalid_argument("faceSizePercentageY is out of range.");
 	}
 	markerBoxInflatePixels = myMarkerBoxInflatePixels;
 	if(markerBoxInflatePixels < 0.0) {
@@ -101,7 +105,13 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		return;
 	}
 	Rect2d markerBoundaryRect;
-	Rect2d searchBox = Rect(Utilities::insetBox(facialBoundingBox.rect, faceSizePercentage));
+	double newBoxWidth = facialBoundingBox.rect.width * faceSizePercentageX;
+	double newBoxHeight = facialBoundingBox.rect.height * faceSizePercentageY;
+	Rect2d searchBox = Rect2d(
+		facialBoundingBox.rect.x + ((facialBoundingBox.rect.width - newBoxWidth) / 2.0),
+		facialBoundingBox.rect.y + ((facialBoundingBox.rect.height - newBoxHeight) / 4.0),
+		newBoxWidth,
+		newBoxHeight);
 	Size searchFrameSize;
 	try {
 		Mat frame = frameDerivatives->getWorkingFrame();
