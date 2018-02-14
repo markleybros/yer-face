@@ -40,7 +40,7 @@ public:
 
 class FaceMapper {
 public:
-	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, bool myPerformOpticalTracking = true);
+	FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool myPerformOpticalTracking = true);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);

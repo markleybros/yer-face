@@ -1,13 +1,14 @@
 #pragma once
 
 #include "SDL.h"
-
 #include "opencv2/imgproc.hpp"
+#include "json.hpp"
 
 #include <exception>
 
 using namespace std;
 using namespace cv;
+using json = nlohmann::json;
 
 namespace YerFace {
 
@@ -53,6 +54,8 @@ public:
 	static bool rayPlaneIntersection(Point3d &intersection, Point3d rayOrigin, Vec3d rayVector, Point3d planePoint, Vec3d planeNormal);
 	static void drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color = Scalar(0, 0, 255), int thickness = 1);
 	static void drawX(Mat frame, Point2d markerPoint, Scalar color = Scalar(0, 0, 255), int lineLength = 5, int thickness = 1);
+	static cv::Scalar scalarColorFromJSONArray(String jsonArrayString);
+	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
 };
 
 }; //namespace YerFace

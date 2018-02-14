@@ -148,5 +148,23 @@ void Utilities::drawX(Mat frame, Point2d markerPoint, Scalar color, int lineLeng
 	line(frame, a, b, color, thickness);
 }
 
+cv::Scalar Utilities::scalarColorFromJSONArray(String jsonArrayString) {
+	json j = json::parse(jsonArrayString);
+	return Utilities::scalarColorFromJSONArray(j);
+}
+
+cv::Scalar Utilities::scalarColorFromJSONArray(json jsonArray) {
+	if(!jsonArray.is_array() || jsonArray.size() != 3) {
+		throw invalid_argument("jsonArray must be an array with three ints");
+	}
+	Scalar s;
+	for(int i = 0; i < 3; i++) {
+		if(!jsonArray[i].is_number_integer() || jsonArray[i] < 0 || jsonArray[i] > 255) {
+			throw invalid_argument("color scalar must be three ints between 0-255, but jsonArray contains an element which is not a valid number");
+		}
+		s[i] = jsonArray[i];
+	}
+	return s;
+}
 
 }; //namespace YerFace

@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, bool myPerformOpticalTracking) {
+FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool myPerformOpticalTracking) {
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
@@ -29,7 +29,7 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 	logger = new Logger("FaceMapper");
 	metrics = new Metrics("FaceMapper", frameDerivatives);
 
-	markerSeparator = new MarkerSeparator(sdlDriver, frameDerivatives, faceTracker);
+	markerSeparator = new MarkerSeparator(sdlDriver, frameDerivatives, faceTracker, myHSVRangeMin, myHSVRangeMax);
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, performOpticalTracking);
 	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, performOpticalTracking);

@@ -5,6 +5,7 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/tracking.hpp"
 
+// FIXME - these notes don't belong here... they should be reorganized and moved into README.md
 // best available resolution / rate: ffplay -pixel_format mjpeg -video_size 1920x1080 /dev/video1
 // best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
 // alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
@@ -40,6 +41,8 @@ String dlibFaceDetector;
 String previewImgSeq;
 String hiddenMarkovModel;
 String allPhoneLM;
+String markerHSVRangeMinJSON;
+String markerHSVRangeMaxJSON;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
@@ -84,7 +87,10 @@ int main(int argc, const char** argv) {
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		"{hiddenMarkovModel|data/sphinx-models/en-us/en-us|Hidden Markov Model used by PocketSphinx for lip synchronization.}"
-		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}");
+		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}"
+		"{markerHSVRangeMin|[56, 29, 80]|Default starting range for marker colors in HSV, lower bound. (JSON array with three ints.)}"
+		"{markerHSVRangeMax|[100, 211, 255]|Default starting range for marker colors in HSV, upper bound. (JSON array with three ints.)}"
+		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
 	if(parser.get<bool>("help")) {
@@ -107,13 +113,30 @@ int main(int argc, const char** argv) {
 	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
+	markerHSVRangeMinJSON = parser.get<string>("markerHSVRangeMin");
+	markerHSVRangeMaxJSON = parser.get<string>("markerHSVRangeMax");
+
+	Scalar markerHSVRangeMin;
+	try {
+		markerHSVRangeMin = Utilities::scalarColorFromJSONArray(markerHSVRangeMinJSON);
+	} catch(exception &e) {
+		logger->error("Wasn't able to parse markerHSVRangeMin. Got exception: %s", e.what());
+		return 1;
+	}
+	Scalar markerHSVRangeMax;
+	try {
+		markerHSVRangeMax = Utilities::scalarColorFromJSONArray(markerHSVRangeMaxJSON);
+	} catch(exception &e) {
+		logger->error("Wasn't able to parse markerHSVRangeMax. Got exception: %s", e.what());
+		return 1;
+	}
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives();
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
-	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, false);
+	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, markerHSVRangeMin, markerHSVRangeMax, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(frameDerivatives, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
