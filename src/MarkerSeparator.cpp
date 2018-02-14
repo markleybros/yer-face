@@ -265,8 +265,10 @@ void MarkerSeparator::unlockWorkingMarkerList(void) {
 }
 
 void MarkerSeparator::doPickColor(void) {
-	Rect2d rect = selectROI(searchFrameBGR); //FIXME -- this is probably broken now
+	Rect2d rect = selectROI(searchFrameBGR);
 	logger->verbose("doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>", rect.x, rect.y, rect.width, rect.height);
+	Mat search;
+	cvtColor(searchFrameBGR, search, COLOR_BGR2HSV);
 	double hue = 0.0, minHue = -1, maxHue = -1;
 	double saturation = 0.0, minSaturation = -1, maxSaturation = -1;
 	double value = 0.0, minValue = -1, maxValue = -1;
@@ -274,7 +276,7 @@ void MarkerSeparator::doPickColor(void) {
 	for(int x = rect.x; x < rect.x + rect.width; x++) {
 		for(int y = rect.y; y < rect.y + rect.height; y++) {
 			samples++;
-			Vec3b intensity = searchFrameHSV.at<Vec3b>(y, x); //FIXME -- this is broken now :)
+			Vec3b intensity = search.at<Vec3b>(y, x);
 			logger->verbose("doPickColor: <%d, %d> HSV: <%d, %d, %d>", x, y, intensity[0], intensity[1], intensity[2]);
 			hue += (double)intensity[0];
 			if(minHue < 0.0 || intensity[0] < minHue) {
