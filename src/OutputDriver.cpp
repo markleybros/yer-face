@@ -29,6 +29,9 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
+	if((basisFlagMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 	if((pipeHandle = open(OUTPUTDRIVER_NAMED_PIPE, O_WRONLY)) == -1) {
 		throw runtime_error("tried to open named pipe " OUTPUTDRIVER_NAMED_PIPE " for writing but failed!");
 	}
@@ -36,7 +39,9 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	basisFlagged = false;
 	sdlDriver->onBasisFlagEvent([this] (void) -> void {
 		this->logger->info("Got a Basis Flag event. Handling...");
+		YerFace_MutexLock(this->basisFlagMutex);
 		this->basisFlagged = true;
+		YerFace_MutexUnlock(this->basisFlagMutex);
 	});
 	logger = new Logger("OutputDriver");
 	logger->debug("OutputDriver object constructed and ready to go!");
@@ -44,6 +49,7 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 
 OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
+	SDL_DestroyMutex(basisFlagMutex);
 	delete logger;
 }
 
@@ -87,12 +93,14 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
+	YerFace_MutexLock(this->basisFlagMutex);
 	if(basisFlagged) {
 		autoBasisTransmitted = true;
 		basisFlagged = false;
 		frame["meta"]["basis"] = true;
 		logger->info("Transmitting basis flag based on received basis event.");
 	}
+	YerFace_MutexUnlock(this->basisFlagMutex);
 
 	string jsonString = frame.dump(-1, ' ', true) + "\n";
 	const char *jsonStringC = jsonString.c_str();

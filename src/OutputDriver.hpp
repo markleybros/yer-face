@@ -24,6 +24,7 @@ private:
 	SDLDriver *sdlDriver;
 	Logger *logger;
 
+	SDL_mutex *basisFlagMutex;
 	bool autoBasisTransmitted, basisFlagged;
 
 	int pipeHandle;
