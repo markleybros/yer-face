@@ -56,7 +56,7 @@ public:
 	SDL_Texture *getPreviewTexture(void);
 	void doRenderPreviewFrame(void);
 	void doHandleEvents(void);
-	void onColorPickerEvent(function<void(void)> callback);
+	void onEyedropperEvent(function<void(bool reset, int x, int y)> callback);
 	void onBasisFlagEvent(function<void(void)> callback);
 	void setIsRunning(bool newisRunning);
 	bool getIsRunning(void);
@@ -72,7 +72,6 @@ public:
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
 private:
-	void invokeAll(std::vector<function<void(void)>> callbacks);
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
 	FrameDerivatives *frameDerivatives;
@@ -99,8 +98,8 @@ private:
 	list<SDLAudioFrame *> audioFrameQueue;
 	list<SDLAudioFrame *> audioFramesAllocated;
 
-	SDL_mutex *onColorPickerCallbacksMutex;
-	std::vector<function<void(void)>> onColorPickerCallbacks;
+	SDL_mutex *onEyedropperCallbacksMutex;
+	std::vector<function<void(bool reset, int x, int y)>> onEyedropperCallbacks;
 
 	SDL_mutex *onBasisFlagCallbacksMutex;
 	std::vector<function<void(void)>> onBasisFlagCallbacks;

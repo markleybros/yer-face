@@ -37,6 +37,7 @@ public:
 	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, double myFaceSizePercentageX = 1.5, double myFaceSizePercentageY = 2.0, double myMinTargetMarkerAreaPercentage = 0.00001, double myMaxTargetMarkerAreaPercentage = 0.01, double myMarkerBoxInflatePixels = 1.5);
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
+	void widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void processCurrentFrame(bool debug = false);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
@@ -44,7 +45,7 @@ public:
 	void lockWorkingMarkerList(void);
 	void unlockWorkingMarkerList(void);
 private:
-	void doPickColor(void);
+	void doEyedropper(bool reset, int x, int y);
 	
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
@@ -59,6 +60,7 @@ private:
 	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;
+	bool HSVRangeReset;
 	Mat searchFrameBGR;
 	Mat searchFrameHSV;
 

@@ -65,9 +65,9 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	working.markerList.clear();
 	complete.markerList.clear();
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
-	sdlDriver->onColorPickerEvent([this] (void) -> void {
-		this->logger->info("Got a Color Picker event. Popping up a color picker...");
-		this->doPickColor();
+	sdlDriver->onEyedropperEvent([this] (bool reset, int x, int y) -> void {
+		this->logger->info("Got an Eyedropper event. [ %s, %d, %d ] Handling...", reset ? "RESETTING" : "Adding Color", x, y);
+		this->doEyedropper(reset, x, y);
 	});
 
 	structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
@@ -92,6 +92,20 @@ void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
 	YerFace_MutexLock(myWrkMutex);
 	HSVRangeMin = myHSVRangeMin;
 	HSVRangeMax = myHSVRangeMax;
+	HSVRangeReset = false;
+	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+	YerFace_MutexLock(myWrkMutex);
+	for(int i = 0; i < 3; i++) {
+		if(myHSVRangeMin[i] < HSVRangeMin[i]) {
+			HSVRangeMin[i] = myHSVRangeMin[i];
+		}
+		if(myHSVRangeMax[i] > HSVRangeMax[i]) {
+			HSVRangeMax[i] = myHSVRangeMax[i];
+		}
+	}
 	YerFace_MutexUnlock(myWrkMutex);
 }
 
@@ -157,6 +171,10 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	vector<vector<Point>> contours;
 	vector<Vec4i> heirarchy;
 	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+
+	if(HSVRangeReset) {
+		contours.clear();
+	}
 
 	YerFace_MutexLock(myWorkingMarkerListMutex);
 
@@ -279,35 +297,44 @@ void MarkerSeparator::unlockWorkingMarkerList(void) {
 	YerFace_MutexUnlock(myWorkingMarkerListMutex);
 }
 
-void MarkerSeparator::doPickColor(void) {
-	Rect2d rect = selectROI(searchFrameBGR);
-	logger->verbose("doPickColor: Got a ROI Rectangle of: <%.02f, %.02f, %.02f, %.02f>", rect.x, rect.y, rect.width, rect.height);
-	Mat search;
-	cvtColor(searchFrameBGR, search, COLOR_BGR2HSV);
-	double hue = 0.0, minHue = -1, maxHue = -1;
-	double saturation = 0.0, minSaturation = -1, maxSaturation = -1;
-	double value = 0.0, minValue = -1, maxValue = -1;
-	unsigned long samples = 0;
-	for(int x = rect.x; x < rect.x + rect.width; x++) {
-		for(int y = rect.y; y < rect.y + rect.height; y++) {
-			samples++;
-			Vec3b intensity = search.at<Vec3b>(y, x);
-			logger->verbose("doPickColor: <%d, %d> HSV: <%d, %d, %d>", x, y, intensity[0], intensity[1], intensity[2]);
-			hue += (double)intensity[0];
+void MarkerSeparator::doEyedropper(bool reset, int x, int y) {
+	YerFace_MutexLock(myWrkMutex);
+	if(reset) {
+		HSVRangeReset = true;
+		YerFace_MutexUnlock(myWrkMutex);
+		return;
+	}
+	Mat frame = frameDerivatives->getWorkingFrame();
+	Rect2d impliedRect = Rect2d(x, y, 1, 1);
+	impliedRect = Utilities::insetBox(impliedRect, 3.0);
+	Size frameSize = frame.size();
+	Rect2d imageRect = Rect(0, 0, frameSize.width, frameSize.height);
+	Rect2d eyedropperRect = Rect(impliedRect & imageRect);
+	logger->verbose("doEyedropper: Got an Eyedropper Rectangle of: <%.02f, %.02f, %.02f, %.02f>", eyedropperRect.x, eyedropperRect.y, eyedropperRect.width, eyedropperRect.height);
+	Mat eyedropperPixelsBGR = frame(eyedropperRect);
+	Size eyedropperPixelsSize = eyedropperPixelsBGR.size();
+	Mat eyedropperPixelsHSV;
+	cvtColor(eyedropperPixelsBGR, eyedropperPixelsHSV, COLOR_BGR2HSV);
+
+	double minHue = -1, maxHue = -1;
+	double minSaturation = -1, maxSaturation = -1;
+	double minValue = -1, maxValue = -1;
+	for(int x = 0; x < eyedropperPixelsSize.width; x++) {
+		for(int y = 0; y < eyedropperPixelsSize.height; y++) {
+			Vec3b intensity = eyedropperPixelsHSV.at<Vec3b>(y, x);
+			// logger->verbose("doEyedropper: <%d, %d> HSV: <%d, %d, %d>", x, y, intensity[0], intensity[1], intensity[2]);
 			if(minHue < 0.0 || intensity[0] < minHue) {
 				minHue = intensity[0];
 			}
 			if(maxHue < 0.0 || intensity[0] > maxHue) {
 				maxHue = intensity[0];
 			}
-			saturation += (double)intensity[1];
 			if(minSaturation < 0.0 || intensity[1] < minSaturation) {
 				minSaturation = intensity[1];
 			}
 			if(maxSaturation < 0.0 || intensity[1] > maxSaturation) {
 				maxSaturation = intensity[1];
 			}
-			value += (double)intensity[2];
 			if(minValue < 0.0 || intensity[2] < minValue) {
 				minValue = intensity[2];
 			}
@@ -316,12 +343,17 @@ void MarkerSeparator::doPickColor(void) {
 			}
 		}
 	}
-	hue = hue / (double)samples;
-	saturation = saturation / (double)samples;
-	value = value / (double)samples;
-	logger->info("doPickColor: Average HSV color within selected rectangle: <%.02f, %.02f, %.02f>", hue, saturation, value);
-	logger->info("doPickColor: Minimum HSV color within selected rectangle: <%.02f, %.02f, %.02f>", minHue, minSaturation, minValue);
-	logger->info("doPickColor: Maximum HSV color within selected rectangle: <%.02f, %.02f, %.02f>", maxHue, maxSaturation, maxValue);
+	logger->info("doEyedropper: Minimum-Maximum HSV color within eyedropper rectangle: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", minHue, minSaturation, minValue, maxHue, maxSaturation, maxValue);
+
+	if(HSVRangeReset) {
+		setHSVRange(Scalar(minHue, minSaturation, minValue), Scalar(maxHue, maxSaturation, maxValue));
+		logger->info("doEyedropper: Reset HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
+	} else {
+		widenHSVRange(Scalar(minHue, minSaturation, minValue), Scalar(maxHue, maxSaturation, maxValue));
+		logger->info("doEyedropper: Updated HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
+	}
+
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 }; //namespace YerFace

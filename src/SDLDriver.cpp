@@ -32,7 +32,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	if((audioFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((onColorPickerCallbacksMutex = SDL_CreateMutex()) == NULL) {
+	if((onEyedropperCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
@@ -46,7 +46,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
-	onColorPickerCallbacks.clear();
+	onEyedropperCallbacks.clear();
 	onBasisFlagCallbacks.clear();
 
 	frameDerivatives = myFrameDerivatives;
@@ -128,7 +128,7 @@ SDLDriver::~SDLDriver() {
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	SDL_DestroyMutex(previewDebugDensityMutex);
 	SDL_DestroyMutex(audioFramesMutex);
-	SDL_DestroyMutex(onColorPickerCallbacksMutex);
+	SDL_DestroyMutex(onEyedropperCallbacksMutex);
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(audioFrame->buf != NULL) {
@@ -217,13 +217,6 @@ void SDLDriver::doHandleEvents(void) {
 					case SDLK_SPACE:
 						toggleIsPaused();
 						break;
-					case SDLK_PERIOD:
-						setIsPaused(true);
-						logger->info("Received Color Picker keyboard event. Rebroadcasting...");
-						YerFace_MutexLock(onColorPickerCallbacksMutex);
-						invokeAll(onColorPickerCallbacks);
-						YerFace_MutexUnlock(onColorPickerCallbacksMutex);
-						break;
 					case SDLK_LEFT:
 						movePreviewPositionInFrame(MoveLeft);
 						break;
@@ -242,9 +235,27 @@ void SDLDriver::doHandleEvents(void) {
 					case SDLK_RETURN:
 						logger->info("Received Basis Flag keyboard event. Rebroadcasting...");
 						YerFace_MutexLock(onBasisFlagCallbacksMutex);
-						invokeAll(onBasisFlagCallbacks);
+						for(auto callback : onBasisFlagCallbacks) {
+							callback();
+						}
 						YerFace_MutexUnlock(onBasisFlagCallbacksMutex);
 						break;
+				}
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+				if(SDL_GetModState() & KMOD_CTRL) {
+					bool reset = false;
+					if(event.button.button == SDL_BUTTON_LEFT) {
+						logger->info("Got an Eyedropper event at screen coordinates %dx%d. Rebroadcasting...", event.button.x, event.button.y);
+					} else if(event.button.button == SDL_BUTTON_RIGHT) {
+						logger->info("Got an Eyedropper RESET event. Rebroadcasting...");
+						reset = true;
+					}
+					YerFace_MutexLock(onEyedropperCallbacksMutex);
+					for(auto callback : onEyedropperCallbacks) {
+						callback(reset, event.button.x, event.button.y);
+					}
+					YerFace_MutexUnlock(onEyedropperCallbacksMutex);
 				}
 				break;
 		}
@@ -354,22 +365,16 @@ int SDLDriver::getPreviewDebugDensity(void) {
 	return status;
 }
 
-void SDLDriver::onColorPickerEvent(function<void(void)> callback) {
-	YerFace_MutexLock(onColorPickerCallbacksMutex);
-	onColorPickerCallbacks.push_back(callback);
-	YerFace_MutexUnlock(onColorPickerCallbacksMutex);
+void SDLDriver::onEyedropperEvent(function<void(bool reset, int x, int y)> callback) {
+	YerFace_MutexLock(onEyedropperCallbacksMutex);
+	onEyedropperCallbacks.push_back(callback);
+	YerFace_MutexUnlock(onEyedropperCallbacksMutex);
 }
 
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {
 	YerFace_MutexLock(onBasisFlagCallbacksMutex);
 	onBasisFlagCallbacks.push_back(callback);
 	YerFace_MutexUnlock(onBasisFlagCallbacksMutex);
-}
-
-void SDLDriver::invokeAll(std::vector<function<void(void)>> callbacks) {
-	for(auto callback : callbacks) {
-		callback();
-	}
 }
 
 SDLAudioFrame *SDLDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
