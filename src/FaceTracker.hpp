@@ -109,7 +109,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.5, double myPoseSmoothingExponent = 3);
+	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.25, double myPoseSmoothingExponent = 3);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);

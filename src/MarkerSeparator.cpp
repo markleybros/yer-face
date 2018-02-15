@@ -163,6 +163,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 
 		tempImageGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
 
+		// FIXME - Apparently a bug (in OpenCV?) is causing this to blow up CUDA and crash.
 		// openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
 		// closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
 
