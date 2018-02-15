@@ -56,7 +56,7 @@ private:
 	double markerBoxInflatePixels;
 
 	Logger *logger;
-	SDL_mutex *myWrkMutex, *myCmpMutex, *myWorkingMarkerListMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex, *myWorkingMarkerListMutex, *myEyedropperMutex;
 	Metrics *metrics;
 	Scalar HSVRangeMin;
 	Scalar HSVRangeMax;

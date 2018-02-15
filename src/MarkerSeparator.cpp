@@ -62,6 +62,9 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	if((myWorkingMarkerListMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((myEyedropperMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 	working.markerList.clear();
 	complete.markerList.clear();
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
@@ -84,20 +87,21 @@ MarkerSeparator::~MarkerSeparator() {
 	SDL_DestroyMutex(myWrkMutex);
 	SDL_DestroyMutex(myCmpMutex);
 	SDL_DestroyMutex(myWorkingMarkerListMutex);
+	SDL_DestroyMutex(myEyedropperMutex);
 	delete metrics;
 	delete logger;
 }
 
 void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
-	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myEyedropperMutex);
 	HSVRangeMin = myHSVRangeMin;
 	HSVRangeMax = myHSVRangeMax;
 	HSVRangeReset = false;
-	YerFace_MutexUnlock(myWrkMutex);
+	YerFace_MutexUnlock(myEyedropperMutex);
 }
 
 void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
-	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myEyedropperMutex);
 	for(int i = 0; i < 3; i++) {
 		if(myHSVRangeMin[i] < HSVRangeMin[i]) {
 			HSVRangeMin[i] = myHSVRangeMin[i];
@@ -106,7 +110,7 @@ void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) 
 			HSVRangeMax[i] = myHSVRangeMax[i];
 		}
 	}
-	YerFace_MutexUnlock(myWrkMutex);
+	YerFace_MutexUnlock(myEyedropperMutex);
 }
 
 void MarkerSeparator::processCurrentFrame(bool debug) {
@@ -140,6 +144,12 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	}
 
 	Mat searchFrameThreshold, debugFrame;
+
+	YerFace_MutexLock(myEyedropperMutex);
+	Scalar HSVMin = HSVRangeMin;
+	Scalar HSVMax = HSVRangeMax;
+	bool HSVReset = HSVRangeReset;
+	YerFace_MutexUnlock(myEyedropperMutex);
 	
 	#ifdef HAVE_CUDA
 		cuda::GpuMat searchFrameBGRGPU, searchFrameHSVGPU, searchFrameThresholdGPU, tempImageGPU;
@@ -149,16 +159,20 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		cv::cuda::cvtColor(searchFrameBGRGPU, searchFrameHSVGPU, COLOR_BGR2HSV);
 
 		searchFrameThresholdGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
-		inRangeGPU(searchFrameHSVGPU, HSVRangeMin, HSVRangeMax, searchFrameThresholdGPU);
+		inRangeGPU(searchFrameHSVGPU, HSVMin, HSVMax, searchFrameThresholdGPU);
 
 		tempImageGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
-		openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
-		closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
+		try {
+			openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
+			closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
 
-		searchFrameThresholdGPU.download(searchFrameThreshold);
+			searchFrameThresholdGPU.download(searchFrameThreshold);
+		} catch(exception &e) {
+			logger->verbose("Got an exception while trying to perform marker separation! Suspicious variables: %dx%d. Exception was: %s.", searchFrameSize.width, searchFrameSize.height, e.what());
+		}
 	#else
 		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
-		inRange(searchFrameHSV, HSVRangeMin, HSVRangeMax, searchFrameThreshold);
+		inRange(searchFrameHSV, HSVMin, HSVMax, searchFrameThreshold);
 		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
 		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 	#endif
@@ -172,7 +186,7 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 	vector<Vec4i> heirarchy;
 	findContours(searchFrameThreshold, contours, heirarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 
-	if(HSVRangeReset) {
+	if(HSVReset) {
 		contours.clear();
 	}
 
@@ -298,13 +312,13 @@ void MarkerSeparator::unlockWorkingMarkerList(void) {
 }
 
 void MarkerSeparator::doEyedropper(bool reset, int x, int y) {
-	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myEyedropperMutex);
 	if(reset) {
 		HSVRangeReset = true;
-		YerFace_MutexUnlock(myWrkMutex);
+		YerFace_MutexUnlock(myEyedropperMutex);
 		return;
 	}
-	Mat frame = frameDerivatives->getWorkingFrame();
+	Mat frame = frameDerivatives->getCompletedFrame();
 	Rect2d impliedRect = Rect2d(x, y, 1, 1);
 	impliedRect = Utilities::insetBox(impliedRect, 3.0);
 	Size frameSize = frame.size();
@@ -353,7 +367,7 @@ void MarkerSeparator::doEyedropper(bool reset, int x, int y) {
 		logger->info("doEyedropper: Updated HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
 	}
 
-	YerFace_MutexUnlock(myWrkMutex);
+	YerFace_MutexUnlock(myEyedropperMutex);
 }
 
 }; //namespace YerFace

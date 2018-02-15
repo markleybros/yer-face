@@ -90,6 +90,17 @@ Mat FrameDerivatives::getWorkingFrame(void) {
 	return value;
 }
 
+Mat FrameDerivatives::getCompletedFrame(void) {
+	YerFace_MutexLock(myMutex);
+	if(!completedFrameSet) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getCompletedFrame() called, but no completed frame set");
+	}
+	Mat value = completedFrame;
+	YerFace_MutexUnlock(myMutex);
+	return value;
+}
+
 void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
 	YerFace_MutexLock(myMutex);
 	if(!workingFrameSet) {

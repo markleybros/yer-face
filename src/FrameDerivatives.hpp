@@ -32,6 +32,7 @@ public:
 	~FrameDerivatives();
 	void setWorkingFrame(Mat newFrame, double timestamp); //Expected to be in BGR format, at the native resolution of the input. Timestamp is in seconds.
 	Mat getWorkingFrame(void);
+	Mat getCompletedFrame(void);
 	void advanceWorkingFrameToCompleted(void);
 	Mat getClassificationFrame(void);
 	Mat getWorkingPreviewFrame(void);
