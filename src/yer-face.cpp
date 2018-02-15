@@ -16,6 +16,9 @@
 // On my laptop, however, which is not so well-endowed, we need to do something more like this:
 // ffmpeg -framerate 30 -f video4linux2 -pixel_format mjpeg -video_size 1280x720 -i /dev/video0 -vcodec copy -f avi pipe:1 | build/bin/yer-face --captureFile=- --frameDrop
 
+// Colors for yellow florescent paint:
+// INFO: MarkerSeparator: doEyedropper: Updated HSV color range to: <56.00, 104.00, 65.00> - <96.00, 255.00, 239.00>
+
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
