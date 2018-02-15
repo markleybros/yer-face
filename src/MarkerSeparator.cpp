@@ -74,10 +74,10 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	});
 
 	structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
-	#ifdef HAVE_CUDA
-		openFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, structuringElement);
-		closeFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, structuringElement);
-	#endif
+	// #ifdef HAVE_CUDA
+	// 	openFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, structuringElement);
+	// 	closeFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, structuringElement);
+	// #endif
 
 	logger->debug("MarkerSeparator object constructed and ready to go!");
 }
@@ -162,21 +162,18 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		inRangeGPU(searchFrameHSVGPU, HSVMin, HSVMax, searchFrameThresholdGPU);
 
 		tempImageGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
-		try {
-			openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
-			closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
 
-			searchFrameThresholdGPU.download(searchFrameThreshold);
-		} catch(exception &e) {
-			logger->verbose("Got an exception while trying to perform marker separation! Suspicious variables: %dx%d. Exception was: %s.", searchFrameSize.width, searchFrameSize.height, e.what());
-		}
+		// openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
+		// closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
+
+		searchFrameThresholdGPU.download(searchFrameThreshold);
 	#else
 		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
 		inRange(searchFrameHSV, HSVMin, HSVMax, searchFrameThreshold);
-		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
-		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 	#endif
 
+	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
+	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
 	if(debug) {
 		cvtColor(searchFrameThreshold, debugFrame, COLOR_GRAY2BGR);

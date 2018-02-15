@@ -65,9 +65,9 @@ private:
 	Mat searchFrameHSV;
 
 	Mat structuringElement;
-	#ifdef HAVE_CUDA
-	Ptr<cuda::Filter> openFilter, closeFilter;
-	#endif
+	// #ifdef HAVE_CUDA
+	// Ptr<cuda::Filter> openFilter, closeFilter;
+	// #endif
 	
 	MarkerSeparatorWorkingVariables working, complete;
 };
