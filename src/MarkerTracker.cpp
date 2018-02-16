@@ -56,6 +56,7 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 
 	trackerState = DETECTING;
 	working.markerPoint.set = false;
+	working.previouslyReportedMarkerPoint.set = false;
 	working.markerDetectedSet = false;
 	working.trackingBoxSet = false;
 	complete.markerPoint.set = false;
@@ -598,7 +599,20 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 		tempPoint.point3d.z += point.point3d.z * weight;
 	}
 
-	working.markerPoint = tempPoint;
+	bool reportNewPoint = true;
+	if(working.previouslyReportedMarkerPoint.set) {
+		double distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
+		if(distance < 1.0) { //FIXME - magic numbers
+			reportNewPoint = false;
+		}
+	}
+
+	if(reportNewPoint) {
+		working.markerPoint = tempPoint;
+		working.previouslyReportedMarkerPoint = working.markerPoint;
+	} else {
+		working.markerPoint = working.previouslyReportedMarkerPoint;
+	}
 }
 
 void MarkerTracker::generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect, double proposedExclusionRadius, bool overrideExclusionZone, bool debug) {

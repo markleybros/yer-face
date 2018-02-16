@@ -36,6 +36,11 @@ double Utilities::lineDistance(Point2d a, Point2d b) {
     return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
 }
 
+double Utilities::lineDistance(Point3d a, Point3d b) {
+	Point3d d = a - b;
+    return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0) + std::pow(d.z, 2.0));
+}
+
 double Utilities::degreesToRadians(double degrees) {
 	return degrees * (M_PI / 180.0);
 }

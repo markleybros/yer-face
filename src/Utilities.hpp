@@ -46,6 +46,7 @@ public:
 	static Rect2d insetBox(Rect2d originalBox, double scale);
 	static Point2d centerRect(Rect2d rect);
 	static double lineDistance(Point2d a, Point2d b);
+	static double lineDistance(Point3d a, Point3d b);
 	static double degreesToRadians(double degrees);
 	static double radiansToDegrees(double radians, bool normalize = true);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);

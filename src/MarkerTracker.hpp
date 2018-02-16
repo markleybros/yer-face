@@ -44,6 +44,7 @@ public:
 	Rect2d trackingBox;
 	bool trackingBoxSet;
 	MarkerPoint markerPoint;
+	MarkerPoint previouslyReportedMarkerPoint;
 };
 
 class FaceMapper;
