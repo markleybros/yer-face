@@ -47,7 +47,7 @@ sudo make install
 
 **CMAKE NOTES:**
 
-Make sure in the CMake output, under "OpenCV modules," the list includes:
+_NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes:
 - core
 - tracking
 - calib3d
@@ -88,6 +88,7 @@ cmake --config Release ..
 ```
 
 **CMAKE NOTES:**
+
 _NOTE:_ If you get errors like `CUDA was found but your compiler failed to compile a simple CUDA program` you need to make sure you're using the correct version of GCC:
 - Check above in the OpenCV section for more information.
 - `scl enable devtoolset-6 bash`
@@ -102,7 +103,7 @@ You might be able to get away with using FFmpeg packaged for your distro:
 dnf -y install ffmpeg ffmpeg-libs ffmpeg-devel
 ```
 
-If you *really* need to build FFmpeg from scratch, make sure its dependencies are installed first:
+If you **really** need to build FFmpeg from scratch, make sure its dependencies are installed first:
 
 ```
 dnf -y install nasm yasm yasm-devel frei0r-plugins-opencv frei0r-plugins frei0r-devel gnutls gnutls-devel 'ladspa*' libass libass-devel libbluray libbluray-utils libbluray-devel gsm-devel lame lame-libs lame-devel openjpeg2 openjpeg2-tools openjpeg2-devel opus opus-devel opus-tools pulseaudio-libs pulseaudio-libs-devel soxr soxr-devel speex speex-tools speex-devel libtheora libtheora-devel theora-tools libv4l libv4l-devel vo-amrwbenc vo-amrwbenc-devel libvorbis libvorbis-devel vorbis-tools libvpx libvpx-devel libvpx-utils x264 x264-libs x264-devel x265 x265-libs x265-devel xvidcore xvodcore-devel openal-soft openal-soft-devel opencl-utils opencl-utils-devel opencl-headers ocl-icd ocl-icd-devel libgcrypt libgcrypt-devel libcdio libcdio-devel libcdio-paranoia libcdio-paranoia-devel
