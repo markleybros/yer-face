@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, double myPoseSmoothingOverSeconds, double myPoseSmoothingExponent) {
+FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, double myPoseSmoothingOverSeconds, double myPoseSmoothingExponent, double myPoseSmoothingRotationRejectionThreshold, double myPoseSmoothingTranslationRejectionThreshold) {
 	featureDetectionModelFileName = myFeatureDetectionModelFileName;
 	faceDetectionModelFileName = myFaceDetectionModelFileName;
 	trackerState = DETECTING;
@@ -25,6 +25,7 @@ FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDe
 	working.facialFeatures.set = false;
 	working.facialFeatures.featuresExposed.set = false;
 	working.facialPose.set = false;
+	working.previouslyReportedFacialPose.set = false;
 	complete.classificationBox.set = false;
 	complete.trackingBox.set = false;
 	complete.faceRect.set = false;
@@ -56,6 +57,14 @@ FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDe
 	poseSmoothingExponent = myPoseSmoothingExponent;
 	if(poseSmoothingExponent <= 0.0) {
 		throw invalid_argument("poseSmoothingExponent cannot be less than or equal to zero.");
+	}
+	poseSmoothingRotationRejectionThreshold = myPoseSmoothingRotationRejectionThreshold;
+	if(poseSmoothingRotationRejectionThreshold <= 0.0) {
+		throw invalid_argument("poseSmoothingRotationRejectionThreshold cannot be less than or equal to zero.");
+	}
+	poseSmoothingTranslationRejectionThreshold = myPoseSmoothingTranslationRejectionThreshold;
+	if(poseSmoothingTranslationRejectionThreshold <= 0.0) {
+		throw invalid_argument("poseSmoothingRotationRejectionThreshold cannot be less than or equal to zero.");
 	}
 
 	logger = new Logger("FaceTracker");
@@ -403,11 +412,38 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		}
 	}
 
-	working.facialPose = tempPose;
-	working.facialPose.set = true;
+	tempPose.set = true;
+	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
-	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(working.facialPose.rotationMatrix);
-	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
+	bool reportNewPose = true;
+	if(working.previouslyReportedFacialPose.set) {
+		//Calculate the difference between the previous rotation and the current rotation.
+		Mat aTransposed = working.previouslyReportedFacialPose.rotationMatrix.t();
+		Mat ab = aTransposed * tempPose.rotationMatrix;
+		Scalar abTraceScalar = cv::trace(ab);
+		double abTrace = abTraceScalar[0];
+		while(abTrace > 1.0) {
+			abTrace = abTrace - 2.0;
+		}
+		while(abTrace < -1.0) {
+			abTrace = abTrace + 2.0;
+		}
+		double degreesDifference = Utilities::radiansToDegrees(std::acos(abTrace) / 2.0);
+		//Calculate the difference between the previous translation and the current translation.
+		double distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
+		if(degreesDifference < poseSmoothingRotationRejectionThreshold && distance < poseSmoothingTranslationRejectionThreshold) { // FIXME magic numbers
+			// logger->verbose("Dropping facial pose due to low rotation (%.02lf) and low motion (%.02lf)!", degreesDifference, distance);
+			reportNewPose = false;
+		}
+	}
+
+	if(reportNewPose) {
+		working.facialPose = tempPose;
+		working.previouslyReportedFacialPose = working.facialPose;
+	} else {
+		working.facialPose = working.previouslyReportedFacialPose;
+	}
 }
 
 void FaceTracker::doCalculateFacialPlane(void) {
