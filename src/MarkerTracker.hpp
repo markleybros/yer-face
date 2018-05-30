@@ -51,7 +51,7 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, double myTrackingBoxPercentage = 1.5, double myMaxTrackerDriftPercentage = 0.75, double myPointSmoothingOverSeconds = 0.1, double myPointSmoothingExponent = 3);
+	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, double myTrackingBoxPercentage = 1.5, double myMaxTrackerDriftPercentage = 0.75, double myPointSmoothingOverSeconds = 0.1, double myPointSmoothingExponent = 3, double myPointSmoothingRejectionThreshold = 1.0);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);
@@ -86,6 +86,7 @@ private:
 	double maxTrackerDriftPercentage;
 	double pointSmoothingOverSeconds;
 	double pointSmoothingExponent;
+	double pointSmoothingRejectionThreshold;
 
 	Logger *logger;
 	SDL_mutex *myWrkMutex, *myCmpMutex;

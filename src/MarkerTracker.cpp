@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, double myTrackingBoxPercentage, double myMaxTrackerDriftPercentage, double myPointSmoothingOverSeconds, double myPointSmoothingExponent) {
+MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, double myTrackingBoxPercentage, double myMaxTrackerDriftPercentage, double myPointSmoothingOverSeconds, double myPointSmoothingExponent, double myPointSmoothingRejectionThreshold) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -47,6 +47,10 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 	pointSmoothingExponent = myPointSmoothingExponent;
 	if(pointSmoothingExponent <= 0.0) {
 		throw invalid_argument("pointSmoothingExponent cannot be less than or equal to zero");
+	}
+	pointSmoothingRejectionThreshold = myPointSmoothingRejectionThreshold;
+	if(pointSmoothingRejectionThreshold <= 0.0) {
+		throw invalid_argument("pointSmoothingRejectionThreshold cannot be less than or equal to zero");
 	}
 
 	sdlDriver = faceMapper->getSDLDriver();
@@ -602,7 +606,7 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 	bool reportNewPoint = true;
 	if(working.previouslyReportedMarkerPoint.set) {
 		double distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
-		if(distance < 1.0) { //FIXME - magic numbers
+		if(distance < pointSmoothingRejectionThreshold) {
 			reportNewPoint = false;
 		}
 	}
