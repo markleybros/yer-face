@@ -101,6 +101,20 @@ Mat Utilities::eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees) {
 	return matrix;
 }
 
+double Utilities::degreesDifferenceBetweenTwoRotationMatrices(Mat a, Mat b) {
+	Mat aTransposed = a.t();
+	Mat ab = aTransposed * b;
+	Scalar abTraceScalar = cv::trace(ab);
+	double abTrace = abTraceScalar[0];
+	while(abTrace > 1.0) {
+		abTrace = abTrace - 2.0;
+	}
+	while(abTrace < -1.0) {
+		abTrace = abTrace + 2.0;
+	}
+	return Utilities::radiansToDegrees(std::acos(abTrace) / 2.0);
+}
+
 Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoint) {
 	return (Mat_<double>(3,3) <<
 		focalLength, 0.0,         principalPoint.x,

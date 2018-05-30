@@ -110,7 +110,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.15, double myPoseSmoothingExponent = 3, double myPoseSmoothingRotationRejectionThreshold = 2.0, double myPoseSmoothingTranslationRejectionThreshold = 3.75);
+	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.2, double myPoseSmoothingExponent = 3, double myPoseSmoothingRotationLowRejectionThreshold = 2.5, double myPoseSmoothingTranslationLowRejectionThreshold = 4.0);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -141,8 +141,8 @@ private:
 	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
-	double poseSmoothingRotationRejectionThreshold;
-	double poseSmoothingTranslationRejectionThreshold;
+	double poseSmoothingRotationLowRejectionThreshold;
+	double poseSmoothingTranslationLowRejectionThreshold;
 
 	Logger *logger;
 	Metrics *metrics;

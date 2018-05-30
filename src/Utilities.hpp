@@ -51,6 +51,7 @@ public:
 	static double radiansToDegrees(double radians, bool normalize = true);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);
 	static Mat eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees = true);
+	static double degreesDifferenceBetweenTwoRotationMatrices(Mat a, Mat b);
 	static Mat generateFakeCameraMatrix(double focalLength = 1.0, Point2d principalPoint = Point2d(0, 0));
 	static bool rayPlaneIntersection(Point3d &intersection, Point3d rayOrigin, Vec3d rayVector, Point3d planePoint, Vec3d planeNormal);
 	static void drawRotatedRectOutline(Mat frame, RotatedRect rrect, Scalar color = Scalar(0, 0, 255), int thickness = 1);
