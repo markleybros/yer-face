@@ -12,6 +12,15 @@
       "poseSmoothingTranslationLowRejectionThreshold": 4.0,
       "poseSmoothingRotationHighRejectionThreshold": 7,
       "poseSmoothingTranslationHighRejectionThreshold": 210
+    },
+    "FaceMapper": {
+      "markerHSVRangeMin": [56, 29, 80],
+      "markerHSVRangeMax": [100, 211, 255],
+      "performOpticalTracking": false
+    },
+    "FrameDerivatives": {
+      "classificationBoundingBox": 320,
+      "classificationScaleFactor": 0.0
     }
   }
 }

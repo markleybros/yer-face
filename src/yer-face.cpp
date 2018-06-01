@@ -44,8 +44,6 @@ String captureFile;
 String previewImgSeq;
 String hiddenMarkovModel;
 String allPhoneLM;
-String markerHSVRangeMinJSON;
-String markerHSVRangeMaxJSON;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
@@ -93,8 +91,6 @@ int main(int argc, const char** argv) {
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		"{hiddenMarkovModel|data/sphinx-models/en-us/en-us|Hidden Markov Model used by PocketSphinx for lip synchronization.}"
 		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}"
-		"{markerHSVRangeMin|[56, 29, 80]|Default starting range for marker colors in HSV, lower bound. (JSON array with three ints.)}"
-		"{markerHSVRangeMax|[100, 211, 255]|Default starting range for marker colors in HSV, upper bound. (JSON array with three ints.)}"
 		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -123,30 +119,13 @@ int main(int argc, const char** argv) {
 	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
-	markerHSVRangeMinJSON = parser.get<string>("markerHSVRangeMin");
-	markerHSVRangeMaxJSON = parser.get<string>("markerHSVRangeMax");
-
-	Scalar markerHSVRangeMin;
-	try {
-		markerHSVRangeMin = Utilities::scalarColorFromJSONArray(markerHSVRangeMinJSON);
-	} catch(exception &e) {
-		logger->error("Wasn't able to parse markerHSVRangeMin. Got exception: %s", e.what());
-		return 1;
-	}
-	Scalar markerHSVRangeMax;
-	try {
-		markerHSVRangeMax = Utilities::scalarColorFromJSONArray(markerHSVRangeMaxJSON);
-	} catch(exception &e) {
-		logger->error("Wasn't able to parse markerHSVRangeMax. Got exception: %s", e.what());
-		return 1;
-	}
 
 	//Instantiate our classes.
-	frameDerivatives = new FrameDerivatives();
+	frameDerivatives = new FrameDerivatives(config);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
-	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, markerHSVRangeMin, markerHSVRangeMax, false);
+	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(frameDerivatives, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {

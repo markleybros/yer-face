@@ -8,16 +8,17 @@ using namespace std;
 
 namespace YerFace {
 
-FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myClassificationScaleFactor) {
+FrameDerivatives::FrameDerivatives(json config) {
 	logger = new Logger("FrameDerivatives");
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if(myClassificationBoundingBox < 0) {
+	classificationBoundingBox = config["YerFace"]["FrameDerivatives"]["classificationBoundingBox"];
+	if(classificationBoundingBox < 0) {
 		throw invalid_argument("Classification Bounding Box is invalid.");
 	}
-	classificationBoundingBox = myClassificationBoundingBox;
-	if(myClassificationScaleFactor < 0.0 || myClassificationScaleFactor > 1.0) {
+	classificationScaleFactor = config["YerFace"]["FrameDerivatives"]["classificationScaleFactor"];
+	if(classificationScaleFactor < 0.0 || classificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
 	workingFrameSet = false;
@@ -25,7 +26,6 @@ FrameDerivatives::FrameDerivatives(int myClassificationBoundingBox, double myCla
 	workingPreviewFrameSet = false;
 	completedPreviewFrameSet = false;
 	workingFrameSizeSet = false;
-	classificationScaleFactor = myClassificationScaleFactor;
 	workingFrameTimestamps.frameNumber = 0;
 	workingFrameTimestamps.set = false;
 	completedFrameTimestamps.set = false;

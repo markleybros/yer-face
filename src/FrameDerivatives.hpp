@@ -2,6 +2,7 @@
 
 #include "Metrics.hpp"
 #include "Logger.hpp"
+#include "Utilities.hpp"
 
 #include <list>
 
@@ -28,7 +29,7 @@ class Metrics;
 
 class FrameDerivatives {
 public:
-	FrameDerivatives(int myClassificationBoundingBox = 320, double myClassificationScaleFactor = 0.0);
+	FrameDerivatives(json config);
 	~FrameDerivatives();
 	void setWorkingFrame(Mat newFrame, double timestamp); //Expected to be in BGR format, at the native resolution of the input. Timestamp is in seconds.
 	Mat getWorkingFrame(void);

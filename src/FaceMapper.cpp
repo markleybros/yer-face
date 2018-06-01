@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool myPerformOpticalTracking) {
+FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
@@ -24,10 +24,13 @@ FaceMapper::FaceMapper(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivati
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
-	performOpticalTracking = myPerformOpticalTracking;
+	performOpticalTracking = config["YerFace"]["FaceMapper"]["performOpticalTracking"];
 
 	logger = new Logger("FaceMapper");
 	metrics = new Metrics("FaceMapper", frameDerivatives);
+
+	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["FaceMapper"]["markerHSVRangeMin"]);
+	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["FaceMapper"]["markerHSVRangeMax"]);
 
 	markerSeparator = new MarkerSeparator(sdlDriver, frameDerivatives, faceTracker, myHSVRangeMin, myHSVRangeMax);
 
