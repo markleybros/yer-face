@@ -15,6 +15,7 @@
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "MarkerSeparator.hpp"
+#include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
@@ -51,7 +52,7 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking = true, double myTrackingBoxPercentage = 1.5, double myMaxTrackerDriftPercentage = 0.75, double myPointSmoothingOverSeconds = 0.1, double myPointSmoothingExponent = 3, double myPointSmoothingRejectionThreshold = 1.0);
+	MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	TrackerState processCurrentFrame(void);

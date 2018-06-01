@@ -11,7 +11,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking, double myTrackingBoxPercentage, double myMaxTrackerDriftPercentage, double myPointSmoothingOverSeconds, double myPointSmoothingExponent, double myPointSmoothingRejectionThreshold) {
+MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking) {
 	markerType = MarkerType(myMarkerType);
 
 	if(markerType.type == NoMarkerAssigned) {
@@ -32,23 +32,23 @@ MarkerTracker::MarkerTracker(MarkerType myMarkerType, FaceMapper *myFaceMapper, 
 		throw invalid_argument("faceMapper cannot be NULL");
 	}
 	performOpticalTracking = myPerformOpticalTracking;
-	trackingBoxPercentage = myTrackingBoxPercentage;
+	trackingBoxPercentage = config["YerFace"]["MarkerTracker"]["trackingBoxPercentage"];
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
 	}
-	maxTrackerDriftPercentage = myMaxTrackerDriftPercentage;
+	maxTrackerDriftPercentage = config["YerFace"]["MarkerTracker"]["maxTrackerDriftPercentage"];
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
 	}
-	pointSmoothingOverSeconds = myPointSmoothingOverSeconds;
+	pointSmoothingOverSeconds = config["YerFace"]["MarkerTracker"]["pointSmoothingOverSeconds"];
 	if(pointSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("pointSmoothingOverSeconds cannot be less than or equal to zero");
 	}
-	pointSmoothingExponent = myPointSmoothingExponent;
+	pointSmoothingExponent = config["YerFace"]["MarkerTracker"]["pointSmoothingExponent"];
 	if(pointSmoothingExponent <= 0.0) {
 		throw invalid_argument("pointSmoothingExponent cannot be less than or equal to zero");
 	}
-	pointSmoothingRejectionThreshold = myPointSmoothingRejectionThreshold;
+	pointSmoothingRejectionThreshold = config["YerFace"]["MarkerTracker"]["pointSmoothingRejectionThreshold"];
 	if(pointSmoothingRejectionThreshold <= 0.0) {
 		throw invalid_argument("pointSmoothingRejectionThreshold cannot be less than or equal to zero");
 	}

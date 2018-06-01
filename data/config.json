@@ -28,6 +28,13 @@
       "minTargetMarkerAreaPercentage": 0.00001,
       "maxTargetMarkerAreaPercentage": 0.01,
       "markerBoxInflatePixels": 1.5
+    },
+    "MarkerTracker": {
+      "trackingBoxPercentage": 1.5,
+      "maxTrackerDriftPercentage": 0.75,
+      "pointSmoothingOverSeconds": 0.1,
+      "pointSmoothingExponent": 3,
+      "pointSmoothingRejectionThreshold": 1.0
     }
   }
 }

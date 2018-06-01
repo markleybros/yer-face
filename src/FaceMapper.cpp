@@ -31,31 +31,31 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *my
 
 	markerSeparator = new MarkerSeparator(config, sdlDriver, frameDerivatives, faceTracker);
 
-	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, performOpticalTracking);
-	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, performOpticalTracking);
-	markerEyelidLeftBottom = new MarkerTracker(EyelidLeftBottom, this, performOpticalTracking);
-	markerEyelidRightBottom = new MarkerTracker(EyelidRightBottom, this, performOpticalTracking);
+	markerEyelidLeftTop = new MarkerTracker(config, EyelidLeftTop, this, performOpticalTracking);
+	markerEyelidRightTop = new MarkerTracker(config, EyelidRightTop, this, performOpticalTracking);
+	markerEyelidLeftBottom = new MarkerTracker(config, EyelidLeftBottom, this, performOpticalTracking);
+	markerEyelidRightBottom = new MarkerTracker(config, EyelidRightBottom, this, performOpticalTracking);
 
-	markerEyebrowLeftInner = new MarkerTracker(EyebrowLeftInner, this, performOpticalTracking);
-	markerEyebrowRightInner = new MarkerTracker(EyebrowRightInner, this, performOpticalTracking);
-	markerEyebrowLeftMiddle = new MarkerTracker(EyebrowLeftMiddle, this, performOpticalTracking);
-	markerEyebrowRightMiddle = new MarkerTracker(EyebrowRightMiddle, this, performOpticalTracking);
-	markerEyebrowLeftOuter = new MarkerTracker(EyebrowLeftOuter, this, performOpticalTracking);
-	markerEyebrowRightOuter = new MarkerTracker(EyebrowRightOuter, this, performOpticalTracking);
+	markerEyebrowLeftInner = new MarkerTracker(config, EyebrowLeftInner, this, performOpticalTracking);
+	markerEyebrowRightInner = new MarkerTracker(config, EyebrowRightInner, this, performOpticalTracking);
+	markerEyebrowLeftMiddle = new MarkerTracker(config, EyebrowLeftMiddle, this, performOpticalTracking);
+	markerEyebrowRightMiddle = new MarkerTracker(config, EyebrowRightMiddle, this, performOpticalTracking);
+	markerEyebrowLeftOuter = new MarkerTracker(config, EyebrowLeftOuter, this, performOpticalTracking);
+	markerEyebrowRightOuter = new MarkerTracker(config, EyebrowRightOuter, this, performOpticalTracking);
 
-	markerCheekLeft = new MarkerTracker(CheekLeft, this, performOpticalTracking);
-	markerCheekRight = new MarkerTracker(CheekRight, this, performOpticalTracking);
+	markerCheekLeft = new MarkerTracker(config, CheekLeft, this, performOpticalTracking);
+	markerCheekRight = new MarkerTracker(config, CheekRight, this, performOpticalTracking);
 	
-	markerJaw = new MarkerTracker(Jaw, this, performOpticalTracking);
+	markerJaw = new MarkerTracker(config, Jaw, this, performOpticalTracking);
 
-	markerLipsLeftCorner = new MarkerTracker(LipsLeftCorner, this, performOpticalTracking);
-	markerLipsRightCorner = new MarkerTracker(LipsRightCorner, this, performOpticalTracking);
+	markerLipsLeftCorner = new MarkerTracker(config, LipsLeftCorner, this, performOpticalTracking);
+	markerLipsRightCorner = new MarkerTracker(config, LipsRightCorner, this, performOpticalTracking);
 
-	markerLipsLeftTop = new MarkerTracker(LipsLeftTop, this, performOpticalTracking);
-	markerLipsRightTop = new MarkerTracker(LipsRightTop, this, performOpticalTracking);
+	markerLipsLeftTop = new MarkerTracker(config, LipsLeftTop, this, performOpticalTracking);
+	markerLipsRightTop = new MarkerTracker(config, LipsRightTop, this, performOpticalTracking);
 
-	markerLipsLeftBottom = new MarkerTracker(LipsLeftBottom, this, performOpticalTracking);
-	markerLipsRightBottom = new MarkerTracker(LipsRightBottom, this, performOpticalTracking);
+	markerLipsLeftBottom = new MarkerTracker(config, LipsLeftBottom, this, performOpticalTracking);
+	markerLipsRightBottom = new MarkerTracker(config, LipsRightBottom, this, performOpticalTracking);
 	
 	working.features.set = false;
 	working.leftEye.set = false;
