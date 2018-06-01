@@ -15,6 +15,7 @@
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "Metrics.hpp"
+#include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
@@ -110,7 +111,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking = true, float myTrackingBoxPercentage = 0.75, float myMaxTrackerDriftPercentage = 0.25, double myPoseSmoothingOverSeconds = 0.2, double myPoseSmoothingExponent = 3, double myPoseSmoothingRotationLowRejectionThreshold = 2.5, double myPoseSmoothingTranslationLowRejectionThreshold = 4.0, double myPoseSmoothingRotationHighRejectionThreshold = 7, double myPoseSmoothingTranslationHighRejectionThreshold = 210);
+	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives);
 	~FaceTracker();
 	TrackerState processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);

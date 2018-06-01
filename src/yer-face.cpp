@@ -31,6 +31,7 @@
 // #include "SphinxDriver.hpp"
 
 #include <iostream>
+#include <sstream>
 #include <cstdio>
 #include <cstdlib>
 
@@ -38,9 +39,8 @@ using namespace std;
 using namespace cv;
 using namespace YerFace;
 
+String configFile;
 String captureFile;
-String dlibFaceLandmarks;
-String dlibFaceDetector;
 String previewImgSeq;
 String hiddenMarkovModel;
 String allPhoneLM;
@@ -49,6 +49,8 @@ String markerHSVRangeMaxJSON;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
+
+json config = NULL;
 
 SDLWindowRenderer sdlWindowRenderer;
 bool windowInitializationFailed;
@@ -75,6 +77,7 @@ SDL_mutex *frameSizeMutex;
 
 static int runCaptureLoop(void *ptr);
 void doRenderPreviewFrame(void);
+void parseConfigFile(void);
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -83,8 +86,7 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{dlibFaceLandmarks|data/dlib-models/shape_predictor_68_face_landmarks.dat|Model for dlib's facial landmark detector.}"
-		"{dlibFaceDetector|data/dlib-models/mmod_human_face_detector.dat|Model for dlib's DNN facial landmark detector or empty string (\"\") to default to the older HOG detector.}"
+		"{configFile C|data/config.json|Required configuration file.}"
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
@@ -105,13 +107,18 @@ int main(int argc, const char** argv) {
 		parser.printErrors();
 		return 1;
 	}
+	configFile = parser.get<string>("configFile");
+	try {
+		parseConfigFile();
+	} catch(exception &e) {
+		logger->error("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
+		return 1;
+	}
 	captureFile = parser.get<string>("captureFile");
 	if(captureFile == "-") {
 		captureFile = "pipe:0";
 	}
 	previewImgSeq = parser.get<string>("previewImgSeq");
-	dlibFaceLandmarks = parser.get<string>("dlibFaceLandmarks");
-	dlibFaceDetector = parser.get<string>("dlibFaceDetector");
 	hiddenMarkovModel = parser.get<string>("hiddenMarkovModel");
 	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
@@ -138,7 +145,7 @@ int main(int argc, const char** argv) {
 	frameDerivatives = new FrameDerivatives();
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	faceTracker = new FaceTracker(dlibFaceLandmarks, dlibFaceDetector, sdlDriver, frameDerivatives, false);
+	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(sdlDriver, frameDerivatives, faceTracker, markerHSVRangeMin, markerHSVRangeMax, false);
 	metrics = new Metrics("YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(frameDerivatives, faceTracker, sdlDriver);
@@ -299,4 +306,15 @@ void doRenderPreviewFrame(void) {
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
 	YerFace_MutexUnlock(flipWorkingCompletedMutex);
+}
+
+void parseConfigFile(void) {
+	logger->verbose("Opening and parsing config file: \"%s\"", configFile.c_str());
+	std::ifstream fileStream = std::ifstream(configFile);
+	if(fileStream.fail()) {
+		throw invalid_argument("Specified config file failed to open.");
+	}
+	std::stringstream ssBuffer;
+	ssBuffer << fileStream.rdbuf();
+	config = json::parse(ssBuffer.str());
 }

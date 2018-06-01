@@ -15,9 +15,9 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDetectionModelFileName, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myPerformOpticalTracking, float myTrackingBoxPercentage, float myMaxTrackerDriftPercentage, double myPoseSmoothingOverSeconds, double myPoseSmoothingExponent, double myPoseSmoothingRotationLowRejectionThreshold, double myPoseSmoothingTranslationLowRejectionThreshold, double myPoseSmoothingRotationHighRejectionThreshold, double myPoseSmoothingTranslationHighRejectionThreshold) {
-	featureDetectionModelFileName = myFeatureDetectionModelFileName;
-	faceDetectionModelFileName = myFaceDetectionModelFileName;
+FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives) {
+	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
+	faceDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceDetector"];
 	trackerState = DETECTING;
 	working.classificationBox.set = false;
 	working.trackingBox.set = false;
@@ -41,36 +41,36 @@ FaceTracker::FaceTracker(string myFeatureDetectionModelFileName, string myFaceDe
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	performOpticalTracking = myPerformOpticalTracking;
-	trackingBoxPercentage = myTrackingBoxPercentage;
+	performOpticalTracking = config["YerFace"]["FaceTracker"]["performOpticalTracking"];
+	trackingBoxPercentage = config["YerFace"]["FaceTracker"]["trackingBoxPercentage"];
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
 	}
-	maxTrackerDriftPercentage = myMaxTrackerDriftPercentage;
+	maxTrackerDriftPercentage = config["YerFace"]["FaceTracker"]["maxTrackerDriftPercentage"];
 	if(maxTrackerDriftPercentage <= 0.0) {
 		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
 	}
-	poseSmoothingOverSeconds = myPoseSmoothingOverSeconds;
+	poseSmoothingOverSeconds = config["YerFace"]["FaceTracker"]["poseSmoothingOverSeconds"];
 	if(poseSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("poseSmoothingOverSeconds cannot be less than or equal to zero.");
 	}
-	poseSmoothingExponent = myPoseSmoothingExponent;
+	poseSmoothingExponent = config["YerFace"]["FaceTracker"]["poseSmoothingExponent"];
 	if(poseSmoothingExponent <= 0.0) {
 		throw invalid_argument("poseSmoothingExponent cannot be less than or equal to zero.");
 	}
-	poseSmoothingRotationLowRejectionThreshold = myPoseSmoothingRotationLowRejectionThreshold;
+	poseSmoothingRotationLowRejectionThreshold = config["YerFace"]["FaceTracker"]["poseSmoothingRotationLowRejectionThreshold"];
 	if(poseSmoothingRotationLowRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseSmoothingRotationLowRejectionThreshold cannot be less than or equal to zero.");
 	}
-	poseSmoothingTranslationLowRejectionThreshold = myPoseSmoothingTranslationLowRejectionThreshold;
+	poseSmoothingTranslationLowRejectionThreshold = config["YerFace"]["FaceTracker"]["poseSmoothingTranslationLowRejectionThreshold"];
 	if(poseSmoothingTranslationLowRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseSmoothingRotationLowRejectionThreshold cannot be less than or equal to zero.");
 	}
-	poseSmoothingRotationHighRejectionThreshold = myPoseSmoothingRotationHighRejectionThreshold;
+	poseSmoothingRotationHighRejectionThreshold = config["YerFace"]["FaceTracker"]["poseSmoothingRotationHighRejectionThreshold"];
 	if(poseSmoothingRotationHighRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseSmoothingRotationHighRejectionThreshold cannot be less than or equal to zero.");
 	}
-	poseSmoothingTranslationHighRejectionThreshold = myPoseSmoothingTranslationHighRejectionThreshold;
+	poseSmoothingTranslationHighRejectionThreshold = config["YerFace"]["FaceTracker"]["poseSmoothingTranslationHighRejectionThreshold"];
 	if(poseSmoothingTranslationHighRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseSmoothingRotationHighRejectionThreshold cannot be less than or equal to zero.");
 	}
