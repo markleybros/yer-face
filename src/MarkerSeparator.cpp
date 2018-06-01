@@ -18,7 +18,7 @@ using namespace cv;
 
 namespace YerFace {
 
-MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, double myFaceSizePercentageX, double myFaceSizePercentageY, double myMinTargetMarkerAreaPercentage, double myMaxTargetMarkerAreaPercentage, double myMarkerBoxInflatePixels) {
+MarkerSeparator::MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
@@ -31,23 +31,23 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
-	minTargetMarkerAreaPercentage = myMinTargetMarkerAreaPercentage;
+	minTargetMarkerAreaPercentage = config["YerFace"]["MarkerSeparator"]["minTargetMarkerAreaPercentage"];
 	if(minTargetMarkerAreaPercentage <= 0.0 || minTargetMarkerAreaPercentage > 1.0) {
 		throw invalid_argument("minTargetMarkerAreaPercentage is out of range.");
 	}
-	maxTargetMarkerAreaPercentage = myMaxTargetMarkerAreaPercentage;
+	maxTargetMarkerAreaPercentage = config["YerFace"]["MarkerSeparator"]["maxTargetMarkerAreaPercentage"];
 	if(maxTargetMarkerAreaPercentage <= 0.0 || maxTargetMarkerAreaPercentage > 1.0) {
 		throw invalid_argument("maxTargetMarkerAreaPercentage is out of range.");
 	}
-	faceSizePercentageX = myFaceSizePercentageX;
+	faceSizePercentageX = config["YerFace"]["MarkerSeparator"]["faceSizePercentageX"];
 	if(faceSizePercentageX <= 0.0 || faceSizePercentageX > 2.0) {
 		throw invalid_argument("faceSizePercentageX is out of range.");
 	}
-	faceSizePercentageY = myFaceSizePercentageY;
+	faceSizePercentageY = config["YerFace"]["MarkerSeparator"]["faceSizePercentageY"];
 	if(faceSizePercentageY <= 0.0 || faceSizePercentageY > 2.0) {
 		throw invalid_argument("faceSizePercentageY is out of range.");
 	}
-	markerBoxInflatePixels = myMarkerBoxInflatePixels;
+	markerBoxInflatePixels = config["YerFace"]["MarkerSeparator"]["markerBoxInflatePixels"];
 	if(markerBoxInflatePixels < 0.0) {
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
@@ -67,6 +67,8 @@ MarkerSeparator::MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFra
 	}
 	working.markerList.clear();
 	complete.markerList.clear();
+	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMin"]);
+	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMax"]);
 	setHSVRange(myHSVRangeMin, myHSVRangeMax);
 	sdlDriver->onEyedropperEvent([this] (bool reset, int x, int y) -> void {
 		this->logger->info("Got an Eyedropper event. [ %s, %d, %d ] Handling...", reset ? "RESETTING" : "Adding Color", x, y);

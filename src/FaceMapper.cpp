@@ -29,10 +29,7 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *my
 	logger = new Logger("FaceMapper");
 	metrics = new Metrics("FaceMapper", frameDerivatives);
 
-	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["FaceMapper"]["markerHSVRangeMin"]);
-	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["FaceMapper"]["markerHSVRangeMax"]);
-
-	markerSeparator = new MarkerSeparator(sdlDriver, frameDerivatives, faceTracker, myHSVRangeMin, myHSVRangeMax);
+	markerSeparator = new MarkerSeparator(config, sdlDriver, frameDerivatives, faceTracker);
 
 	markerEyelidLeftTop = new MarkerTracker(EyelidLeftTop, this, performOpticalTracking);
 	markerEyelidRightTop = new MarkerTracker(EyelidRightTop, this, performOpticalTracking);

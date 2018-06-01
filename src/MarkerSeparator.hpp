@@ -13,6 +13,7 @@
 #include "FaceTracker.hpp"
 #include "MarkerType.hpp"
 #include "Metrics.hpp"
+#include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
@@ -34,7 +35,7 @@ public:
 
 class MarkerSeparator {
 public:
-	MarkerSeparator(SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, Scalar myHSVRangeMin, Scalar myHSVRangeMax, double myFaceSizePercentageX = 1.5, double myFaceSizePercentageY = 2.0, double myMinTargetMarkerAreaPercentage = 0.00001, double myMaxTargetMarkerAreaPercentage = 0.01, double myMarkerBoxInflatePixels = 1.5);
+	MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~MarkerSeparator();
 	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
 	void widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
