@@ -61,7 +61,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop = false);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop);
 	~FFmpegDriver();
 	void rollDemuxerThread(void);
 	bool getIsAudioInputPresent(void);

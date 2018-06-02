@@ -29,7 +29,7 @@ FrameDerivatives::FrameDerivatives(json config) {
 	workingFrameTimestamps.frameNumber = 0;
 	workingFrameTimestamps.set = false;
 	completedFrameTimestamps.set = false;
-	metrics = new Metrics("FrameDerivatives", this);
+	metrics = new Metrics(config, "FrameDerivatives", this);
 	logger->debug("FrameDerivatives constructed and ready to go!");
 }
 

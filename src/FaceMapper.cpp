@@ -27,7 +27,7 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *my
 	performOpticalTracking = config["YerFace"]["FaceMapper"]["performOpticalTracking"];
 
 	logger = new Logger("FaceMapper");
-	metrics = new Metrics("FaceMapper", frameDerivatives);
+	metrics = new Metrics(config, "FaceMapper", frameDerivatives);
 
 	markerSeparator = new MarkerSeparator(config, sdlDriver, frameDerivatives, faceTracker);
 

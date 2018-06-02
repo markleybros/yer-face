@@ -7,16 +7,22 @@ using namespace cv;
 
 namespace YerFace {
 
-Metrics::Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames, double myAverageOverSeconds, double myReportEverySeconds) {
+Metrics::Metrics(json config, const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames) {
 	name = (string)myName;
 	metricIsFrames = myMetricIsFrames;
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	averageOverSeconds = myAverageOverSeconds;
-	reportEverySeconds = myReportEverySeconds;
-	lastReport = -1.0 - myReportEverySeconds;
+	averageOverSeconds = config["YerFace"]["Metrics"]["averageOverSeconds"];
+	if(averageOverSeconds <= 0.0) {
+		throw invalid_argument("averageOverSeconds cannot be less than or equal to zero");
+	}
+	reportEverySeconds = config["YerFace"]["Metrics"]["reportEverySeconds"];
+	if(averageOverSeconds < 1.0) {
+		throw invalid_argument("reportEverySeconds cannot be less than one");
+	}
+	lastReport = -1.0 - reportEverySeconds;
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
 	fps = 0.0;

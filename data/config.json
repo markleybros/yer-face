@@ -35,6 +35,10 @@
       "pointSmoothingOverSeconds": 0.1,
       "pointSmoothingExponent": 3,
       "pointSmoothingRejectionThreshold": 1.0
+    },
+    "Metrics": {
+      "averageOverSeconds": 1.0,
+      "reportEverySeconds": 10.0
     }
   }
 }

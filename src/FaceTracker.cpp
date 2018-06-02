@@ -76,7 +76,7 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	}
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics("FaceTracker", frameDerivatives);
+	metrics = new Metrics(config, "FaceTracker", frameDerivatives);
 
 	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");

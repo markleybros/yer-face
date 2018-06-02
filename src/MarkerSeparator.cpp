@@ -52,7 +52,7 @@ MarkerSeparator::MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDeriv
 		throw invalid_argument("markerBoxInflatePixels cannot be less than zero");
 	}
 	logger = new Logger("MarkerSeparator");
-	metrics = new Metrics("MarkerSeparator", frameDerivatives);
+	metrics = new Metrics(config, "MarkerSeparator", frameDerivatives);
 	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}

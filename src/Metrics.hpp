@@ -2,6 +2,7 @@
 
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
+#include "Utilities.hpp"
 
 #include "SDL.h"
 
@@ -25,7 +26,7 @@ class FrameDerivatives;
 
 class Metrics {
 public:
-	Metrics(const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false, double myAverageOverSeconds = 1.0, double myReportEverySeconds = 10.0);
+	Metrics(json config, const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false);
 	~Metrics();
 	void startClock(void);
 	void endClock(void);
