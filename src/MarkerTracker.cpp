@@ -48,9 +48,9 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 	if(pointSmoothingExponent <= 0.0) {
 		throw invalid_argument("pointSmoothingExponent cannot be less than or equal to zero");
 	}
-	pointSmoothingRejectionThreshold = config["YerFace"]["MarkerTracker"]["pointSmoothingRejectionThreshold"];
-	if(pointSmoothingRejectionThreshold <= 0.0) {
-		throw invalid_argument("pointSmoothingRejectionThreshold cannot be less than or equal to zero");
+	pointMotionLowRejectionThreshold = config["YerFace"]["MarkerTracker"]["pointMotionLowRejectionThreshold"];
+	if(pointMotionLowRejectionThreshold <= 0.0) {
+		throw invalid_argument("pointMotionLowRejectionThreshold cannot be less than or equal to zero");
 	}
 
 	sdlDriver = faceMapper->getSDLDriver();
@@ -606,7 +606,7 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 	bool reportNewPoint = true;
 	if(working.previouslyReportedMarkerPoint.set) {
 		double distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
-		if(distance < pointSmoothingRejectionThreshold) {
+		if(distance < pointMotionLowRejectionThreshold) {
 			reportNewPoint = false;
 		}
 	}

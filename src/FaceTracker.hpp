@@ -142,10 +142,11 @@ private:
 	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
-	double poseSmoothingRotationLowRejectionThreshold;
-	double poseSmoothingTranslationLowRejectionThreshold;
-	double poseSmoothingRotationHighRejectionThreshold;
-	double poseSmoothingTranslationHighRejectionThreshold;
+	double poseRotationLowRejectionThreshold;
+	double poseTranslationLowRejectionThreshold;
+	double poseRotationHighRejectionThreshold;
+	double poseTranslationHighRejectionThreshold;
+	double poseRejectionResetAfterSeconds;
 
 	Logger *logger;
 	Metrics *metrics;

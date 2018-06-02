@@ -87,7 +87,7 @@ private:
 	double maxTrackerDriftPercentage;
 	double pointSmoothingOverSeconds;
 	double pointSmoothingExponent;
-	double pointSmoothingRejectionThreshold;
+	double pointMotionLowRejectionThreshold;
 
 	Logger *logger;
 	SDL_mutex *myWrkMutex, *myCmpMutex;
