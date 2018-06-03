@@ -5,18 +5,24 @@
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "SDLDriver.hpp"
+#include "Utilities.hpp"
+
+#define ASIO_STANDALONE
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+#include <set>
 
 using namespace std;
 
 namespace YerFace {
 
-//FIXME - we don't want to use named pipes ultimately -- this is just a thin slice to get our data into blender quickly
-#define OUTPUTDRIVER_NAMED_PIPE "/tmp/yerface"
-
 class OutputDriver {
 public:
-	OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
+	static int launchWebSocketServer(void* data);
+	void serverOnOpen(websocketpp::connection_hdl handle);
+	void serverOnClose(websocketpp::connection_hdl handle);
 	void handleCompletedFrame(void);
 private:
 	FrameDerivatives *frameDerivatives;
@@ -24,10 +30,15 @@ private:
 	SDLDriver *sdlDriver;
 	Logger *logger;
 
+	SDL_mutex *serverMutex;
+	int serverPort;
+	websocketpp::server<websocketpp::config::asio> server;
+	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
+
+	SDL_Thread *serverThread;
+
 	SDL_mutex *basisFlagMutex;
 	bool autoBasisTransmitted, basisFlagged;
-
-	int pipeHandle;
 };
 
 }; //namespace YerFace

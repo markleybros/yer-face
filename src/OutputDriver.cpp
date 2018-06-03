@@ -1,22 +1,21 @@
 
 #include "OutputDriver.hpp"
-#include "Utilities.hpp"
 
-#include "json.hpp"
-#include <cstring>
-
-//FIXME - get rid of this please (we don't want to use named pipes ultimately -- this is just a thin slice to get our data into blender quickly)
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sstream>
+#include <string>
 #include <iostream>
+#include <cstring>
+#include <streambuf>
 
-using json = nlohmann::json;
 using namespace cv;
+
+using websocketpp::connection_hdl;
+using websocketpp::lib::placeholders::_1;
+using websocketpp::lib::placeholders::_2;
+using websocketpp::lib::bind;
 
 namespace YerFace {
 
-OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -32,9 +31,14 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 	if((basisFlagMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((pipeHandle = open(OUTPUTDRIVER_NAMED_PIPE, O_WRONLY)) == -1) {
-		throw runtime_error("tried to open named pipe " OUTPUTDRIVER_NAMED_PIPE " for writing but failed!");
+	if((serverMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
 	}
+	serverPort = config["YerFace"]["OutputDriver"]["serverPort"];
+	if(serverPort < 1 || serverPort > 65535) {
+		throw runtime_error("Server port is invalid");
+	}
+
 	autoBasisTransmitted = false;
 	basisFlagged = false;
 	sdlDriver->onBasisFlagEvent([this] (void) -> void {
@@ -44,6 +48,12 @@ OutputDriver::OutputDriver(FrameDerivatives *myFrameDerivatives, FaceTracker *my
 		YerFace_MutexUnlock(this->basisFlagMutex);
 	});
 	logger = new Logger("OutputDriver");
+
+	//Create worker thread.
+	if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
+		throw runtime_error("Failed spawning worker thread!");
+	}
+
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
 
@@ -51,6 +61,36 @@ OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
 	SDL_DestroyMutex(basisFlagMutex);
 	delete logger;
+}
+
+int OutputDriver::launchWebSocketServer(void *data) {
+	OutputDriver *self = (OutputDriver *)data;
+	self->logger->verbose("WebSocket Server Thread Alive!");
+
+	self->server.init_asio();
+	self->server.set_open_handler(bind(&OutputDriver::serverOnOpen,self,::_1));
+	self->server.set_close_handler(bind(&OutputDriver::serverOnClose,self,::_1));
+
+	self->server.listen(self->serverPort);
+	self->server.start_accept();
+	self->server.run();
+
+	self->logger->verbose("WebSocket Server Thread Terminating.");
+	return 0;
+}
+
+void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
+	YerFace_MutexLock(this->serverMutex);
+	connectionList.insert(handle);
+	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
+	YerFace_MutexUnlock(this->serverMutex);
+}
+
+void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
+	YerFace_MutexLock(this->serverMutex);
+	connectionList.insert(handle);
+	logger->verbose("WebSocket Connection Closed: 0x%X", handle);
+	YerFace_MutexUnlock(this->serverMutex);
 }
 
 void OutputDriver::handleCompletedFrame(void) {
@@ -102,21 +142,14 @@ void OutputDriver::handleCompletedFrame(void) {
 	}
 	YerFace_MutexUnlock(this->basisFlagMutex);
 
-	string jsonString = frame.dump(-1, ' ', true) + "\n";
-	const char *jsonStringC = jsonString.c_str();
-	// logger->verbose("Completed frame... %s", jsonStringC);
-	//FIXME - get rid of this please (we don't want to use named pipes ultimately -- this is just a thin slice to get our data into blender quickly)
-	size_t jsonStringLen = strlen(jsonStringC);
-	ssize_t writeRet;
-	size_t wrote = 0;
-	while(wrote < jsonStringLen) {
-		writeRet = write(pipeHandle, jsonStringC + wrote, jsonStringLen - wrote);
-		if(writeRet < 0) {
-			throw runtime_error("failed writing to named pipe " OUTPUTDRIVER_NAMED_PIPE);
-		} else {
-			wrote += writeRet;
-		}
+	std::stringstream jsonString;
+	jsonString << frame.dump(-1, ' ', true);
+
+	YerFace_MutexLock(this->serverMutex);
+	for(auto handle : connectionList) {
+		server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
 	}
+	YerFace_MutexUnlock(this->serverMutex);
 }
 
 }; //namespace YerFace

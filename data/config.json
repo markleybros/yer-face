@@ -40,6 +40,9 @@
     "Metrics": {
       "averageOverSeconds": 1.0,
       "reportEverySeconds": 10.0
+    },
+    "OutputDriver": {
+      "serverPort": 9002
     }
   }
 }
