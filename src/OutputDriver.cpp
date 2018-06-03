@@ -88,7 +88,7 @@ void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
 
 void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
 	YerFace_MutexLock(this->serverMutex);
-	connectionList.insert(handle);
+	connectionList.erase(handle);
 	logger->verbose("WebSocket Connection Closed: 0x%X", handle);
 	YerFace_MutexUnlock(this->serverMutex);
 }
@@ -146,8 +146,12 @@ void OutputDriver::handleCompletedFrame(void) {
 	jsonString << frame.dump(-1, ' ', true);
 
 	YerFace_MutexLock(this->serverMutex);
-	for(auto handle : connectionList) {
-		server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+	try {
+		for(auto handle : connectionList) {
+			server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+		}
+	} catch (websocketpp::exception const &e) {
+		logger->warn("Got a websocket exception: %s", e.what());
 	}
 	YerFace_MutexUnlock(this->serverMutex);
 }
