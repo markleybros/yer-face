@@ -33,15 +33,16 @@ private:
 	SDLDriver *sdlDriver;
 	Logger *logger;
 
-	SDL_mutex *serverMutex;
+	SDL_mutex *connectionListMutex;
 	int serverPort;
 	websocketpp::server<websocketpp::config::asio> server;
 	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
 
 	SDL_Thread *serverThread;
 
-	SDL_mutex *basisFlagMutex;
+	SDL_mutex *streamFlagsMutex;
 	bool autoBasisTransmitted, basisFlagged;
+	json lastBasisFrame;
 };
 
 }; //namespace YerFace

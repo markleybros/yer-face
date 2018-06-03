@@ -28,10 +28,10 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
-	if((basisFlagMutex = SDL_CreateMutex()) == NULL) {
+	if((streamFlagsMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((serverMutex = SDL_CreateMutex()) == NULL) {
+	if((connectionListMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	serverPort = config["YerFace"]["OutputDriver"]["serverPort"];
@@ -43,9 +43,9 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 	basisFlagged = false;
 	sdlDriver->onBasisFlagEvent([this] (void) -> void {
 		this->logger->info("Got a Basis Flag event. Handling...");
-		YerFace_MutexLock(this->basisFlagMutex);
+		YerFace_MutexLock(this->streamFlagsMutex);
 		this->basisFlagged = true;
-		YerFace_MutexUnlock(this->basisFlagMutex);
+		YerFace_MutexUnlock(this->streamFlagsMutex);
 	});
 	logger = new Logger("OutputDriver");
 
@@ -60,8 +60,8 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
 	SDL_WaitThread(serverThread, NULL);
-	SDL_DestroyMutex(basisFlagMutex);
-	SDL_DestroyMutex(serverMutex);
+	SDL_DestroyMutex(streamFlagsMutex);
+	SDL_DestroyMutex(connectionListMutex);
 	delete logger;
 }
 
@@ -83,20 +83,30 @@ int OutputDriver::launchWebSocketServer(void *data) {
 }
 
 void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->serverMutex);
-	connectionList.insert(handle);
+	YerFace_MutexLock(this->streamFlagsMutex);
+	YerFace_MutexLock(this->connectionListMutex);
 	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
-	YerFace_MutexUnlock(this->serverMutex);
+	std::stringstream jsonString;
+	jsonString << lastBasisFrame.dump(-1, ' ', true);
+	server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+	connectionList.insert(handle);
+	YerFace_MutexUnlock(this->connectionListMutex);
+	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
 void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->serverMutex);
+	YerFace_MutexLock(this->connectionListMutex);
 	connectionList.erase(handle);
 	logger->verbose("WebSocket Connection Closed: 0x%X", handle);
-	YerFace_MutexUnlock(this->serverMutex);
+	YerFace_MutexUnlock(this->connectionListMutex);
 }
 
 void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
+	if(ec) {
+		logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
+		sdlDriver->setIsRunning(false);
+		return;
+	}
 	if(!this->sdlDriver->getIsRunning()) {
 		server.stop();
 	}
@@ -143,19 +153,22 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
-	YerFace_MutexLock(this->basisFlagMutex);
+	YerFace_MutexLock(this->streamFlagsMutex);
 	if(basisFlagged) {
 		autoBasisTransmitted = true;
 		basisFlagged = false;
 		frame["meta"]["basis"] = true;
 		logger->info("Transmitting basis flag based on received basis event.");
 	}
-	YerFace_MutexUnlock(this->basisFlagMutex);
+
+	if(frame["meta"]["basis"]) {
+		lastBasisFrame = frame;
+	}
 
 	std::stringstream jsonString;
 	jsonString << frame.dump(-1, ' ', true);
 
-	YerFace_MutexLock(this->serverMutex);
+	YerFace_MutexLock(this->connectionListMutex);
 	try {
 		for(auto handle : connectionList) {
 			server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
@@ -163,11 +176,12 @@ void OutputDriver::handleCompletedFrame(void) {
 	} catch (websocketpp::exception const &e) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
-	YerFace_MutexUnlock(this->serverMutex);
+	YerFace_MutexUnlock(this->connectionListMutex);
+	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
 void OutputDriver::serverSetQuitPollTimer(void) {
-	server.set_timer(250, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
+	server.set_timer(100, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
 }
 
 }; //namespace YerFace
