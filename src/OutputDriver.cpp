@@ -59,7 +59,9 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 
 OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
+	SDL_WaitThread(serverThread, NULL);
 	SDL_DestroyMutex(basisFlagMutex);
+	SDL_DestroyMutex(serverMutex);
 	delete logger;
 }
 
@@ -70,6 +72,7 @@ int OutputDriver::launchWebSocketServer(void *data) {
 	self->server.init_asio();
 	self->server.set_open_handler(bind(&OutputDriver::serverOnOpen,self,::_1));
 	self->server.set_close_handler(bind(&OutputDriver::serverOnClose,self,::_1));
+	self->serverSetQuitPollTimer();
 
 	self->server.listen(self->serverPort);
 	self->server.start_accept();
@@ -91,6 +94,13 @@ void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
 	connectionList.erase(handle);
 	logger->verbose("WebSocket Connection Closed: 0x%X", handle);
 	YerFace_MutexUnlock(this->serverMutex);
+}
+
+void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
+	if(!this->sdlDriver->getIsRunning()) {
+		server.stop();
+	}
+	serverSetQuitPollTimer();
 }
 
 void OutputDriver::handleCompletedFrame(void) {
@@ -154,6 +164,10 @@ void OutputDriver::handleCompletedFrame(void) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
 	YerFace_MutexUnlock(this->serverMutex);
+}
+
+void OutputDriver::serverSetQuitPollTimer(void) {
+	server.set_timer(250, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
 }
 
 }; //namespace YerFace

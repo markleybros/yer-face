@@ -20,11 +20,14 @@ class OutputDriver {
 public:
 	OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
+	void handleCompletedFrame(void);
+private:
 	static int launchWebSocketServer(void* data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
-	void handleCompletedFrame(void);
-private:
+	void serverOnTimer(websocketpp::lib::error_code const &ec);
+	void serverSetQuitPollTimer(void);
+
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
