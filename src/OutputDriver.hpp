@@ -34,7 +34,8 @@ private:
 	Logger *logger;
 
 	SDL_mutex *connectionListMutex;
-	int serverPort;
+	int websocketServerPort;
+	bool websocketServerEnabled;
 	websocketpp::server<websocketpp::config::asio> server;
 	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
 

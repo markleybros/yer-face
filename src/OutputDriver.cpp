@@ -17,6 +17,7 @@ using websocketpp::lib::bind;
 namespace YerFace {
 
 OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+	serverThread = NULL;
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -35,10 +36,11 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 	if((connectionListMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	serverPort = config["YerFace"]["OutputDriver"]["serverPort"];
-	if(serverPort < 1 || serverPort > 65535) {
+	websocketServerPort = config["YerFace"]["OutputDriver"]["websocketServerPort"];
+	if(websocketServerPort < 1 || websocketServerPort > 65535) {
 		throw runtime_error("Server port is invalid");
 	}
+	websocketServerEnabled = config["YerFace"]["OutputDriver"]["websocketServerEnabled"];
 
 	autoBasisTransmitted = false;
 	basisFlagged = false;
@@ -50,23 +52,27 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 	});
 	logger = new Logger("OutputDriver");
 
-	//Create worker thread.
-	if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
-		throw runtime_error("Failed spawning worker thread!");
-	}
-
 	//Constrain websocket server logs a bit for sanity.
 	server.get_alog().clear_channels(log::alevel::all);
 	server.get_alog().set_channels(log::alevel::connect | log::alevel::disconnect | log::alevel::app | log::alevel::http | log::alevel::fail);
 	server.get_elog().clear_channels(log::elevel::all);
 	server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
 
+	if(websocketServerEnabled) {
+		//Create worker thread.
+		if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
+			throw runtime_error("Failed spawning worker thread!");
+		}
+	}
+
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
 
 OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
-	SDL_WaitThread(serverThread, NULL);
+	if(websocketServerEnabled && serverThread) {
+		SDL_WaitThread(serverThread, NULL);
+	}
 	SDL_DestroyMutex(streamFlagsMutex);
 	SDL_DestroyMutex(connectionListMutex);
 	delete logger;
@@ -82,7 +88,7 @@ int OutputDriver::launchWebSocketServer(void *data) {
 	self->server.set_close_handler(bind(&OutputDriver::serverOnClose,self,::_1));
 	self->serverSetQuitPollTimer();
 
-	self->server.listen(self->serverPort);
+	self->server.listen(self->websocketServerPort);
 	self->server.start_accept();
 	self->server.run();
 
