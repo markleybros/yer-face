@@ -28,7 +28,7 @@
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 #include "OutputDriver.hpp"
-// #include "SphinxDriver.hpp"
+#include "SphinxDriver.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -62,7 +62,7 @@ FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 OutputDriver *outputDriver = NULL;
-// SphinxDriver *sphinxDriver = NULL;
+SphinxDriver *sphinxDriver = NULL;
 
 unsigned long workingFrameNumber = 0;
 SDL_mutex *flipWorkingCompletedMutex;
@@ -128,9 +128,9 @@ int main(int argc, const char** argv) {
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(config, frameDerivatives, faceTracker, sdlDriver);
-	// if(ffmpegDriver->getIsAudioInputPresent()) {
-	// 	sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
-	// }
+	if(ffmpegDriver->getIsAudioInputPresent()) {
+		sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
+	}
 	ffmpegDriver->rollDemuxerThread();
 
 	sdlWindowRenderer.window = NULL;
@@ -187,9 +187,9 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
-	// if(sphinxDriver != NULL) {
-	// 	delete sphinxDriver;
-	// }
+	if(sphinxDriver != NULL) {
+		delete sphinxDriver;
+	}
 	delete outputDriver;
 	delete metrics;
 	delete faceMapper;
@@ -244,9 +244,9 @@ int runCaptureLoop(void *ptr) {
 			frameDerivatives->advanceWorkingFrameToCompleted();
 			faceTracker->advanceWorkingToCompleted();
 			faceMapper->advanceWorkingToCompleted();
-			// if(sphinxDriver != NULL) {
-			// 	sphinxDriver->advanceWorkingToCompleted();
-			// }
+			if(sphinxDriver != NULL) {
+				sphinxDriver->advanceWorkingToCompleted();
+			}
 
 			outputDriver->handleCompletedFrame();
 
@@ -275,9 +275,9 @@ void doRenderPreviewFrame(void) {
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
-	// if(sphinxDriver != NULL) {
-	// 	sphinxDriver->renderPreviewHUD();
-	// }
+	if(sphinxDriver != NULL) {
+		sphinxDriver->renderPreviewHUD();
+	}
 
 	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 

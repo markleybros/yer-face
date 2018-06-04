@@ -1,10 +1,12 @@
 Dependencies
 ============
 
+
 Introduction
 ------------
 
 FIXME - These instructions are all from the perspective of Fedora (circa 26/27).
+
 
 SDL2
 ----
@@ -13,12 +15,14 @@ SDL2
 dnf -y install SDL2 SDL2-devel
 ```
 
+
 CUDA
 ----
 
 Follow the directions at RPM Fusion:
 - https://rpmfusion.org/Howto/NVIDIA
 - https://rpmfusion.org/Howto/CUDA
+
 
 OpenCV
 ------
@@ -64,6 +68,7 @@ _NOTE:_ If you get errors like `/usr/bin/ccache: invalid option -- 'E'` you need
 - https://rpmfusion.org/Howto/CUDA#GCC_version
 - http://mirror.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-2.el7.centos.noarch.rpm
 - `scl enable devtoolset-6 bash`
+
 
 Dlib
 ----
@@ -173,5 +178,32 @@ cd ffmpeg
 make -j 8
 
 # Install on the system.
+sudo make install
+```
+
+
+CMU Sphinx / Pocketsphinx
+-------------------------
+
+As of June 2018, Pocketsphinx within the Fedora repositories is far too old for our purposes. We need to compile from source. :-\
+
+```
+# You'll need swig. You may need other things too, I make no guarantees!
+dnf -y install swig
+
+# Do the clone thing.
+git clone https://github.com/cmusphinx/sphinxbase.git
+git clone https://github.com/cmusphinx/pocketsphinx.git
+
+# Build sphinxbase
+cd sphinxbase
+./autogen.sh
+make
+sudo make install
+
+# Build pocketsphinx
+cd ../pocketsphinx
+./autogen.sh
+make
 sudo make install
 ```
