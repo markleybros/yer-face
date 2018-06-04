@@ -8,6 +8,7 @@
 
 using namespace cv;
 
+using namespace websocketpp;
 using websocketpp::connection_hdl;
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
@@ -53,6 +54,12 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 	if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
 		throw runtime_error("Failed spawning worker thread!");
 	}
+
+	//Constrain websocket server logs a bit for sanity.
+	server.get_alog().clear_channels(log::alevel::all);
+	server.get_alog().set_channels(log::alevel::connect | log::alevel::disconnect | log::alevel::app | log::alevel::http | log::alevel::fail);
+	server.get_elog().clear_channels(log::elevel::all);
+	server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
 
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
@@ -106,6 +113,7 @@ void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
 	if(ec) {
 		logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
 		sdlDriver->setIsRunning(false);
+		server.stop();
 		return;
 	}
 	if(!this->sdlDriver->getIsRunning()) {
