@@ -70,6 +70,7 @@ int OutputDriver::launchWebSocketServer(void *data) {
 	self->logger->verbose("WebSocket Server Thread Alive!");
 
 	self->server.init_asio();
+	self->server.set_reuse_addr(true);
 	self->server.set_open_handler(bind(&OutputDriver::serverOnOpen,self,::_1));
 	self->server.set_close_handler(bind(&OutputDriver::serverOnClose,self,::_1));
 	self->serverSetQuitPollTimer();
