@@ -35,6 +35,18 @@ download_project(PROJ	jsoncpp
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
+download_project(PROJ	asio
+	GIT_REPOSITORY	https://github.com/chriskohlhoff/asio.git
+	GIT_TAG	master
+	${UPDATE_DISCONNECTED_IF_AVAILABLE}
+)
+
+download_project(PROJ	websocketpp
+	GIT_REPOSITORY	https://github.com/zaphoyd/websocketpp.git
+	GIT_TAG	master
+	${UPDATE_DISCONNECTED_IF_AVAILABLE}
+)
+
 # Prevent GoogleTest from overriding our compiler/linker options
 # when building with Visual Studio
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -42,6 +54,10 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
 include_directories("src" "${jsoncpp_SOURCE_DIR}/single_include/nlohmann")
+
+include_directories("src" "${asio_SOURCE_DIR}/asio/include")
+
+include_directories("src" "${websocketpp_SOURCE_DIR}")
 
 set( _OPENCV_REQUIRED_MODULES core tracking calib3d )
 

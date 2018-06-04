@@ -40,6 +40,10 @@
     "Metrics": {
       "averageOverSeconds": 1.0,
       "reportEverySeconds": 10.0
+    },
+    "OutputDriver": {
+      "websocketServerEnabled": true,
+      "websocketServerPort": 9002
     }
   }
 }

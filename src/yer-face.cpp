@@ -127,7 +127,7 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(frameDerivatives, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, frameDerivatives, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
 	// }
