@@ -44,6 +44,10 @@
     "OutputDriver": {
       "websocketServerEnabled": true,
       "websocketServerPort": 9002
+    },
+    "SphinxDriver": {
+      "hiddenMarkovModel": "data/sphinx-models/en-us/en-us",
+      "allPhoneLM": "data/sphinx-models/en-us/en-us-phone.lm.bin"
     }
   }
 }

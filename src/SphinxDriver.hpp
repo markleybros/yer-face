@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FFmpegDriver.hpp"
+#include "Utilities.hpp"
 
 namespace PocketSphinx {
 extern "C" {
@@ -36,7 +37,7 @@ public:
 
 class SphinxDriver {
 public:
-	SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
+	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
 	~SphinxDriver();
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);

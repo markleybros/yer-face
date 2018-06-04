@@ -42,8 +42,6 @@ using namespace YerFace;
 String configFile;
 String captureFile;
 String previewImgSeq;
-String hiddenMarkovModel;
-String allPhoneLM;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
@@ -89,8 +87,6 @@ int main(int argc, const char** argv) {
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
-		"{hiddenMarkovModel|data/sphinx-models/en-us/en-us|Hidden Markov Model used by PocketSphinx for lip synchronization.}"
-		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}"
 		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -115,8 +111,6 @@ int main(int argc, const char** argv) {
 		captureFile = "pipe:0";
 	}
 	previewImgSeq = parser.get<string>("previewImgSeq");
-	hiddenMarkovModel = parser.get<string>("hiddenMarkovModel");
-	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
 
@@ -129,7 +123,7 @@ int main(int argc, const char** argv) {
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(config, frameDerivatives, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
-		sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
+		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver);
 	}
 	ffmpegDriver->rollDemuxerThread();
 

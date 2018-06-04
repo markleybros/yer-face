@@ -7,9 +7,9 @@ using namespace PocketSphinx;
 
 namespace YerFace {
 
-SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
-	hiddenMarkovModel = myHiddenMarkovModel;
-	allPhoneLM = myAllPhoneLM;
+SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
+	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
+	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
