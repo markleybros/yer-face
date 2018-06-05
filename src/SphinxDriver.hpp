@@ -26,25 +26,15 @@ public:
 	bool inUse;
 };
 
-class SphinxPhoneme {
-public:
-	string symbol;
-	bool used;
-	PocketSphinx::int32 startFrame, endFrame;
-	double startTime, endTime;
-	int utteranceIndex;
-};
-
 class SphinxDriver {
 public:
 	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
 	~SphinxDriver();
 	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
 private:
 	void initializeRecognitionThread(void);
 	void destroyRecognitionThread(void);
-	void updateRecognizedPhonemes(void);
+	void processUtteranceHypothesis(void);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
@@ -70,8 +60,6 @@ private:
 
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
-
-	list<SphinxPhoneme *> recognizedPhonemes;
 };
 
 }; //namespace YerFace

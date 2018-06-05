@@ -269,9 +269,6 @@ void doRenderPreviewFrame(void) {
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
-	if(sphinxDriver != NULL) {
-		sphinxDriver->renderPreviewHUD();
-	}
 
 	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 

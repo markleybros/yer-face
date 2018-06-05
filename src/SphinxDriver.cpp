@@ -68,9 +68,6 @@ SphinxDriver::~SphinxDriver() {
 	cmd_ln_free_r(pocketSphinxConfig);
 	SDL_DestroyMutex(myWrkMutex);
 	SDL_DestroyMutex(myCmpMutex);
-	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
-		delete phoneme;
-	}
 	delete logger;
 }
 
@@ -96,36 +93,20 @@ void SphinxDriver::destroyRecognitionThread(void) {
 }
 
 void SphinxDriver::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myWrkMutex);
-	YerFace_MutexLock(myCmpMutex);
-	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
-	updateRecognizedPhonemes();
-	logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
-	//FIXME - do stuff
-	YerFace_MutexUnlock(myCmpMutex);
-	YerFace_MutexUnlock(myWrkMutex);
+	// YerFace_MutexLock(myWrkMutex);
+	// YerFace_MutexLock(myCmpMutex);
+	// FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
+	// updateRecognizedPhonemes();
+	// logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+	// // FIXME - do stuff
+	// YerFace_MutexUnlock(myCmpMutex);
+	// YerFace_MutexUnlock(myWrkMutex);
 }
 
-void SphinxDriver::renderPreviewHUD(void) {
-	YerFace_MutexLock(myCmpMutex);
-	// Mat frame = frameDerivatives->getCompletedPreviewFrame();
-	//FIXME - do stuff
-	YerFace_MutexUnlock(myCmpMutex);
-}
-
-void SphinxDriver::updateRecognizedPhonemes(void) {
+void SphinxDriver::processUtteranceHypothesis(void) {
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
-	int32 earliestStartFrame = -1;
-	if(recognizedPhonemes.size() > 0) {
-		earliestStartFrame = recognizedPhonemes.front()->startFrame;
-	}
-
-	list<SphinxPhoneme *>::iterator phonemeIterator = recognizedPhonemes.begin();
-	while(phonemeIterator != recognizedPhonemes.end() && (*phonemeIterator)->utteranceIndex < utteranceIndex) {
-		++phonemeIterator;
-	}
-
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
+	logger->verbose("======== HYPOTHESIS BREAKDOWN:");
 	while(segmentIterator != NULL) {
 		int32 startFrame, endFrame;
 		double startTime, endTime;
@@ -133,42 +114,8 @@ void SphinxDriver::updateRecognizedPhonemes(void) {
 		ps_seg_frames(segmentIterator, &startFrame, &endFrame);
 		startTime = ((double)startFrame / (double)frameRate) + timestampOffset;
 		endTime = ((double)endFrame / (double)frameRate) + timestampOffset;
-
-		if(phonemeIterator == recognizedPhonemes.end()) {
-			SphinxPhoneme *newPhoneme = new SphinxPhoneme();
-			newPhoneme->symbol = symbol;
-			newPhoneme->startFrame = startFrame;
-			newPhoneme->startTime = startTime;
-			newPhoneme->endFrame = endFrame;
-			newPhoneme->endTime = endTime;
-			newPhoneme->used = false;
-			newPhoneme->utteranceIndex = utteranceIndex;
-			recognizedPhonemes.push_back(newPhoneme);
-		} else if(startFrame >= earliestStartFrame) {
-			if(!(*phonemeIterator)->used) {
-				if((*phonemeIterator)->symbol != symbol) {
-					(*phonemeIterator)->symbol = symbol;
-				}
-				if((*phonemeIterator)->startFrame != startFrame) {
-					(*phonemeIterator)->startFrame = startFrame;
-					(*phonemeIterator)->startTime = startTime;
-				}
-				if((*phonemeIterator)->endFrame != endFrame) {
-					(*phonemeIterator)->endFrame = endFrame;
-					(*phonemeIterator)->endTime = endTime;
-				}
-			}
-		}
-
+		logger->verbose("    %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d\n", symbol.c_str(), startTime, startFrame, endTime, endFrame, utteranceIndex);
 		segmentIterator = ps_seg_next(segmentIterator);
-		if(phonemeIterator != recognizedPhonemes.end()) {
-			++phonemeIterator;
-		}
-	}
-
-	logger->verbose("======== AFTER UPDATING PHONEME LIST:");
-	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
-		logger->verbose("    %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d %s\n", phoneme->symbol.c_str(), phoneme->startTime, phoneme->startFrame, phoneme->endTime, phoneme->endFrame, phoneme->utteranceIndex, phoneme->used ? "-USED-" : " ");
 	}
 }
 
@@ -198,7 +145,7 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 				}
 				hypothesis = ps_get_hyp(self->pocketSphinx, NULL);
 				self->logger->verbose("======== Utterance Ended. Hypothesis: %s", hypothesis);
-				self->updateRecognizedPhonemes();
+				self->processUtteranceHypothesis();
 				self->utteranceIndex++;
 				if(ps_start_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to start PocketSphinx utterance");
