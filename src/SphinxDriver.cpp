@@ -7,9 +7,35 @@ using namespace PocketSphinx;
 
 namespace YerFace {
 
+PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
+	seen = {
+		{ "AI", false },
+		{ "E", false },
+		{ "O", false },
+		{ "U", false },
+		{ "MBP", false },
+		{ "FV", false },
+		{ "L", false },
+		{ "WQ", false },
+		{ "etc", false }
+	};
+	percent = {
+		{ "AI", 0.0 },
+		{ "E", 0.0 },
+		{ "O", 0.0 },
+		{ "U", 0.0 },
+		{ "MBP", 0.0 },
+		{ "FV", 0.0 },
+		{ "L", 0.0 },
+		{ "WQ", 0.0 },
+		{ "etc", 0.0 }
+	};
+}
+
 SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
+	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -93,13 +119,30 @@ void SphinxDriver::destroyRecognitionThread(void) {
 
 void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
+	// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
 	SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
+	sphinxVideoFrame->processed = false;
 	sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
 	if(videoFrames.size() > 0) {
 		videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
 	}
 	// logger->verbose("==== FRAME FLIP %ld: %.3lf -> ~%.3lf", sphinxVideoFrame->timestamps.frameNumber, sphinxVideoFrame->timestamps.startTimestamp, sphinxVideoFrame->timestamps.estimatedEndTimestamp);
 	videoFrames.push_back(sphinxVideoFrame);
+
+	// Handle any already-processed frames off the other side of the video frame buffer.
+	bool bannerDropped = false;
+	while(videoFrames.front()->processed) {
+		if(!bannerDropped) {
+			logger->verbose("======== PROCESSED FRAMES BANNER:::");
+			bannerDropped = true;
+		}
+		std::stringstream jsonString;
+		jsonString << videoFrames.front()->phonemes.percent.dump(-1, ' ', true);
+		logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
+		SphinxVideoFrame *old = videoFrames.front();
+		videoFrames.pop_front();
+		delete old;
+	}
 	YerFace_MutexUnlock(myWrkMutex);
 }
 
@@ -133,10 +176,45 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 				logger->verbose("---- FRAME: %ld, %.3lf - %.3lf", (*videoFrameIterator)->timestamps.frameNumber, (*videoFrameIterator)->timestamps.startTimestamp, (*videoFrameIterator)->realEndTimestamp);
 				frameReportStarted = true;
 			}
-			logger->verbose("  %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d\n", symbol.c_str(), startTime, startFrame, endTime, endFrame, utteranceIndex);
+			string pbPhoneme = "";
+			try {
+				pbPhoneme = sphinxToPrestonBlairPhonemeMapping.at(symbol);
+			} catch(nlohmann::detail::out_of_range &e) {
+				// logger->verbose("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
+			}
+			logger->verbose("  %s -> (%s) Times: %.3lf - %.3lf, Utterance: %d\n", symbol.c_str(), pbPhoneme.length() > 0 ? pbPhoneme.c_str() : "", startTime, endTime, utteranceIndex);
+			if(pbPhoneme.length() > 0) {
+				bool wasSeen = false;
+				double currentPercent = 0.0;
+				try {
+					wasSeen = (*videoFrameIterator)->phonemes.seen.at(pbPhoneme);
+					currentPercent = (*videoFrameIterator)->phonemes.percent.at(pbPhoneme);
+				} catch(exception &e) {
+					throw logic_error("Preston Blair mapping returned an unrecognized phoneme!");
+				}
+				if(!wasSeen) {
+					wasSeen = true;
+					(*videoFrameIterator)->phonemes.seen[pbPhoneme] = wasSeen;
+				}
+				double divisor = (*videoFrameIterator)->realEndTimestamp - (*videoFrameIterator)->timestamps.startTimestamp;
+				if(startTime < (*videoFrameIterator)->timestamps.startTimestamp) {
+					startTime = (*videoFrameIterator)->timestamps.startTimestamp;
+				}
+				if(endTime > (*videoFrameIterator)->realEndTimestamp) {
+					endTime = (*videoFrameIterator)->realEndTimestamp;
+				}
+				double numerator = endTime - startTime;
+				currentPercent = currentPercent + (numerator / divisor);
+				logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
+				if(currentPercent > 1.0) {
+					currentPercent = 1.0;
+				}
+				(*videoFrameIterator)->phonemes.percent[pbPhoneme] = currentPercent;
+			}
 		}
 		if(startTime >= (*videoFrameIterator)->realEndTimestamp || endTime >= (*videoFrameIterator)->realEndTimestamp) {
 			iterate = false;
+			(*videoFrameIterator)->processed = true;
 			++videoFrameIterator;
 			frameReportStarted = false;
 		}

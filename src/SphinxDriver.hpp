@@ -15,6 +15,15 @@ using namespace std;
 
 namespace YerFace {
 
+// We use the Preston Blair 'toon phoneme set. See: http://minyos.its.rmit.edu.au/aim/a_notes/mouth_shapes_01.html
+// This class will represent a single video frame's snapshot of phoneme representation.
+// There will be Booleans for if we saw the phoneme at all, and floating point percentages (0.0 - 1.0) for the influence of each phoneme on the frame.
+class PrestonBlairPhonemes {
+public:
+	PrestonBlairPhonemes(void);
+	json seen, percent;
+};
+
 class SphinxAudioFrame {
 public:
 	uint8_t *buf;
@@ -28,8 +37,10 @@ public:
 
 class SphinxVideoFrame {
 public:
+	bool processed;
 	FrameTimestamps timestamps;
 	double realEndTimestamp;
+	PrestonBlairPhonemes phonemes;
 };
 
 class SphinxDriver {
@@ -46,6 +57,7 @@ private:
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
 	
 	string hiddenMarkovModel, allPhoneLM;
+	json sphinxToPrestonBlairPhonemeMapping;
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
 
