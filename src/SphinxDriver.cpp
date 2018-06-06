@@ -28,9 +28,6 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	
 	logger->info("Initializing PocketSphinx with Models... <HMM: %s, AllPhone: %s>", hiddenMarkovModel.c_str(), allPhoneLM.c_str());
 	// Configuration for phoneme recognition from: https://cmusphinx.github.io/wiki/phonemerecognition/
@@ -67,7 +64,9 @@ SphinxDriver::~SphinxDriver() {
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
 	SDL_DestroyMutex(myWrkMutex);
-	SDL_DestroyMutex(myCmpMutex);
+	for(SphinxVideoFrame *frame : videoFrames) {
+		delete frame;
+	}
 	delete logger;
 }
 
@@ -93,29 +92,58 @@ void SphinxDriver::destroyRecognitionThread(void) {
 }
 
 void SphinxDriver::advanceWorkingToCompleted(void) {
-	// YerFace_MutexLock(myWrkMutex);
-	// YerFace_MutexLock(myCmpMutex);
-	// FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
-	// updateRecognizedPhonemes();
-	// logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
-	// // FIXME - do stuff
-	// YerFace_MutexUnlock(myCmpMutex);
-	// YerFace_MutexUnlock(myWrkMutex);
+	YerFace_MutexLock(myWrkMutex);
+	SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
+	sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
+	if(videoFrames.size() > 0) {
+		videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
+	}
+	// logger->verbose("==== FRAME FLIP %ld: %.3lf -> ~%.3lf", sphinxVideoFrame->timestamps.frameNumber, sphinxVideoFrame->timestamps.startTimestamp, sphinxVideoFrame->timestamps.estimatedEndTimestamp);
+	videoFrames.push_back(sphinxVideoFrame);
+	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void SphinxDriver::processUtteranceHypothesis(void) {
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
+	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
 	logger->verbose("======== HYPOTHESIS BREAKDOWN:");
+	bool frameReportStarted = false;
 	while(segmentIterator != NULL) {
+		if(videoFrameIterator == videoFrames.end()) {
+			throw logic_error("We ran out of video frames trying to process recognized speech!");
+		}
+
+		bool iterate = true;
 		int32 startFrame, endFrame;
 		double startTime, endTime;
-		string symbol = ps_seg_word(segmentIterator);
 		ps_seg_frames(segmentIterator, &startFrame, &endFrame);
 		startTime = ((double)startFrame / (double)frameRate) + timestampOffset;
 		endTime = ((double)endFrame / (double)frameRate) + timestampOffset;
-		logger->verbose("    %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d\n", symbol.c_str(), startTime, startFrame, endTime, endFrame, utteranceIndex);
-		segmentIterator = ps_seg_next(segmentIterator);
+
+		if(
+		  // Does the startTime land within the bounds of this frame?
+		  (startTime >= (*videoFrameIterator)->timestamps.startTimestamp && startTime < (*videoFrameIterator)->realEndTimestamp) ||
+		  // Does the endTime land within the bounds of this frame?
+		  (endTime >= (*videoFrameIterator)->timestamps.startTimestamp && endTime < (*videoFrameIterator)->realEndTimestamp) ||
+		  // Does this frame sit completely inside the start and end times of this segment?
+		  (startTime < (*videoFrameIterator)->timestamps.startTimestamp && endTime > (*videoFrameIterator)->realEndTimestamp)) {
+			string symbol = ps_seg_word(segmentIterator);
+			if(!frameReportStarted) {
+				logger->verbose("---- FRAME: %ld, %.3lf - %.3lf", (*videoFrameIterator)->timestamps.frameNumber, (*videoFrameIterator)->timestamps.startTimestamp, (*videoFrameIterator)->realEndTimestamp);
+				frameReportStarted = true;
+			}
+			logger->verbose("  %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d\n", symbol.c_str(), startTime, startFrame, endTime, endFrame, utteranceIndex);
+		}
+		if(startTime >= (*videoFrameIterator)->realEndTimestamp || endTime >= (*videoFrameIterator)->realEndTimestamp) {
+			iterate = false;
+			++videoFrameIterator;
+			frameReportStarted = false;
+		}
+
+		if(iterate) {
+			segmentIterator = ps_seg_next(segmentIterator);
+		}
 	}
 }
 

@@ -26,6 +26,12 @@ public:
 	bool inUse;
 };
 
+class SphinxVideoFrame {
+public:
+	FrameTimestamps timestamps;
+	double realEndTimestamp;
+};
+
 class SphinxDriver {
 public:
 	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
@@ -48,7 +54,7 @@ private:
 	PocketSphinx::ps_decoder_t *pocketSphinx;
 	PocketSphinx::cmd_ln_t *pocketSphinxConfig;
 	
-	SDL_mutex *myWrkMutex, *myCmpMutex;
+	SDL_mutex *myWrkMutex;
 	SDL_cond *myWrkCond;
 	SDL_Thread *recognizerThread;
 
@@ -60,6 +66,8 @@ private:
 
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
+
+	list<SphinxVideoFrame *> videoFrames;
 };
 
 }; //namespace YerFace
