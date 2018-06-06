@@ -78,6 +78,11 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	audioFrameCallback.sampleRate = 16000;
 	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
 	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
+
+	AudioStreamEndedCallback audioStreamEndedCallback;
+	audioStreamEndedCallback.userdata = (void *)this;
+	audioStreamEndedCallback.callback = FFmpegDriverAudioStreamEndedCallback;
+	ffmpegDriver->registerAudioStreamEndedCallback(audioStreamEndedCallback);
 	
 	initializeRecognitionThread();
 
@@ -126,9 +131,14 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 	if(videoFrames.size() > 0) {
 		videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
 	}
-	// logger->verbose("==== FRAME FLIP %ld: %.3lf -> ~%.3lf", sphinxVideoFrame->timestamps.frameNumber, sphinxVideoFrame->timestamps.startTimestamp, sphinxVideoFrame->timestamps.estimatedEndTimestamp);
 	videoFrames.push_back(sphinxVideoFrame);
 
+	handleProcessedVideoFrames();
+
+	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void SphinxDriver::handleProcessedVideoFrames(void) {
 	// Handle any already-processed frames off the other side of the video frame buffer.
 	bool bannerDropped = false;
 	while(videoFrames.front()->processed) {
@@ -143,7 +153,6 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 		videoFrames.pop_front();
 		delete old;
 	}
-	YerFace_MutexUnlock(myWrkMutex);
 }
 
 void SphinxDriver::processUtteranceHypothesis(void) {
@@ -235,7 +244,6 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			throw runtime_error("Failed waiting on condition.");
 		}
 		if(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
-			char const *hypothesis;
 			if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
 				throw runtime_error("Failed processing audio samples in PocketSphinx");
 			}
@@ -249,8 +257,6 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 				if(ps_end_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to end PocketSphinx utterance");
 				}
-				hypothesis = ps_get_hyp(self->pocketSphinx, NULL);
-				self->logger->verbose("======== Utterance Ended. Hypothesis: %s", hypothesis);
 				self->processUtteranceHypothesis();
 				self->utteranceIndex++;
 				if(ps_start_utt(self->pocketSphinx) < 0) {
@@ -260,6 +266,12 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			}
 		}
 	}
+	self->logger->verbose("Recognition loop ended. Draining speech recognizer...");
+	if(ps_end_utt(self->pocketSphinx) < 0) {
+		throw runtime_error("Failed to end PocketSphinx utterance");
+	}
+	self->processUtteranceHypothesis();
+	self->handleProcessedVideoFrames();
 
 	YerFace_MutexUnlock(self->myWrkMutex);
 	self->logger->verbose("Speech Recognition Thread quitting...");
@@ -309,6 +321,14 @@ void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, 
 	audioFrame->audioBytes = audioBytes;
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
+	SDL_CondSignal(self->myWrkCond);
+	YerFace_MutexUnlock(self->myWrkMutex);
+}
+
+void SphinxDriver::FFmpegDriverAudioStreamEndedCallback(void *userdata) {
+	SphinxDriver *self = (SphinxDriver *)userdata;
+	YerFace_MutexLock(self->myWrkMutex);
+	self->recognizerRunning = false;
 	SDL_CondSignal(self->myWrkCond);
 	YerFace_MutexUnlock(self->myWrkMutex);
 }

@@ -51,10 +51,12 @@ public:
 private:
 	void initializeRecognitionThread(void);
 	void destroyRecognitionThread(void);
+	void handleProcessedVideoFrames(void);
 	void processUtteranceHypothesis(void);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
+	static void FFmpegDriverAudioStreamEndedCallback(void *userdata);
 	
 	string hiddenMarkovModel, allPhoneLM;
 	json sphinxToPrestonBlairPhonemeMapping;

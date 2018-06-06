@@ -45,6 +45,12 @@ public:
 	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp)> callback;
 };
 
+class AudioStreamEndedCallback {
+public:
+	void *userdata;
+	std::function<void(void *userdata)> callback;
+};
+
 class AudioFrameResampler {
 public:
 	int numChannels;
@@ -56,7 +62,7 @@ public:
 class AudioFrameHandler {
 public:
 	AudioFrameResampler resampler;
-	AudioFrameCallback callback;
+	AudioFrameCallback audioFrameCallback;
 };
 
 class FFmpegDriver {
@@ -70,6 +76,7 @@ public:
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	void releaseVideoFrame(VideoFrame videoFrame);
 	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
+	void registerAudioStreamEndedCallback(AudioStreamEndedCallback audioStreamEndedCallback);
 private:
 	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
@@ -115,6 +122,7 @@ private:
 	list<VideoFrameBacking *> allocatedVideoFrameBackings;
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
+	std::vector<AudioStreamEndedCallback> audioStreamEndedCallbacks;
 };
 
 }; //namespace YerFace
