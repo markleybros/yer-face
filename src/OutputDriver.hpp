@@ -27,8 +27,9 @@ public:
 class OutputDriver {
 public:
 	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
-	~OutputDriver() noexcept(false);
+	~OutputDriver();
 	void handleCompletedFrame(void);
+	void drainPipelineDataNow(void);
 private:
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);

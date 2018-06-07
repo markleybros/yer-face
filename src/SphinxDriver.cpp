@@ -79,11 +79,6 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
 	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 
-	AudioStreamEndedCallback audioStreamEndedCallback;
-	audioStreamEndedCallback.userdata = (void *)this;
-	audioStreamEndedCallback.callback = FFmpegDriverAudioStreamEndedCallback;
-	ffmpegDriver->registerAudioStreamEndedCallback(audioStreamEndedCallback);
-	
 	initializeRecognitionThread();
 
 	logger->debug("SphinxDriver object constructed and ready to go!");
@@ -91,10 +86,10 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 
 SphinxDriver::~SphinxDriver() {
 	logger->debug("SphinxDriver object destructing...");
-	destroyRecognitionThread();
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
 	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyCond(myWrkCond);
 	for(SphinxVideoFrame *frame : videoFrames) {
 		delete frame;
 	}
@@ -111,17 +106,6 @@ void SphinxDriver::initializeRecognitionThread(void) {
 	}
 }
 
-void SphinxDriver::destroyRecognitionThread(void) {
-	YerFace_MutexLock(myWrkMutex);
-	recognizerRunning = false;
-	SDL_CondSignal(myWrkCond);
-	YerFace_MutexUnlock(myWrkMutex);
-
-	SDL_WaitThread(recognizerThread, NULL);
-
-	SDL_DestroyCond(myWrkCond);
-}
-
 void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
 	// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
@@ -136,6 +120,14 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 	handleProcessedVideoFrames();
 
 	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void SphinxDriver::drainPipelineDataNow(void) {
+	YerFace_MutexLock(myWrkMutex);
+	recognizerRunning = false;
+	SDL_CondSignal(myWrkCond);
+	YerFace_MutexUnlock(myWrkMutex);
+	SDL_WaitThread(recognizerThread, NULL);
 }
 
 void SphinxDriver::handleProcessedVideoFrames(void) {
@@ -312,14 +304,6 @@ void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, 
 	audioFrame->audioBytes = audioBytes;
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
-	SDL_CondSignal(self->myWrkCond);
-	YerFace_MutexUnlock(self->myWrkMutex);
-}
-
-void SphinxDriver::FFmpegDriverAudioStreamEndedCallback(void *userdata) {
-	SphinxDriver *self = (SphinxDriver *)userdata;
-	YerFace_MutexLock(self->myWrkMutex);
-	self->recognizerRunning = false;
 	SDL_CondSignal(self->myWrkCond);
 	YerFace_MutexUnlock(self->myWrkMutex);
 }

@@ -244,7 +244,6 @@ int runCaptureLoop(void *ptr) {
 			if(sphinxDriver != NULL) {
 				sphinxDriver->advanceWorkingToCompleted();
 			}
-
 			outputDriver->handleCompletedFrame();
 
 			//If requested, write image sequence.
@@ -261,6 +260,11 @@ int runCaptureLoop(void *ptr) {
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
 	}
+
+	if(sphinxDriver != NULL) {
+		sphinxDriver->drainPipelineDataNow();
+	}
+	outputDriver->drainPipelineDataNow();
 
 	return 0;
 }

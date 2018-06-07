@@ -90,20 +90,10 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivative
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
 
-OutputDriver::~OutputDriver() noexcept(false) {
+OutputDriver::~OutputDriver() {
 	logger->debug("OutputDriver object destructing...");
 	if(websocketServerEnabled && serverThread) {
 		SDL_WaitThread(serverThread, NULL);
-	}
-	if(writerThread) {
-		YerFace_MutexLock(writerMutex);
-		writerThreadRunning = false;
-		YerFace_MutexUnlock(writerMutex);
-		SDL_CondSignal(writerCond);
-		SDL_WaitThread(writerThread, NULL);
-	}
-	if(outputFilename.length() > 0 && outputFilestream.is_open()) {
-		outputFilestream.close();
 	}
 	SDL_DestroyMutex(streamFlagsMutex);
 	SDL_DestroyMutex(connectionListMutex);
@@ -272,6 +262,19 @@ void OutputDriver::handleCompletedFrame(void) {
 		outputFrameBuffer.push_back(container);
 		YerFace_MutexUnlock(this->writerMutex);
 		SDL_CondSignal(this->writerCond);
+	}
+}
+
+void OutputDriver::drainPipelineDataNow(void) {
+	if(writerThread) {
+		YerFace_MutexLock(writerMutex);
+		writerThreadRunning = false;
+		YerFace_MutexUnlock(writerMutex);
+		SDL_CondSignal(writerCond);
+		SDL_WaitThread(writerThread, NULL);
+	}
+	if(outputFilename.length() > 0 && outputFilestream.is_open()) {
+		outputFilestream.close();
 	}
 }
 
