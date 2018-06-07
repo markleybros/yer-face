@@ -229,14 +229,6 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	YerFace_MutexUnlock(demuxerMutex);
 }
 
-void FFmpegDriver::registerAudioStreamEndedCallback(AudioStreamEndedCallback audioStreamEndedCallback) {
-	YerFace_MutexLock(demuxerMutex);
-
-	audioStreamEndedCallbacks.push_back(audioStreamEndedCallback);
-
-	YerFace_MutexUnlock(demuxerMutex);
-}
-
 void FFmpegDriver::logAVErr(String msg, int err) {
 	char errbuf[128];
 	av_strerror(err, errbuf, 128);
@@ -473,10 +465,6 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 			}
 			// driver->logger->verbose("Demuxer Thread is awake now!");
 		}
-	}
-
-	for(AudioStreamEndedCallback callback : driver->audioStreamEndedCallbacks) {
-		callback.callback(callback.userdata);
 	}
 
 	YerFace_MutexUnlock(driver->demuxerMutex);
