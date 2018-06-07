@@ -140,12 +140,7 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 
 void SphinxDriver::handleProcessedVideoFrames(void) {
 	// Handle any already-processed frames off the other side of the video frame buffer.
-	bool bannerDropped = false;
-	while(videoFrames.front()->processed) {
-		if(!bannerDropped) {
-			logger->verbose("======== PROCESSED FRAMES BANNER:::");
-			bannerDropped = true;
-		}
+	while(videoFrames.size() > 0 && videoFrames.front()->processed) {
 		std::stringstream jsonString;
 		jsonString << videoFrames.front()->phonemes.percent.dump(-1, ' ', true);
 		logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
@@ -159,8 +154,6 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
 	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
-	logger->verbose("======== HYPOTHESIS BREAKDOWN:");
-	bool frameReportStarted = false;
 	while(segmentIterator != NULL) {
 		if(videoFrameIterator == videoFrames.end()) {
 			throw logic_error("We ran out of video frames trying to process recognized speech!");
@@ -181,17 +174,13 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 		  // Does this frame sit completely inside the start and end times of this segment?
 		  (startTime < (*videoFrameIterator)->timestamps.startTimestamp && endTime > (*videoFrameIterator)->realEndTimestamp)) {
 			string symbol = ps_seg_word(segmentIterator);
-			if(!frameReportStarted) {
-				logger->verbose("---- FRAME: %ld, %.3lf - %.3lf", (*videoFrameIterator)->timestamps.frameNumber, (*videoFrameIterator)->timestamps.startTimestamp, (*videoFrameIterator)->realEndTimestamp);
-				frameReportStarted = true;
-			}
 			string pbPhoneme = "";
 			try {
 				pbPhoneme = sphinxToPrestonBlairPhonemeMapping.at(symbol);
 			} catch(nlohmann::detail::out_of_range &e) {
 				// logger->verbose("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
 			}
-			logger->verbose("  %s -> (%s) Times: %.3lf - %.3lf, Utterance: %d\n", symbol.c_str(), pbPhoneme.length() > 0 ? pbPhoneme.c_str() : "", startTime, endTime, utteranceIndex);
+			// logger->verbose("  %s -> (%s) Times: %.3lf - %.3lf, Utterance: %d\n", symbol.c_str(), pbPhoneme.length() > 0 ? pbPhoneme.c_str() : "", startTime, endTime, utteranceIndex);
 			if(pbPhoneme.length() > 0) {
 				bool wasSeen = false;
 				double currentPercent = 0.0;
@@ -214,7 +203,7 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 				}
 				double numerator = endTime - startTime;
 				currentPercent = currentPercent + (numerator / divisor);
-				logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
+				// logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
 				if(currentPercent > 1.0) {
 					currentPercent = 1.0;
 				}
@@ -225,7 +214,6 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 			iterate = false;
 			(*videoFrameIterator)->processed = true;
 			++videoFrameIterator;
-			frameReportStarted = false;
 		}
 
 		if(iterate) {
@@ -271,6 +259,9 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 		throw runtime_error("Failed to end PocketSphinx utterance");
 	}
 	self->processUtteranceHypothesis();
+	for(SphinxVideoFrame *frame : self->videoFrames) {
+		frame->processed = true;
+	}
 	self->handleProcessedVideoFrames();
 
 	YerFace_MutexUnlock(self->myWrkMutex);

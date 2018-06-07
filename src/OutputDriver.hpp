@@ -12,26 +12,39 @@
 #include <websocketpp/server.hpp>
 #include <set>
 
+#include <fstream>
+
 using namespace std;
 
 namespace YerFace {
 
+class OutputFrameContainer {
+public:
+	bool ready;
+	json frame;
+};
+
 class OutputDriver {
 public:
-	OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
-	~OutputDriver();
+	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	~OutputDriver() noexcept(false);
 	void handleCompletedFrame(void);
 private:
 	static int launchWebSocketServer(void* data);
+	static int writeOutputBufferToFile(void *data);
+	void writeFrameToOutputStream(OutputFrameContainer *container);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void serverSetQuitPollTimer(void);
 
+	String outputFilename;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
 	Logger *logger;
+
+	ofstream outputFilestream;
 
 	SDL_mutex *connectionListMutex;
 	int websocketServerPort;
@@ -41,9 +54,16 @@ private:
 
 	SDL_Thread *serverThread;
 
+	SDL_mutex *writerMutex;
+	SDL_cond *writerCond;
+	SDL_Thread *writerThread;
+	bool writerThreadRunning;
+
 	SDL_mutex *streamFlagsMutex;
 	bool autoBasisTransmitted, basisFlagged;
 	json lastBasisFrame;
+
+	list<OutputFrameContainer *> outputFrameBuffer;
 };
 
 }; //namespace YerFace

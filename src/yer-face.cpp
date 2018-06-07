@@ -41,6 +41,7 @@ using namespace YerFace;
 
 String configFile;
 String captureFile;
+String outputFile;
 String previewImgSeq;
 bool frameDrop;
 bool audioPreview;
@@ -84,6 +85,7 @@ int main(int argc, const char** argv) {
 		"{help h||Usage message.}"
 		"{configFile C|data/config.json|Required configuration file.}"
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
+		"{outputFile||Output file for generated performance capture data.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
@@ -110,6 +112,7 @@ int main(int argc, const char** argv) {
 	if(captureFile == "-") {
 		captureFile = "pipe:0";
 	}
+	outputFile = parser.get<string>("outputFile");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
@@ -121,7 +124,7 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(config, frameDerivatives, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, outputFile, frameDerivatives, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver);
 	}
