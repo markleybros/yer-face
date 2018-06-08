@@ -151,7 +151,7 @@ int OutputDriver::writeOutputBufferToFile(void *data) {
 			if(!self->outputBuf[idx]->ready) {
 				break;
 			}
-			self->writeFrameToOutputStream(self->outputBuf[idx]);
+			self->outputFilestream << self->outputBuf[idx]->frame.dump(-1, ' ', true) << "\n";
 			delete self->outputBuf[idx];
 			self->outputBuf[idx] = NULL;
 			self->outputBufWriterThreadPosition++;
@@ -169,10 +169,6 @@ int OutputDriver::writeOutputBufferToFile(void *data) {
 
 	self->logger->verbose("File Writer Thread Terminating.");
 	return 0;
-}
-
-void OutputDriver::writeFrameToOutputStream(OutputFrameContainer *container) {
-	outputFilestream << container->frame.dump(-1, ' ', true) << "\n";
 }
 
 void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {

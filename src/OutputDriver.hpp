@@ -36,7 +36,6 @@ public:
 private:
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);
-	void writeFrameToOutputStream(OutputFrameContainer *container);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
