@@ -291,7 +291,6 @@ void OutputDriver::handleCompletedFrame(void) {
 			throw runtime_error("OutputDriver Writer Thread falling too far behind! Ring buffer is not large enough!");
 		}
 		unsigned long idx = outputBufFrameHandlerPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
-		logger->verbose("writing a frame to output ring buffer at index %lu", idx);
 		outputBuf[idx] = container;
 		outputBufFrameHandlerPosition++;
 		YerFace_MutexUnlock(outputBufMutex);
