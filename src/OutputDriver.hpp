@@ -26,10 +26,11 @@ public:
 
 class OutputDriver {
 public:
-	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
 	void handleCompletedFrame(void);
 	void drainPipelineDataNow(void);
+	void updateLateFrameData(signed long frameNumber, string key, json value);
 private:
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);
@@ -39,6 +40,7 @@ private:
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void serverSetQuitPollTimer(void);
 
+	bool sphinxEnabled;
 	String outputFilename;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;

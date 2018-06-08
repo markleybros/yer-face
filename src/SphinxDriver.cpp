@@ -32,7 +32,7 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 	};
 }
 
-SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
+SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
@@ -43,6 +43,10 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
 		throw invalid_argument("ffmpegDriver cannot be NULL");
+	}
+	outputDriver = myOutputDriver;
+	if(outputDriver == NULL) {
+		throw invalid_argument("outputDriver cannot be NULL");
 	}
 	logger = new Logger("SphinxDriver");
 	
@@ -135,7 +139,8 @@ void SphinxDriver::handleProcessedVideoFrames(void) {
 	while(videoFrames.size() > 0 && videoFrames.front()->processed) {
 		std::stringstream jsonString;
 		jsonString << videoFrames.front()->phonemes.percent.dump(-1, ' ', true);
-		logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
+		// logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
+		outputDriver->updateLateFrameData(videoFrames.front()->timestamps.frameNumber, "phonemes", videoFrames.front()->phonemes.percent);
 		SphinxVideoFrame *old = videoFrames.front();
 		videoFrames.pop_front();
 		delete old;

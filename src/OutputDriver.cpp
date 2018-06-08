@@ -16,11 +16,12 @@ using websocketpp::lib::bind;
 
 namespace YerFace {
 
-OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	serverThread = NULL;
 	writerThread = NULL;
 	writerMutex = NULL;
 	writerCond = NULL;
+	sphinxEnabled = mySphinxEnabled;
 	outputFilename = myOutputFilename;
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -256,12 +257,37 @@ void OutputDriver::handleCompletedFrame(void) {
 
 	if(writerThread) {
 		OutputFrameContainer *container = new OutputFrameContainer();
-		container->ready = true; // FIXME - ready is conditional on Sphinx.
+		container->ready = false;
+		if(!sphinxEnabled) {
+			container->ready = true;
+		}
 		container->frame = frame;
 		YerFace_MutexLock(this->writerMutex);
 		outputFrameBuffer.push_back(container);
 		YerFace_MutexUnlock(this->writerMutex);
 		SDL_CondSignal(this->writerCond);
+	}
+}
+
+void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json value) {
+	if(!writerThread) {
+		return;
+	}
+	bool found = false;
+	// FIXME - use a different type of list for outputFrameBuffer's ring buffer, so we can more easily index into it
+	for(OutputFrameContainer *container : outputFrameBuffer) {
+		signed long idx = container->frame["meta"]["frameNumber"];
+		if(idx < frameNumber) {
+			continue;
+		} else if(idx > frameNumber) {
+			break;
+		}
+		found = true;
+		container->frame[key] = value;
+		container->ready = true;
+	}
+	if(!found) {
+		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
 	}
 }
 

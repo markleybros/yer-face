@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FFmpegDriver.hpp"
+#include "OutputDriver.hpp"
 #include "Utilities.hpp"
 
 namespace PocketSphinx {
@@ -45,7 +46,7 @@ public:
 
 class SphinxDriver {
 public:
-	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver);
+	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver);
 	~SphinxDriver();
 	void advanceWorkingToCompleted(void);
 	void drainPipelineDataNow(void);
@@ -61,6 +62,7 @@ private:
 	json sphinxToPrestonBlairPhonemeMapping;
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
+	OutputDriver *outputDriver;
 
 	Logger *logger;
 
