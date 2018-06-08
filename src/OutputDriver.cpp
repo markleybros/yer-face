@@ -21,6 +21,7 @@ OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFil
 	writerThread = NULL;
 	writerMutex = NULL;
 	writerCond = NULL;
+	outputBufMutex = NULL;
 	sphinxEnabled = mySphinxEnabled;
 	outputFilename = myOutputFilename;
 	frameDerivatives = myFrameDerivatives;
@@ -71,9 +72,15 @@ OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFil
 	}
 
 	if(outputFilename.length() > 0) {
+		outputBufWriterThreadPosition = 1;
+		outputBufFrameHandlerPosition = 1;
+		outputBuf.fill(NULL);
 		outputFilestream.open(outputFilename, ofstream::out | ofstream::binary | ofstream::trunc);
 		if(outputFilestream.fail()) {
 			throw invalid_argument("could not open outputFile for writing");
+		}
+		if((outputBufMutex = SDL_CreateMutex()) == NULL) {
+			throw runtime_error("Failed creating mutex!");
 		}
 		if((writerMutex = SDL_CreateMutex()) == NULL) {
 			throw runtime_error("Failed creating mutex!");
@@ -100,6 +107,9 @@ OutputDriver::~OutputDriver() {
 	SDL_DestroyMutex(connectionListMutex);
 	if(writerMutex) {
 		SDL_DestroyMutex(writerMutex);
+	}
+	if(outputBufMutex) {
+		SDL_DestroyMutex(outputBufMutex);
 	}
 	if(writerCond) {
 		SDL_DestroyCond(writerCond);
@@ -135,17 +145,26 @@ int OutputDriver::writeOutputBufferToFile(void *data) {
 			throw runtime_error("Failed waiting on condition.");
 		}
 
-		while(self->outputFrameBuffer.size() > 0 && self->outputFrameBuffer.front()->ready) {
-			self->writeFrameToOutputStream(self->outputFrameBuffer.front());
-			OutputFrameContainer *old = self->outputFrameBuffer.front();
-			self->outputFrameBuffer.pop_front();
-			delete old;
+		YerFace_MutexLock(self->outputBufMutex);
+		while(self->outputBufWriterThreadPosition < self->outputBufFrameHandlerPosition) {
+			unsigned long idx = self->outputBufWriterThreadPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
+			if(!self->outputBuf[idx]->ready) {
+				break;
+			}
+			self->writeFrameToOutputStream(self->outputBuf[idx]);
+			delete self->outputBuf[idx];
+			self->outputBuf[idx] = NULL;
+			self->outputBufWriterThreadPosition++;
 		}
+		YerFace_MutexUnlock(self->outputBufMutex);
 	}
 
-	if(self->outputFrameBuffer.size() > 0) {
+
+	YerFace_MutexLock(self->outputBufMutex);
+	if(self->outputBufFrameHandlerPosition > self->outputBufWriterThreadPosition) {
 		self->logger->error("About to terminate file writer thread, but there are still non-flushed frames in the output buffer!!!");
 	}
+	YerFace_MutexUnlock(self->outputBufMutex);
 	YerFace_MutexUnlock(self->writerMutex);
 
 	self->logger->verbose("File Writer Thread Terminating.");
@@ -262,10 +281,22 @@ void OutputDriver::handleCompletedFrame(void) {
 			container->ready = true;
 		}
 		container->frame = frame;
-		YerFace_MutexLock(this->writerMutex);
-		outputFrameBuffer.push_back(container);
-		YerFace_MutexUnlock(this->writerMutex);
-		SDL_CondSignal(this->writerCond);
+		YerFace_MutexLock(writerMutex);
+		YerFace_MutexLock(outputBufMutex);
+		if(outputBufFrameHandlerPosition != (unsigned long)frameTimestamps.frameNumber) {
+			throw runtime_error("Frame numbers coming in out of order?!");
+		}
+		unsigned long bufferRequiredLength = outputBufFrameHandlerPosition - outputBufWriterThreadPosition;
+		if(bufferRequiredLength > OUTPUTDRIVER_RINGBUFFER_SIZE) {
+			throw runtime_error("OutputDriver Writer Thread falling too far behind! Ring buffer is not large enough!");
+		}
+		unsigned long idx = outputBufFrameHandlerPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
+		logger->verbose("writing a frame to output ring buffer at index %lu", idx);
+		outputBuf[idx] = container;
+		outputBufFrameHandlerPosition++;
+		YerFace_MutexUnlock(outputBufMutex);
+		YerFace_MutexUnlock(writerMutex);
+		SDL_CondSignal(writerCond);
 	}
 }
 
@@ -273,22 +304,14 @@ void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json
 	if(!writerThread) {
 		return;
 	}
-	bool found = false;
-	// FIXME - use a different type of list for outputFrameBuffer's ring buffer, so we can more easily index into it
-	for(OutputFrameContainer *container : outputFrameBuffer) {
-		signed long idx = container->frame["meta"]["frameNumber"];
-		if(idx < frameNumber) {
-			continue;
-		} else if(idx > frameNumber) {
-			break;
-		}
-		found = true;
-		container->frame[key] = value;
-		container->ready = true;
-	}
-	if(!found) {
+	YerFace_MutexLock(outputBufMutex);
+	unsigned long idx = frameNumber % OUTPUTDRIVER_RINGBUFFER_SIZE;
+	if(outputBuf[idx] == NULL || outputBuf[idx]->frame["meta"]["frameNumber"] != frameNumber) {
 		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
 	}
+	outputBuf[idx]->frame[key] = value;
+	outputBuf[idx]->ready = true;
+	YerFace_MutexUnlock(outputBufMutex);
 }
 
 void OutputDriver::drainPipelineDataNow(void) {

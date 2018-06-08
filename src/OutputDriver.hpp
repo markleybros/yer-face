@@ -18,6 +18,8 @@ using namespace std;
 
 namespace YerFace {
 
+#define OUTPUTDRIVER_RINGBUFFER_SIZE 3600
+
 class OutputFrameContainer {
 public:
 	bool ready;
@@ -66,7 +68,9 @@ private:
 	bool autoBasisTransmitted, basisFlagged;
 	json lastBasisFrame;
 
-	list<OutputFrameContainer *> outputFrameBuffer;
+	array<OutputFrameContainer *, OUTPUTDRIVER_RINGBUFFER_SIZE> outputBuf;
+	unsigned long outputBufWriterThreadPosition, outputBufFrameHandlerPosition;
+	SDL_mutex *outputBufMutex;
 };
 
 }; //namespace YerFace
