@@ -7,9 +7,35 @@ using namespace PocketSphinx;
 
 namespace YerFace {
 
-SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver) {
-	hiddenMarkovModel = myHiddenMarkovModel;
-	allPhoneLM = myAllPhoneLM;
+PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
+	seen = {
+		{ "AI", false },
+		{ "E", false },
+		{ "O", false },
+		{ "U", false },
+		{ "MBP", false },
+		{ "FV", false },
+		{ "L", false },
+		{ "WQ", false },
+		{ "etc", false }
+	};
+	percent = {
+		{ "AI", 0.0 },
+		{ "E", 0.0 },
+		{ "O", 0.0 },
+		{ "U", 0.0 },
+		{ "MBP", 0.0 },
+		{ "FV", 0.0 },
+		{ "L", 0.0 },
+		{ "WQ", 0.0 },
+		{ "etc", 0.0 }
+	};
+}
+
+SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver) {
+	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
+	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
+	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -17,6 +43,10 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
 		throw invalid_argument("ffmpegDriver cannot be NULL");
+	}
+	outputDriver = myOutputDriver;
+	if(outputDriver == NULL) {
+		throw invalid_argument("outputDriver cannot be NULL");
 	}
 	logger = new Logger("SphinxDriver");
 	
@@ -26,9 +56,6 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 	utteranceRestarted = false;
 	inSpeech = false;
 	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	
@@ -55,7 +82,7 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 	audioFrameCallback.sampleRate = 16000;
 	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
 	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
-	
+
 	initializeRecognitionThread();
 
 	logger->debug("SphinxDriver object constructed and ready to go!");
@@ -63,13 +90,12 @@ SphinxDriver::SphinxDriver(string myHiddenMarkovModel, string myAllPhoneLM, Fram
 
 SphinxDriver::~SphinxDriver() {
 	logger->debug("SphinxDriver object destructing...");
-	destroyRecognitionThread();
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
 	SDL_DestroyMutex(myWrkMutex);
-	SDL_DestroyMutex(myCmpMutex);
-	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
-		delete phoneme;
+	SDL_DestroyCond(myWrkCond);
+	for(SphinxVideoFrame *frame : videoFrames) {
+		delete frame;
 	}
 	delete logger;
 }
@@ -84,91 +110,112 @@ void SphinxDriver::initializeRecognitionThread(void) {
 	}
 }
 
-void SphinxDriver::destroyRecognitionThread(void) {
+void SphinxDriver::advanceWorkingToCompleted(void) {
+	YerFace_MutexLock(myWrkMutex);
+	// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
+	SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
+	sphinxVideoFrame->processed = false;
+	sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
+	if(videoFrames.size() > 0) {
+		videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
+	}
+	videoFrames.push_back(sphinxVideoFrame);
+
+	handleProcessedVideoFrames();
+
+	YerFace_MutexUnlock(myWrkMutex);
+}
+
+void SphinxDriver::drainPipelineDataNow(void) {
 	YerFace_MutexLock(myWrkMutex);
 	recognizerRunning = false;
 	SDL_CondSignal(myWrkCond);
 	YerFace_MutexUnlock(myWrkMutex);
-
 	SDL_WaitThread(recognizerThread, NULL);
-
-	SDL_DestroyCond(myWrkCond);
 }
 
-void SphinxDriver::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myWrkMutex);
-	YerFace_MutexLock(myCmpMutex);
-	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
-	updateRecognizedPhonemes();
-	logger->verbose("==== FRAME FLIP %.3lf - %.3lf", frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
-	//FIXME - do stuff
-	YerFace_MutexUnlock(myCmpMutex);
-	YerFace_MutexUnlock(myWrkMutex);
+void SphinxDriver::handleProcessedVideoFrames(void) {
+	// Handle any already-processed frames off the other side of the video frame buffer.
+	while(videoFrames.size() > 0 && videoFrames.front()->processed) {
+		std::stringstream jsonString;
+		jsonString << videoFrames.front()->phonemes.percent.dump(-1, ' ', true);
+		// logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
+		outputDriver->updateLateFrameData(videoFrames.front()->timestamps.frameNumber, "phonemes", videoFrames.front()->phonemes.percent);
+		SphinxVideoFrame *old = videoFrames.front();
+		videoFrames.pop_front();
+		delete old;
+	}
 }
 
-void SphinxDriver::renderPreviewHUD(void) {
-	YerFace_MutexLock(myCmpMutex);
-	// Mat frame = frameDerivatives->getCompletedPreviewFrame();
-	//FIXME - do stuff
-	YerFace_MutexUnlock(myCmpMutex);
-}
-
-void SphinxDriver::updateRecognizedPhonemes(void) {
+void SphinxDriver::processUtteranceHypothesis(void) {
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
-	int32 earliestStartFrame = -1;
-	if(recognizedPhonemes.size() > 0) {
-		earliestStartFrame = recognizedPhonemes.front()->startFrame;
-	}
-
-	list<SphinxPhoneme *>::iterator phonemeIterator = recognizedPhonemes.begin();
-	while(phonemeIterator != recognizedPhonemes.end() && (*phonemeIterator)->utteranceIndex < utteranceIndex) {
-		++phonemeIterator;
-	}
-
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
+	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
 	while(segmentIterator != NULL) {
+		if(videoFrameIterator == videoFrames.end()) {
+			throw logic_error("We ran out of video frames trying to process recognized speech!");
+		}
+
+		bool iterate = true;
 		int32 startFrame, endFrame;
 		double startTime, endTime;
-		string symbol = ps_seg_word(segmentIterator);
 		ps_seg_frames(segmentIterator, &startFrame, &endFrame);
 		startTime = ((double)startFrame / (double)frameRate) + timestampOffset;
 		endTime = ((double)endFrame / (double)frameRate) + timestampOffset;
 
-		if(phonemeIterator == recognizedPhonemes.end()) {
-			SphinxPhoneme *newPhoneme = new SphinxPhoneme();
-			newPhoneme->symbol = symbol;
-			newPhoneme->startFrame = startFrame;
-			newPhoneme->startTime = startTime;
-			newPhoneme->endFrame = endFrame;
-			newPhoneme->endTime = endTime;
-			newPhoneme->used = false;
-			newPhoneme->utteranceIndex = utteranceIndex;
-			recognizedPhonemes.push_back(newPhoneme);
-		} else if(startFrame >= earliestStartFrame) {
-			if(!(*phonemeIterator)->used) {
-				if((*phonemeIterator)->symbol != symbol) {
-					(*phonemeIterator)->symbol = symbol;
+		if(
+		  // Does the startTime land within the bounds of this frame?
+		  (startTime >= (*videoFrameIterator)->timestamps.startTimestamp && startTime < (*videoFrameIterator)->realEndTimestamp) ||
+		  // Does the endTime land within the bounds of this frame?
+		  (endTime >= (*videoFrameIterator)->timestamps.startTimestamp && endTime < (*videoFrameIterator)->realEndTimestamp) ||
+		  // Does this frame sit completely inside the start and end times of this segment?
+		  (startTime < (*videoFrameIterator)->timestamps.startTimestamp && endTime > (*videoFrameIterator)->realEndTimestamp)) {
+			string symbol = ps_seg_word(segmentIterator);
+			string pbPhoneme = "";
+			try {
+				pbPhoneme = sphinxToPrestonBlairPhonemeMapping.at(symbol);
+			} catch(nlohmann::detail::out_of_range &e) {
+				// logger->verbose("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
+			}
+			// logger->verbose("  %s -> (%s) Times: %.3lf - %.3lf, Utterance: %d\n", symbol.c_str(), pbPhoneme.length() > 0 ? pbPhoneme.c_str() : "", startTime, endTime, utteranceIndex);
+			if(pbPhoneme.length() > 0) {
+				bool wasSeen = false;
+				double currentPercent = 0.0;
+				try {
+					wasSeen = (*videoFrameIterator)->phonemes.seen.at(pbPhoneme);
+					currentPercent = (*videoFrameIterator)->phonemes.percent.at(pbPhoneme);
+				} catch(exception &e) {
+					throw logic_error("Preston Blair mapping returned an unrecognized phoneme!");
 				}
-				if((*phonemeIterator)->startFrame != startFrame) {
-					(*phonemeIterator)->startFrame = startFrame;
-					(*phonemeIterator)->startTime = startTime;
+				if(!wasSeen) {
+					wasSeen = true;
+					(*videoFrameIterator)->phonemes.seen[pbPhoneme] = wasSeen;
 				}
-				if((*phonemeIterator)->endFrame != endFrame) {
-					(*phonemeIterator)->endFrame = endFrame;
-					(*phonemeIterator)->endTime = endTime;
+				double divisor = (*videoFrameIterator)->realEndTimestamp - (*videoFrameIterator)->timestamps.startTimestamp;
+				if(startTime < (*videoFrameIterator)->timestamps.startTimestamp) {
+					startTime = (*videoFrameIterator)->timestamps.startTimestamp;
 				}
+				if(endTime > (*videoFrameIterator)->realEndTimestamp) {
+					endTime = (*videoFrameIterator)->realEndTimestamp;
+				}
+				double numerator = endTime - startTime;
+				currentPercent = currentPercent + (numerator / divisor);
+				// logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
+				if(currentPercent > 1.0) {
+					currentPercent = 1.0;
+				}
+				(*videoFrameIterator)->phonemes.percent[pbPhoneme] = currentPercent;
 			}
 		}
-
-		segmentIterator = ps_seg_next(segmentIterator);
-		if(phonemeIterator != recognizedPhonemes.end()) {
-			++phonemeIterator;
+		if(startTime >= (*videoFrameIterator)->realEndTimestamp || endTime >= (*videoFrameIterator)->realEndTimestamp) {
+			iterate = false;
+			(*videoFrameIterator)->processed = true;
+			++videoFrameIterator;
 		}
-	}
 
-	logger->verbose("======== AFTER UPDATING PHONEME LIST:");
-	for(SphinxPhoneme * phoneme : recognizedPhonemes) {
-		logger->verbose("    %s Times: %.3lf (%d) - %.3lf (%d), Utterance: %d %s\n", phoneme->symbol.c_str(), phoneme->startTime, phoneme->startFrame, phoneme->endTime, phoneme->endFrame, phoneme->utteranceIndex, phoneme->used ? "-USED-" : " ");
+		if(iterate) {
+			segmentIterator = ps_seg_next(segmentIterator);
+		}
 	}
 }
 
@@ -182,7 +229,6 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			throw runtime_error("Failed waiting on condition.");
 		}
 		if(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
-			char const *hypothesis;
 			if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
 				throw runtime_error("Failed processing audio samples in PocketSphinx");
 			}
@@ -196,9 +242,7 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 				if(ps_end_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to end PocketSphinx utterance");
 				}
-				hypothesis = ps_get_hyp(self->pocketSphinx, NULL);
-				self->logger->verbose("======== Utterance Ended. Hypothesis: %s", hypothesis);
-				self->updateRecognizedPhonemes();
+				self->processUtteranceHypothesis();
 				self->utteranceIndex++;
 				if(ps_start_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to start PocketSphinx utterance");
@@ -207,6 +251,15 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			}
 		}
 	}
+	self->logger->verbose("Recognition loop ended. Draining speech recognizer...");
+	if(ps_end_utt(self->pocketSphinx) < 0) {
+		throw runtime_error("Failed to end PocketSphinx utterance");
+	}
+	self->processUtteranceHypothesis();
+	for(SphinxVideoFrame *frame : self->videoFrames) {
+		frame->processed = true;
+	}
+	self->handleProcessedVideoFrames();
 
 	YerFace_MutexUnlock(self->myWrkMutex);
 	self->logger->verbose("Speech Recognition Thread quitting...");

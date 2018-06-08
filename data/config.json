@@ -44,6 +44,51 @@
     "OutputDriver": {
       "websocketServerEnabled": true,
       "websocketServerPort": 9002
+    },
+    "SphinxDriver": {
+      "hiddenMarkovModel": "data/sphinx-models/en-us/en-us",
+      "allPhoneLM": "data/sphinx-models/en-us/en-us-phone.lm.bin",
+      "sphinxToPrestonBlairPhonemeMapping": {
+        "AA": "AI",
+        "AE": "AI",
+        "AH": "AI",
+        "AO": "O",
+        "AW": "O",
+        "AY": "AI",
+        "B": "MBP",
+        "CH": "etc",
+        "D": "etc",
+        "DH": "etc",
+        "EH": "E",
+        "ER": "E",
+        "EY": "E",
+        "F": "FV",
+        "G": "etc",
+        "HH": "etc",
+        "IH": "AI",
+        "IY": "E",
+        "JH": "etc",
+        "K": "etc",
+        "L": "L",
+        "M": "MBP",
+        "N": "L",
+        "NG": "L",
+        "OW": "O",
+        "OY": "WQ",
+        "P": "MBP",
+        "R": "etc",
+        "S": "etc",
+        "SH": "etc",
+        "T": "etc",
+        "TH": "etc",
+        "UH": "U",
+        "UW": "U",
+        "V": "FV",
+        "W": "WQ",
+        "Y": "etc",
+        "Z": "etc",
+        "ZH": "etc"
+      }
     }
   }
 }

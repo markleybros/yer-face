@@ -28,7 +28,7 @@
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 #include "OutputDriver.hpp"
-// #include "SphinxDriver.hpp"
+#include "SphinxDriver.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -41,9 +41,8 @@ using namespace YerFace;
 
 String configFile;
 String captureFile;
+String outputFile;
 String previewImgSeq;
-String hiddenMarkovModel;
-String allPhoneLM;
 bool frameDrop;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
@@ -62,7 +61,7 @@ FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 OutputDriver *outputDriver = NULL;
-// SphinxDriver *sphinxDriver = NULL;
+SphinxDriver *sphinxDriver = NULL;
 
 unsigned long workingFrameNumber = 0;
 SDL_mutex *flipWorkingCompletedMutex;
@@ -86,11 +85,10 @@ int main(int argc, const char** argv) {
 		"{help h||Usage message.}"
 		"{configFile C|data/config.json|Required configuration file.}"
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
+		"{outputFile||Output file for generated performance capture data.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
-		"{hiddenMarkovModel|data/sphinx-models/en-us/en-us|Hidden Markov Model used by PocketSphinx for lip synchronization.}"
-		"{allPhoneLM|data/sphinx-models/en-us/en-us-phone.lm.bin|Language Model used by PocketSphinx for lip synchronization.}"
 		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -114,9 +112,8 @@ int main(int argc, const char** argv) {
 	if(captureFile == "-") {
 		captureFile = "pipe:0";
 	}
+	outputFile = parser.get<string>("outputFile");
 	previewImgSeq = parser.get<string>("previewImgSeq");
-	hiddenMarkovModel = parser.get<string>("hiddenMarkovModel");
-	allPhoneLM = parser.get<string>("allPhoneLM");
 	frameDrop = parser.get<bool>("frameDrop");
 	audioPreview = parser.get<bool>("audioPreview");
 
@@ -127,10 +124,10 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(config, frameDerivatives, faceTracker, sdlDriver);
-	// if(ffmpegDriver->getIsAudioInputPresent()) {
-	// 	sphinxDriver = new SphinxDriver(hiddenMarkovModel, allPhoneLM, frameDerivatives, ffmpegDriver);
-	// }
+	outputDriver = new OutputDriver(config, ffmpegDriver->getIsAudioInputPresent(), outputFile, frameDerivatives, faceTracker, sdlDriver);
+	if(ffmpegDriver->getIsAudioInputPresent()) {
+		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver);
+	}
 	ffmpegDriver->rollDemuxerThread();
 
 	sdlWindowRenderer.window = NULL;
@@ -187,9 +184,9 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
-	// if(sphinxDriver != NULL) {
-	// 	delete sphinxDriver;
-	// }
+	if(sphinxDriver != NULL) {
+		delete sphinxDriver;
+	}
 	delete outputDriver;
 	delete metrics;
 	delete faceMapper;
@@ -244,10 +241,9 @@ int runCaptureLoop(void *ptr) {
 			frameDerivatives->advanceWorkingFrameToCompleted();
 			faceTracker->advanceWorkingToCompleted();
 			faceMapper->advanceWorkingToCompleted();
-			// if(sphinxDriver != NULL) {
-			// 	sphinxDriver->advanceWorkingToCompleted();
-			// }
-
+			if(sphinxDriver != NULL) {
+				sphinxDriver->advanceWorkingToCompleted();
+			}
 			outputDriver->handleCompletedFrame();
 
 			//If requested, write image sequence.
@@ -265,6 +261,11 @@ int runCaptureLoop(void *ptr) {
 		}
 	}
 
+	if(sphinxDriver != NULL) {
+		sphinxDriver->drainPipelineDataNow();
+	}
+	outputDriver->drainPipelineDataNow();
+
 	return 0;
 }
 
@@ -275,9 +276,6 @@ void doRenderPreviewFrame(void) {
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
-	// if(sphinxDriver != NULL) {
-	// 	sphinxDriver->renderPreviewHUD();
-	// }
 
 	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 

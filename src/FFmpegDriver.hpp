@@ -56,7 +56,7 @@ public:
 class AudioFrameHandler {
 public:
 	AudioFrameResampler resampler;
-	AudioFrameCallback callback;
+	AudioFrameCallback audioFrameCallback;
 };
 
 class FFmpegDriver {

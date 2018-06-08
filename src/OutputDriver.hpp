@@ -12,26 +12,43 @@
 #include <websocketpp/server.hpp>
 #include <set>
 
+#include <fstream>
+
 using namespace std;
 
 namespace YerFace {
 
+#define OUTPUTDRIVER_RINGBUFFER_SIZE 3600
+
+class OutputFrameContainer {
+public:
+	bool ready;
+	json frame;
+};
+
 class OutputDriver {
 public:
-	OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
 	void handleCompletedFrame(void);
+	void drainPipelineDataNow(void);
+	void updateLateFrameData(signed long frameNumber, string key, json value);
 private:
 	static int launchWebSocketServer(void* data);
+	static int writeOutputBufferToFile(void *data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void serverSetQuitPollTimer(void);
 
+	bool sphinxEnabled;
+	String outputFilename;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
 	Logger *logger;
+
+	ofstream outputFilestream;
 
 	SDL_mutex *connectionListMutex;
 	int websocketServerPort;
@@ -41,9 +58,18 @@ private:
 
 	SDL_Thread *serverThread;
 
+	SDL_mutex *writerMutex;
+	SDL_cond *writerCond;
+	SDL_Thread *writerThread;
+	bool writerThreadRunning;
+
 	SDL_mutex *streamFlagsMutex;
 	bool autoBasisTransmitted, basisFlagged;
 	json lastBasisFrame;
+
+	array<OutputFrameContainer *, OUTPUTDRIVER_RINGBUFFER_SIZE> outputBuf;
+	unsigned long outputBufWriterThreadPosition, outputBufFrameHandlerPosition;
+	SDL_mutex *outputBufMutex;
 };
 
 }; //namespace YerFace

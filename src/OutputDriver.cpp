@@ -16,8 +16,14 @@ using websocketpp::lib::bind;
 
 namespace YerFace {
 
-OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	serverThread = NULL;
+	writerThread = NULL;
+	writerMutex = NULL;
+	writerCond = NULL;
+	outputBufMutex = NULL;
+	sphinxEnabled = mySphinxEnabled;
+	outputFilename = myOutputFilename;
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -65,6 +71,30 @@ OutputDriver::OutputDriver(json config, FrameDerivatives *myFrameDerivatives, Fa
 		}
 	}
 
+	if(outputFilename.length() > 0) {
+		outputBufWriterThreadPosition = 1;
+		outputBufFrameHandlerPosition = 1;
+		outputBuf.fill(NULL);
+		outputFilestream.open(outputFilename, ofstream::out | ofstream::binary | ofstream::trunc);
+		if(outputFilestream.fail()) {
+			throw invalid_argument("could not open outputFile for writing");
+		}
+		if((outputBufMutex = SDL_CreateMutex()) == NULL) {
+			throw runtime_error("Failed creating mutex!");
+		}
+		if((writerMutex = SDL_CreateMutex()) == NULL) {
+			throw runtime_error("Failed creating mutex!");
+		}
+		if((writerCond = SDL_CreateCond()) == NULL) {
+			throw runtime_error("Failed creating condition!");
+		}
+		//Create worker thread.
+		writerThreadRunning = true;
+		if((writerThread = SDL_CreateThread(OutputDriver::writeOutputBufferToFile, "WriterThread", (void *)this)) == NULL) {
+			throw runtime_error("Failed spawning worker thread!");
+		}
+	}
+
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
 
@@ -75,6 +105,15 @@ OutputDriver::~OutputDriver() {
 	}
 	SDL_DestroyMutex(streamFlagsMutex);
 	SDL_DestroyMutex(connectionListMutex);
+	if(writerMutex) {
+		SDL_DestroyMutex(writerMutex);
+	}
+	if(outputBufMutex) {
+		SDL_DestroyMutex(outputBufMutex);
+	}
+	if(writerCond) {
+		SDL_DestroyCond(writerCond);
+	}
 	delete logger;
 }
 
@@ -96,16 +135,53 @@ int OutputDriver::launchWebSocketServer(void *data) {
 	return 0;
 }
 
+int OutputDriver::writeOutputBufferToFile(void *data) {
+	OutputDriver *self = (OutputDriver *)data;
+	self->logger->verbose("File Writer Thread Alive!");
+
+	YerFace_MutexLock(self->writerMutex);
+	while(self->writerThreadRunning) {
+		if(SDL_CondWait(self->writerCond, self->writerMutex) < 0) {
+			throw runtime_error("Failed waiting on condition.");
+		}
+
+		YerFace_MutexLock(self->outputBufMutex);
+		while(self->outputBufWriterThreadPosition < self->outputBufFrameHandlerPosition) {
+			unsigned long idx = self->outputBufWriterThreadPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
+			if(!self->outputBuf[idx]->ready) {
+				break;
+			}
+			self->outputFilestream << self->outputBuf[idx]->frame.dump(-1, ' ', true) << "\n";
+			delete self->outputBuf[idx];
+			self->outputBuf[idx] = NULL;
+			self->outputBufWriterThreadPosition++;
+		}
+		YerFace_MutexUnlock(self->outputBufMutex);
+	}
+
+
+	YerFace_MutexLock(self->outputBufMutex);
+	if(self->outputBufFrameHandlerPosition > self->outputBufWriterThreadPosition) {
+		self->logger->error("About to terminate file writer thread, but there are still non-flushed frames in the output buffer!!!");
+	}
+	YerFace_MutexUnlock(self->outputBufMutex);
+	YerFace_MutexUnlock(self->writerMutex);
+
+	self->logger->verbose("File Writer Thread Terminating.");
+	return 0;
+}
+
 void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
 	YerFace_MutexLock(this->streamFlagsMutex);
-	YerFace_MutexLock(this->connectionListMutex);
-	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
 	std::stringstream jsonString;
 	jsonString << lastBasisFrame.dump(-1, ' ', true);
+	YerFace_MutexUnlock(this->streamFlagsMutex);
+
+	YerFace_MutexLock(this->connectionListMutex);
+	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
 	server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
 	connectionList.insert(handle);
 	YerFace_MutexUnlock(this->connectionListMutex);
-	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
 void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
@@ -168,6 +244,7 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
+
 	YerFace_MutexLock(this->streamFlagsMutex);
 	if(basisFlagged) {
 		autoBasisTransmitted = true;
@@ -175,10 +252,10 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["meta"]["basis"] = true;
 		logger->info("Transmitting basis flag based on received basis event.");
 	}
-
 	if(frame["meta"]["basis"]) {
 		lastBasisFrame = frame;
 	}
+	YerFace_MutexUnlock(this->streamFlagsMutex);
 
 	std::stringstream jsonString;
 	jsonString << frame.dump(-1, ' ', true);
@@ -192,7 +269,57 @@ void OutputDriver::handleCompletedFrame(void) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
 	YerFace_MutexUnlock(this->connectionListMutex);
-	YerFace_MutexUnlock(this->streamFlagsMutex);
+
+	if(writerThread) {
+		OutputFrameContainer *container = new OutputFrameContainer();
+		container->ready = false;
+		if(!sphinxEnabled) {
+			container->ready = true;
+		}
+		container->frame = frame;
+		YerFace_MutexLock(writerMutex);
+		YerFace_MutexLock(outputBufMutex);
+		if(outputBufFrameHandlerPosition != (unsigned long)frameTimestamps.frameNumber) {
+			throw runtime_error("Frame numbers coming in out of order?!");
+		}
+		unsigned long bufferRequiredLength = outputBufFrameHandlerPosition - outputBufWriterThreadPosition;
+		if(bufferRequiredLength > OUTPUTDRIVER_RINGBUFFER_SIZE) {
+			throw runtime_error("OutputDriver Writer Thread falling too far behind! Ring buffer is not large enough!");
+		}
+		unsigned long idx = outputBufFrameHandlerPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
+		outputBuf[idx] = container;
+		outputBufFrameHandlerPosition++;
+		YerFace_MutexUnlock(outputBufMutex);
+		YerFace_MutexUnlock(writerMutex);
+		SDL_CondSignal(writerCond);
+	}
+}
+
+void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json value) {
+	if(!writerThread) {
+		return;
+	}
+	YerFace_MutexLock(outputBufMutex);
+	unsigned long idx = frameNumber % OUTPUTDRIVER_RINGBUFFER_SIZE;
+	if(outputBuf[idx] == NULL || outputBuf[idx]->frame["meta"]["frameNumber"] != frameNumber) {
+		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
+	}
+	outputBuf[idx]->frame[key] = value;
+	outputBuf[idx]->ready = true;
+	YerFace_MutexUnlock(outputBufMutex);
+}
+
+void OutputDriver::drainPipelineDataNow(void) {
+	if(writerThread) {
+		YerFace_MutexLock(writerMutex);
+		writerThreadRunning = false;
+		YerFace_MutexUnlock(writerMutex);
+		SDL_CondSignal(writerCond);
+		SDL_WaitThread(writerThread, NULL);
+	}
+	if(outputFilename.length() > 0 && outputFilestream.is_open()) {
+		outputFilestream.close();
+	}
 }
 
 void OutputDriver::serverSetQuitPollTimer(void) {

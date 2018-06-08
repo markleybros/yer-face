@@ -199,10 +199,10 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			return false;
 		}
 
-		//Wait for the demuxer thread to generate more frames. In practice I have never actually seen this happen.
+		//Wait for the demuxer thread to generate more frames. In practice I have very rarely actually seen this happen.
 		YerFace_MutexUnlock(demuxerMutex);
 		logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
-		SDL_Delay(50);
+		SDL_Delay(10);
 		YerFace_MutexLock(demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();
@@ -220,7 +220,7 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	YerFace_MutexLock(demuxerMutex);
 
 	AudioFrameHandler *handler = new AudioFrameHandler();
-	handler->callback = audioFrameCallback;
+	handler->audioFrameCallback = audioFrameCallback;
 	handler->resampler.swrContext = NULL;
 	handler->resampler.bufferArray = NULL;
 	handler->resampler.bufferSamples = 0;
@@ -322,14 +322,14 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 							throw runtime_error("Unsupported number of channels and/or channel layout!");
 						}
 					}
-					handler->resampler.swrContext = swr_alloc_set_opts(NULL, handler->callback.channelLayout, handler->callback.sampleFormat, handler->callback.sampleRate, inputChannelLayout, (enum AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->sample_rate, 0, NULL);
+					handler->resampler.swrContext = swr_alloc_set_opts(NULL, handler->audioFrameCallback.channelLayout, handler->audioFrameCallback.sampleFormat, handler->audioFrameCallback.sampleRate, inputChannelLayout, (enum AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->sample_rate, 0, NULL);
 					if(handler->resampler.swrContext == NULL) {
 						throw runtime_error("Failed generating a swr context!");
 					}
 					if(swr_init(handler->resampler.swrContext) < 0) {
 						throw runtime_error("Failed initializing swr context!");
 					}
-					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->callback.channelLayout);
+					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->audioFrameCallback.channelLayout);
 				}
 				int expectedOutputSamples = swr_get_out_samples(handler->resampler.swrContext, frameNumSamples);
 				if(expectedOutputSamples < 0) {
@@ -337,7 +337,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 					return false;
 				}
 				if(handler->resampler.bufferArray == NULL || handler->resampler.bufferSamples < expectedOutputSamples) {
-					handler->resampler.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, audioStream->codecpar->sample_rate) + frameNumSamples, handler->callback.sampleRate, audioStream->codecpar->sample_rate, AV_ROUND_UP);
+					handler->resampler.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, audioStream->codecpar->sample_rate, AV_ROUND_UP);
 					handler->resampler.bufferSamples += YERFACE_RESAMPLE_BUFFER_HEADROOM;
 
 					if(handler->resampler.bufferArray != NULL) {
@@ -345,7 +345,7 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 						av_freep(&handler->resampler.bufferArray);
 					}
 
-					if(av_samples_alloc_array_and_samples(&handler->resampler.bufferArray, &handler->resampler.bufferLineSize, handler->resampler.numChannels, handler->resampler.bufferSamples, handler->callback.sampleFormat, 1) < 0) {
+					if(av_samples_alloc_array_and_samples(&handler->resampler.bufferArray, &handler->resampler.bufferLineSize, handler->resampler.numChannels, handler->resampler.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
 						throw runtime_error("Failed allocating audio buffer!");
 					}
 
@@ -358,11 +358,11 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 				}
 
 				int audioBytes;
-				if((audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioSamples, handler->callback.sampleFormat, 0)) < 0) {
+				if((audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioSamples, handler->audioFrameCallback.sampleFormat, 0)) < 0) {
 					throw runtime_error("Failed calculating output buffer size");
 				}
 				
-				handler->callback.callback(handler->callback.userdata, handler->resampler.bufferArray[0], audioSamples, audioBytes, handler->resampler.bufferLineSize, frameTimestamp);
+				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, handler->resampler.bufferArray[0], audioSamples, audioBytes, handler->resampler.bufferLineSize, frameTimestamp);
 			}
 			av_frame_unref(frame);
 		}
