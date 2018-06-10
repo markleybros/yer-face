@@ -10,9 +10,18 @@
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.5,
       "poseTranslationLowRejectionThreshold": 4.0,
-      "poseRotationHighRejectionThreshold": 7,
+      "poseRotationHighRejectionThreshold": 13,
       "poseTranslationHighRejectionThreshold": 210,
-      "poseRejectionResetAfterSeconds": 0.5
+      "poseTranslationMaxX": 125,
+      "poseTranslationMinX": -125,
+      "poseTranslationMaxY": 50,
+      "poseTranslationMinY": -125,
+      "poseTranslationMaxZ": 1000,
+      "poseTranslationMinZ": 450,
+      "poseRotationPlusMinusX": 17,
+      "poseRotationPlusMinusY": 22,
+      "poseRotationPlusMinusZ": 15,
+      "poseRejectionResetAfterSeconds": 0.1
     },
     "FaceMapper": {
       "performOpticalTracking": false
@@ -35,7 +44,9 @@
       "maxTrackerDriftPercentage": 0.75,
       "pointSmoothingOverSeconds": 0.1,
       "pointSmoothingExponent": 3,
-      "pointMotionLowRejectionThreshold": 1.0
+      "pointMotionLowRejectionThreshold": 0.75,
+      "pointMotionHighRejectionThreshold": 20.0,
+      "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
       "averageOverSeconds": 1.0,

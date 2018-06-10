@@ -74,7 +74,7 @@ private:
 	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList, double setExclusionRadius = 0.0);
 	void assignMarkerPoint(void);
 	void calculate3dMarkerPoint(void);
-	void performMarkerPointSmoothing(void);
+	void performMarkerPointValidationAndSmoothing(void);
 	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, double proposedExclusionRadius = 0.0, bool overrideExclusionZone = false, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;
@@ -88,6 +88,8 @@ private:
 	double pointSmoothingOverSeconds;
 	double pointSmoothingExponent;
 	double pointMotionLowRejectionThreshold;
+	double pointMotionHighRejectionThreshold;
+	double markerRejectionResetAfterSeconds;
 
 	Logger *logger;
 	SDL_mutex *myWrkMutex, *myCmpMutex;

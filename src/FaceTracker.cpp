@@ -78,6 +78,15 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if(poseRejectionResetAfterSeconds <= 0.0) {
 		throw invalid_argument("poseRejectionResetAfterSeconds cannot be less than or equal to zero.");
 	}
+	poseTranslationMaxX = config["YerFace"]["FaceTracker"]["poseTranslationMaxX"];
+	poseTranslationMinX = config["YerFace"]["FaceTracker"]["poseTranslationMinX"];
+	poseTranslationMaxY = config["YerFace"]["FaceTracker"]["poseTranslationMaxY"];
+	poseTranslationMinY = config["YerFace"]["FaceTracker"]["poseTranslationMinY"];
+	poseTranslationMaxZ = config["YerFace"]["FaceTracker"]["poseTranslationMaxZ"];
+	poseTranslationMinZ = config["YerFace"]["FaceTracker"]["poseTranslationMinZ"];
+	poseRotationPlusMinusX = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusX"];
+	poseRotationPlusMinusY = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusY"];
+	poseRotationPlusMinusZ = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusZ"];
 
 	logger = new Logger("FaceTracker");
 	metrics = new Metrics(config, "FaceTracker", frameDerivatives);
@@ -360,7 +369,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 		trackerState = LOST;
 		return;
 	}
-	partPoint = (mouthTop + mouthBottom) * 0.5;
+	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
 	working.facialFeatures.features.push_back(partPoint);
 	working.facialFeatures.featuresExposed.stommion = partPoint;
 	working.facialFeatures.features3D.push_back(VERTEX_STOMMION);
@@ -402,18 +411,34 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -30.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
 	translationOffset = tempPose.rotationMatrix * translationOffset;
 	tempPose.translationVector = tempPose.translationVector + translationOffset;
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 
 	//// REJECT BAD / OUT OF BOUNDS FACIAL POSES ////
 
 	bool reportNewPose = true;
-	double degreesDifference, distance;
+	double degreesDifference, distance, scaledRotationThreshold, scaledTranslationThreshold;
+	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	if(working.previouslyReportedFacialPose.set) {
+		scaledRotationThreshold = poseRotationHighRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationHighRejectionThreshold * timeScale;
 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-		if(degreesDifference > poseRotationHighRejectionThreshold || distance > poseTranslationHighRejectionThreshold) {
+		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
 			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
+	}
+	if(tempPose.translationVector.at<double>(0) < poseTranslationMinX || tempPose.translationVector.at<double>(0) > poseTranslationMaxX ||
+	  tempPose.translationVector.at<double>(1) < poseTranslationMinY || tempPose.translationVector.at<double>(1) > poseTranslationMaxY ||
+	  tempPose.translationVector.at<double>(2) < poseTranslationMinZ || tempPose.translationVector.at<double>(2) > poseTranslationMaxZ) {
+		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+		reportNewPose = false;
+	}
+	if((angles[0] < 180.0 && angles[0] > poseRotationPlusMinusX) || (angles[0] > 180.0 && angles[0] < (360.0 - poseRotationPlusMinusX)) ||
+	  (angles[1] < 180.0 && angles[1] > poseRotationPlusMinusY) || (angles[1] > 180.0 && angles[1] < (360.0 - poseRotationPlusMinusY)) ||
+	  (angles[2] < 180.0 && angles[2] > poseRotationPlusMinusZ) || (angles[2] > 180.0 && angles[2] < (360.0 - poseRotationPlusMinusZ))) {
+		logger->warn("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
+		reportNewPose = false;
 	}
 	if(!reportNewPose) {
 		if(working.previouslyReportedFacialPose.set) {
@@ -455,16 +480,18 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 
 	tempPose.set = true;
-	// Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	// angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
 	//// REJECT NOISY SOLUTIONS ////
 
 	reportNewPose = true;
 	if(working.previouslyReportedFacialPose.set) {
+		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-		if(degreesDifference < poseRotationLowRejectionThreshold && distance < poseTranslationLowRejectionThreshold) {
+		if(degreesDifference < scaledRotationThreshold && distance < scaledTranslationThreshold) {
 			// logger->verbose("Dropping facial pose due to low rotation (%.02lf) and low motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
