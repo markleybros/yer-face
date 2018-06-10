@@ -10,7 +10,7 @@
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.5,
       "poseTranslationLowRejectionThreshold": 4.0,
-      "poseRotationHighRejectionThreshold": 7,
+      "poseRotationHighRejectionThreshold": 13,
       "poseTranslationHighRejectionThreshold": 210,
       "poseTranslationMaxX": 125,
       "poseTranslationMinX": -125,
@@ -18,6 +18,9 @@
       "poseTranslationMinY": -125,
       "poseTranslationMaxZ": 1000,
       "poseTranslationMinZ": 450,
+      "poseRotationPlusMinusX": 17,
+      "poseRotationPlusMinusY": 22,
+      "poseRotationPlusMinusZ": 15,
       "poseRejectionResetAfterSeconds": 0.1
     },
     "FaceMapper": {

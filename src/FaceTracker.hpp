@@ -153,6 +153,9 @@ private:
 	double poseTranslationMinY;
 	double poseTranslationMaxZ;
 	double poseTranslationMinZ;
+	double poseRotationPlusMinusX;
+	double poseRotationPlusMinusY;
+	double poseRotationPlusMinusZ;
 
 	Logger *logger;
 	Metrics *metrics;
