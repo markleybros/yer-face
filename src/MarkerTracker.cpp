@@ -581,6 +581,7 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 		return;
 	}
 	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	double frameTimestamp = frameTimestamps.startTimestamp;
 	working.markerPoint.timestamp = frameTimestamp;
 	markerPointSmoothingBuffer.push_back(working.markerPoint);
@@ -606,7 +607,7 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 	bool reportNewPoint = true;
 	if(working.previouslyReportedMarkerPoint.set) {
 		double distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
-		if(distance < pointMotionLowRejectionThreshold) {
+		if(distance < (pointMotionLowRejectionThreshold * timeScale)) {
 			reportNewPoint = false;
 		}
 	}

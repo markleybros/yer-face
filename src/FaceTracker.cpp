@@ -406,11 +406,14 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	//// REJECT BAD / OUT OF BOUNDS FACIAL POSES ////
 
 	bool reportNewPose = true;
-	double degreesDifference, distance;
+	double degreesDifference, distance, scaledRotationThreshold, scaledTranslationThreshold;
+	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	if(working.previouslyReportedFacialPose.set) {
+		scaledRotationThreshold = poseRotationHighRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationHighRejectionThreshold * timeScale;
 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-		if(degreesDifference > poseRotationHighRejectionThreshold || distance > poseTranslationHighRejectionThreshold) {
+		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
 			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
@@ -462,9 +465,11 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	reportNewPose = true;
 	if(working.previouslyReportedFacialPose.set) {
+		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-		if(degreesDifference < poseRotationLowRejectionThreshold && distance < poseTranslationLowRejectionThreshold) {
+		if(degreesDifference < scaledRotationThreshold && distance < scaledTranslationThreshold) {
 			// logger->verbose("Dropping facial pose due to low rotation (%.02lf) and low motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
