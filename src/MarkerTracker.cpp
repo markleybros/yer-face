@@ -52,6 +52,14 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 	if(pointMotionLowRejectionThreshold <= 0.0) {
 		throw invalid_argument("pointMotionLowRejectionThreshold cannot be less than or equal to zero");
 	}
+	pointMotionHighRejectionThreshold = config["YerFace"]["MarkerTracker"]["pointMotionHighRejectionThreshold"];
+	if(pointMotionHighRejectionThreshold <= 0.0) {
+		throw invalid_argument("pointMotionHighRejectionThreshold cannot be less than or equal to zero");
+	}
+	markerRejectionResetAfterSeconds = config["YerFace"]["MarkerTracker"]["markerRejectionResetAfterSeconds"];
+	if(markerRejectionResetAfterSeconds <= 0.0) {
+		throw invalid_argument("markerRejectionResetAfterSeconds cannot be less than or equal to zero");
+	}
 
 	sdlDriver = faceMapper->getSDLDriver();
 	frameDerivatives = faceMapper->getFrameDerivatives();
@@ -125,7 +133,7 @@ TrackerState MarkerTracker::processCurrentFrame(void) {
 
 	calculate3dMarkerPoint();
 
-	performMarkerPointSmoothing();
+	performMarkerPointValidationAndSmoothing();
 
 	YerFace_MutexUnlock(myWrkMutex);
 
@@ -576,14 +584,34 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
 }
 
-void MarkerTracker::performMarkerPointSmoothing(void) {
+void MarkerTracker::performMarkerPointValidationAndSmoothing(void) {
 	if(!working.markerPoint.set) {
 		return;
 	}
+
 	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
 	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	double frameTimestamp = frameTimestamps.startTimestamp;
 	working.markerPoint.timestamp = frameTimestamp;
+
+	//// REJECT BAD MARKER POINTS ////
+
+	double distance;
+	if(working.previouslyReportedMarkerPoint.set) {
+		distance = Utilities::lineDistance(working.markerPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
+		if(distance > (pointMotionHighRejectionThreshold * timeScale)) {
+			logger->warn("Dropping marker position due to high motion (%.02lf)!", distance);
+			if(working.markerPoint.timestamp - working.previouslyReportedMarkerPoint.timestamp >= markerRejectionResetAfterSeconds) {
+				logger->warn("Marker position has come back bad consistantly for %.02lf seconds! Unsetting the marker completely.", working.markerPoint.timestamp - working.previouslyReportedMarkerPoint.timestamp);
+				working.previouslyReportedMarkerPoint.set = false;
+			}
+			working.markerPoint = working.previouslyReportedMarkerPoint;
+			return;
+		}
+	}
+
+	//// PERFORM MARKER POINT SMOOTHING ////
+
 	markerPointSmoothingBuffer.push_back(working.markerPoint);
 	while(markerPointSmoothingBuffer.front().timestamp <= (frameTimestamp - pointSmoothingOverSeconds)) {
 		markerPointSmoothingBuffer.pop_front();
@@ -604,9 +632,11 @@ void MarkerTracker::performMarkerPointSmoothing(void) {
 		tempPoint.point3d.z += point.point3d.z * weight;
 	}
 
+	//// REJECT NOISY UPDATES ////
+
 	bool reportNewPoint = true;
 	if(working.previouslyReportedMarkerPoint.set) {
-		double distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
+		distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
 		if(distance < (pointMotionLowRejectionThreshold * timeScale)) {
 			reportNewPoint = false;
 		}

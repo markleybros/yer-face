@@ -12,7 +12,7 @@
       "poseTranslationLowRejectionThreshold": 4.0,
       "poseRotationHighRejectionThreshold": 7,
       "poseTranslationHighRejectionThreshold": 210,
-      "poseRejectionResetAfterSeconds": 0.5
+      "poseRejectionResetAfterSeconds": 0.1
     },
     "FaceMapper": {
       "performOpticalTracking": false
@@ -35,7 +35,9 @@
       "maxTrackerDriftPercentage": 0.75,
       "pointSmoothingOverSeconds": 0.1,
       "pointSmoothingExponent": 3,
-      "pointMotionLowRejectionThreshold": 1.0
+      "pointMotionLowRejectionThreshold": 0.75,
+      "pointMotionHighRejectionThreshold": 20.0,
+      "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
       "averageOverSeconds": 1.0,
