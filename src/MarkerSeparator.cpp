@@ -75,15 +75,13 @@ MarkerSeparator::MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDeriv
 		this->doEyedropper(reset, x, y);
 	});
 
-	bool withCuda = false;
 	structuringElement = getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2, 2));
-	#ifdef HAVE_CUDA
-		withCuda = true;
-		openFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, structuringElement);
-		closeFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, structuringElement);
-	#endif
+	// #ifdef HAVE_CUDA
+	// 	openFilter = cv::cuda::createMorphologyFilter(cv::MORPH_OPEN, CV_8UC1, structuringElement);
+	// 	closeFilter = cv::cuda::createMorphologyFilter(cv::MORPH_CLOSE, CV_8UC1, structuringElement);
+	// #endif
 
-	logger->debug("MarkerSeparator [built %s CUDA support] object constructed and ready to go!", withCuda ? "WITH" : "WITHOUT");
+	logger->debug("MarkerSeparator object constructed and ready to go!");
 }
 
 MarkerSeparator::~MarkerSeparator() {
@@ -168,17 +166,17 @@ void MarkerSeparator::processCurrentFrame(bool debug) {
 		tempImageGPU.create(searchFrameSize.width, searchFrameSize.height, CV_8UC1);
 
 		// FIXME - Apparently a bug (in OpenCV?) is causing this to blow up CUDA and crash.
-		openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
-		closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
+		// openFilter->apply(searchFrameThresholdGPU, tempImageGPU);
+		// closeFilter->apply(tempImageGPU, searchFrameThresholdGPU);
 
 		searchFrameThresholdGPU.download(searchFrameThreshold);
 	#else
 		cvtColor(searchFrameBGR, searchFrameHSV, COLOR_BGR2HSV);
 		inRange(searchFrameHSV, HSVMin, HSVMax, searchFrameThreshold);
-		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
-		morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 	#endif
 
+	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_OPEN, structuringElement);
+	morphologyEx(searchFrameThreshold, searchFrameThreshold, cv::MORPH_CLOSE, structuringElement);
 
 	if(debug) {
 		cvtColor(searchFrameThreshold, debugFrame, COLOR_GRAY2BGR);
