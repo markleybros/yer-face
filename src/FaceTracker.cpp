@@ -369,7 +369,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 		trackerState = LOST;
 		return;
 	}
-	partPoint = (mouthTop + mouthBottom) * 0.5;
+	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
 	working.facialFeatures.features.push_back(partPoint);
 	working.facialFeatures.featuresExposed.stommion = partPoint;
 	working.facialFeatures.features3D.push_back(VERTEX_STOMMION);
@@ -480,8 +480,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 
 	tempPose.set = true;
-	angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
-	logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+	// angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
 	//// REJECT NOISY SOLUTIONS ////
 
