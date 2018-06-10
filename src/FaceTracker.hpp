@@ -147,6 +147,12 @@ private:
 	double poseRotationHighRejectionThreshold;
 	double poseTranslationHighRejectionThreshold;
 	double poseRejectionResetAfterSeconds;
+	double poseTranslationMaxX;
+	double poseTranslationMinX;
+	double poseTranslationMaxY;
+	double poseTranslationMinY;
+	double poseTranslationMaxZ;
+	double poseTranslationMinZ;
 
 	Logger *logger;
 	Metrics *metrics;

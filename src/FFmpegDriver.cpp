@@ -176,7 +176,7 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 				readyVideoFrameBuffer.pop_back();
 				dropCount++;
 			}
-			logger->warn("Dropped %d frame(s)!", dropCount);
+			// logger->warn("Dropped %d frame(s)!", dropCount);
 		}
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();

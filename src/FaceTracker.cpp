@@ -78,6 +78,12 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if(poseRejectionResetAfterSeconds <= 0.0) {
 		throw invalid_argument("poseRejectionResetAfterSeconds cannot be less than or equal to zero.");
 	}
+	poseTranslationMaxX = config["YerFace"]["FaceTracker"]["poseTranslationMaxX"];
+	poseTranslationMinX = config["YerFace"]["FaceTracker"]["poseTranslationMinX"];
+	poseTranslationMaxY = config["YerFace"]["FaceTracker"]["poseTranslationMaxY"];
+	poseTranslationMinY = config["YerFace"]["FaceTracker"]["poseTranslationMinY"];
+	poseTranslationMaxZ = config["YerFace"]["FaceTracker"]["poseTranslationMaxZ"];
+	poseTranslationMinZ = config["YerFace"]["FaceTracker"]["poseTranslationMinZ"];
 
 	logger = new Logger("FaceTracker");
 	metrics = new Metrics(config, "FaceTracker", frameDerivatives);
@@ -417,6 +423,12 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
+	}
+	if(tempPose.translationVector.at<double>(0) < poseTranslationMinX || tempPose.translationVector.at<double>(0) > poseTranslationMaxX ||
+	  tempPose.translationVector.at<double>(1) < poseTranslationMinY || tempPose.translationVector.at<double>(1) > poseTranslationMaxY ||
+	  tempPose.translationVector.at<double>(2) < poseTranslationMinZ || tempPose.translationVector.at<double>(2) > poseTranslationMaxZ) {
+		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+		reportNewPose = false;
 	}
 	if(!reportNewPose) {
 		if(working.previouslyReportedFacialPose.set) {
