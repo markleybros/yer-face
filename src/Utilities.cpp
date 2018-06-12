@@ -186,4 +186,16 @@ cv::Scalar Utilities::scalarColorFromJSONArray(json jsonArray) {
 	return s;
 }
 
+cv::Point3d Utilities::Point3dFromJSONArray(json jsonArray) {
+	if(!jsonArray.is_array() || jsonArray.size() != 3) {
+		throw invalid_argument("jsonArray must be an array with three numbers");
+	}
+	for(int i = 0; i < 3; i++) {
+		if(!jsonArray[i].is_number()) {
+			throw invalid_argument("Point3d must be an array of three numbers, but jsonArray contains an element which is not a valid number");
+		}
+	}
+	return Point3d(jsonArray[0], jsonArray[1], jsonArray[2]);
+}
+
 }; //namespace YerFace

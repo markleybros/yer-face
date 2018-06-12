@@ -568,12 +568,13 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	if(!facialPose.set || !cameraModel.set) {
 		return;
 	}
+	FacialPlane facialPlane = faceTracker->getCalculatedFacialPlaneForWorkingFacialPose(markerType);
 	Mat homogeneousPoint = (Mat_<double>(3,1) << working.markerPoint.point.x, working.markerPoint.point.y, 1.0);
 	Mat worldPoint = cameraModel.cameraMatrix.inv() * homogeneousPoint;
 	Point3d intersection;
 	Point3d rayOrigin = Point3d(0,0,0);
 	Vec3d rayVector = Vec3d(worldPoint.at<double>(0), worldPoint.at<double>(1), worldPoint.at<double>(2));
-	if(!Utilities::rayPlaneIntersection(intersection, rayOrigin, rayVector, facialPose.planePoint, facialPose.planeNormal)) {
+	if(!Utilities::rayPlaneIntersection(intersection, rayOrigin, rayVector, facialPlane.planePoint, facialPlane.planeNormal)) {
 		logger->warn("Failed 3d ray/plane intersection with face plane! No update to 3d marker point.");
 		return;
 	}

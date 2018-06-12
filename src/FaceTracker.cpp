@@ -87,6 +87,22 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	poseRotationPlusMinusX = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusX"];
 	poseRotationPlusMinusY = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusY"];
 	poseRotationPlusMinusZ = config["YerFace"]["FaceTracker"]["poseRotationPlusMinusZ"];
+	vertexNoseSellion = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexNoseSellion"]);
+	vertexEyeRightOuterCorner = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexEyeRightOuterCorner"]);
+	vertexEyeLeftOuterCorner = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexEyeLeftOuterCorner"]);
+	vertexRightEar = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexRightEar"]);
+	vertexLeftEar = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexLeftEar"]);
+	vertexNoseTip = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexNoseTip"]);
+	vertexStommion = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexStommion"]);
+	vertexMenton = Utilities::Point3dFromJSONArray((json)config["YerFace"]["FaceTracker"]["solvePnPVertices"]["vertexMenton"]);
+	depthSliceA = config["YerFace"]["FaceTracker"]["depthSlices"]["A"];
+	depthSliceB = config["YerFace"]["FaceTracker"]["depthSlices"]["B"];
+	depthSliceC = config["YerFace"]["FaceTracker"]["depthSlices"]["C"];
+	depthSliceD = config["YerFace"]["FaceTracker"]["depthSlices"]["D"];
+	depthSliceE = config["YerFace"]["FaceTracker"]["depthSlices"]["E"];
+	depthSliceF = config["YerFace"]["FaceTracker"]["depthSlices"]["F"];
+	depthSliceG = config["YerFace"]["FaceTracker"]["depthSlices"]["G"];
+	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
 	metrics = new Metrics(config, "FaceTracker", frameDerivatives);
@@ -148,7 +164,7 @@ TrackerState FaceTracker::processCurrentFrame(void) {
 
 	doCalculateFacialTransformation();
 
-	doCalculateFacialPlane();
+	doPrecalculateFacialPlaneNormal();
 
 	TrackerState status = trackerState;
 
@@ -315,15 +331,15 @@ void FaceTracker::doIdentifyFeatures(void) {
 			default:
 				throw logic_error("bad facial feature index");
 			case IDX_NOSE_SELLION:
-				working.facialFeatures.features3D.push_back(VERTEX_NOSE_SELLION);
+				working.facialFeatures.features3D.push_back(vertexNoseSellion);
 				working.facialFeatures.featuresExposed.noseSellion = partPoint;
 				break;
 			case IDX_EYE_RIGHT_OUTER_CORNER:
-				working.facialFeatures.features3D.push_back(VERTEX_EYE_RIGHT_OUTER_CORNER);
+				working.facialFeatures.features3D.push_back(vertexEyeRightOuterCorner);
 				working.facialFeatures.featuresExposed.eyeRightOuterCorner = partPoint;
 				break;
 			case IDX_EYE_LEFT_OUTER_CORNER:
-				working.facialFeatures.features3D.push_back(VERTEX_EYE_LEFT_OUTER_CORNER);
+				working.facialFeatures.features3D.push_back(vertexEyeLeftOuterCorner);
 				working.facialFeatures.featuresExposed.eyeLeftOuterCorner = partPoint;
 				break;
 			case IDX_EYE_RIGHT_INNER_CORNER:
@@ -335,19 +351,19 @@ void FaceTracker::doIdentifyFeatures(void) {
 				pushCorrelationPoint = false;
 				break;
 			case IDX_JAW_RIGHT_TOP:
-				working.facialFeatures.features3D.push_back(VERTEX_RIGHT_EAR);
+				working.facialFeatures.features3D.push_back(vertexRightEar);
 				working.facialFeatures.featuresExposed.jawRightTop = partPoint;
 				break;
 			case IDX_JAW_LEFT_TOP:
-				working.facialFeatures.features3D.push_back(VERTEX_LEFT_EAR);
+				working.facialFeatures.features3D.push_back(vertexLeftEar);
 				working.facialFeatures.featuresExposed.jawLeftTop = partPoint;
 				break;
 			case IDX_NOSE_TIP:
-				working.facialFeatures.features3D.push_back(VERTEX_NOSE_TIP);
+				working.facialFeatures.features3D.push_back(vertexNoseTip);
 				working.facialFeatures.featuresExposed.noseTip = partPoint;
 				break;
 			case IDX_MENTON:
-				working.facialFeatures.features3D.push_back(VERTEX_MENTON);
+				working.facialFeatures.features3D.push_back(vertexMenton);
 				working.facialFeatures.featuresExposed.menton = partPoint;
 				break;
 		}
@@ -372,7 +388,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
 	working.facialFeatures.features.push_back(partPoint);
 	working.facialFeatures.featuresExposed.stommion = partPoint;
-	working.facialFeatures.features3D.push_back(VERTEX_STOMMION);
+	working.facialFeatures.features3D.push_back(vertexStommion);
 	working.facialFeatures.set = true;
 	working.facialFeatures.featuresExposed.set = true;
 }
@@ -406,12 +422,9 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	//// DO FACIAL POSE SOLUTION ////
 
 	solvePnP(working.facialFeatures.features3D, working.facialFeatures.features, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	tempRotationVector.at<double>(0) = tempRotationVector.at<double>(0) * -1.0;
+	tempRotationVector.at<double>(1) = tempRotationVector.at<double>(1) * -1.0;
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
-
-	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, -30.0); //An offset to bring the planar origin closer to alignment with the majority of the markers.
-	translationOffset = tempPose.rotationMatrix * translationOffset;
-	tempPose.translationVector = tempPose.translationVector + translationOffset;
-	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 
 	//// REJECT BAD / OUT OF BOUNDS FACIAL POSES ////
 
@@ -434,6 +447,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 		reportNewPose = false;
 	}
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 	if((angles[0] < 180.0 && angles[0] > poseRotationPlusMinusX) || (angles[0] > 180.0 && angles[0] < (360.0 - poseRotationPlusMinusX)) ||
 	  (angles[1] < 180.0 && angles[1] > poseRotationPlusMinusY) || (angles[1] > 180.0 && angles[1] < (360.0 - poseRotationPlusMinusY)) ||
 	  (angles[2] < 180.0 && angles[2] > poseRotationPlusMinusZ) || (angles[2] > 180.0 && angles[2] < (360.0 - poseRotationPlusMinusZ))) {
@@ -505,14 +519,70 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 }
 
-void FaceTracker::doCalculateFacialPlane(void) {
+void FaceTracker::doPrecalculateFacialPlaneNormal(void) {
 	if(!working.facialPose.set) {
 		return;
 	}
-	working.facialPose.planePoint = Point3d(working.facialPose.translationVector.at<double>(0), working.facialPose.translationVector.at<double>(1), working.facialPose.translationVector.at<double>(2));
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
 	planeNormalMat = working.facialPose.rotationMatrix * planeNormalMat;
-	working.facialPose.planeNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+	working.facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+}
+
+FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType) {
+	if(!working.facialPose.set) {
+		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
+	}
+
+	double depth = 0;
+	switch(markerType.type) {
+		default:
+			throw runtime_error("Unsupported MarkerType!");
+		case EyelidLeftTop:
+		case EyelidLeftBottom:
+		case EyelidRightTop:
+		case EyelidRightBottom:
+		case CheekLeft:
+		case CheekRight:
+			depth = depthSliceG;
+			break;
+		case EyebrowLeftInner:
+		case EyebrowRightInner:
+			depth = depthSliceE;
+			break;
+		case EyebrowLeftMiddle:
+		case EyebrowRightMiddle:
+			depth = depthSliceF;
+			break;
+		case EyebrowLeftOuter:
+		case EyebrowRightOuter:
+			depth = depthSliceH;
+			break;
+		case LipsLeftCorner:
+		case LipsRightCorner:
+			depth = depthSliceD;
+			break;
+		case LipsLeftTop:
+		case LipsRightTop:
+			depth = depthSliceC;
+			break;
+		case LipsLeftBottom:
+		case LipsRightBottom:
+			depth = depthSliceB;
+			break;
+		case Jaw:
+			depth = depthSliceA;
+			break;
+	}
+
+	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
+	translationOffset = working.facialPose.rotationMatrix * translationOffset;
+
+	FacialPlane facialPlane;
+	Mat translationVector = working.facialPose.translationVector + translationOffset;
+	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
+	facialPlane.planeNormal = working.facialPose.facialPlaneNormal;
+
+	return facialPlane;
 }
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
@@ -535,10 +605,10 @@ void FaceTracker::renderPreviewHUD(void) {
 			std::vector<Point2d> gizmo2d;
 			gizmo3d[0] = Point3d(-50,0.0,0.0);
 			gizmo3d[1] = Point3d(50,0.0,0.0);
-			gizmo3d[2] = Point3d(0.0,-50,0.0);
-			gizmo3d[3] = Point3d(0.0,50,0.0);
-			gizmo3d[4] = Point3d(0.0,0.0,-50);
-			gizmo3d[5] = Point3d(0.0,0.0,50);
+			gizmo3d[2] = Point3d(0.0,50,0.0);
+			gizmo3d[3] = Point3d(0.0,-50,0.0);
+			gizmo3d[4] = Point3d(0.0,0.0,50);
+			gizmo3d[5] = Point3d(0.0,0.0,-50);
 			
 			Mat tempRotationVector;
 			Rodrigues(complete.facialPose.rotationMatrix, tempRotationVector);
@@ -565,6 +635,34 @@ void FaceTracker::renderPreviewHUD(void) {
 		if(complete.facialFeatures.set) {
 			for(auto feature : complete.facialFeatures.features) {
 				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
+			}
+		}
+	}
+
+	if(density > 4) {
+		if(complete.facialPose.set) {
+			std::vector<Point3d> edges3d;
+			std::vector<Point2d> edges2d;
+
+			std::list<double> depths = { depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG };
+			for(double depth : depths) {
+				double planeWidth = 300;
+				double gridIncrement = 25;
+				double planeEdge = (planeWidth / 2.0);
+				for(double x = planeEdge * -1.0; x <= planeEdge; x = x + gridIncrement) {
+					edges3d.push_back(Point3d(x, planeEdge, depth));
+					edges3d.push_back(Point3d(x, planeEdge * -1.0, depth));
+				}
+				for(double y = planeEdge * -1.0; y <= planeEdge; y = y + gridIncrement) {
+					edges3d.push_back(Point3d(planeEdge, y, depth));
+					edges3d.push_back(Point3d(planeEdge * -1.0, y, depth));
+				}
+			}
+
+			projectPoints(edges3d, complete.facialPose.rotationMatrix, complete.facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, edges2d);
+
+			for(unsigned int i = 0; i + 1 < edges2d.size(); i = i + 2) {
+				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255));
 			}
 		}
 	}

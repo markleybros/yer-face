@@ -167,6 +167,7 @@ void FaceMapper::renderPreviewHUD() {
 	if(density > 0) {
 		Size frameSize = frame.size();
 		double previewRatio = 1.25, previewWidthPercentage = 0.2, previewCenterHeightPercentage = 0.2; // FIXME - magic numbers
+		int gridIncrement = 15; //FIXME - more magic numbers
 		Rect2d previewRect;
 		previewRect.width = frameSize.width * previewWidthPercentage;
 		previewRect.height = previewRect.width * previewRatio;
@@ -185,6 +186,14 @@ void FaceMapper::renderPreviewHUD() {
 		previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
+		if(density > 4) {
+			for(int x = previewRect.x; x < previewRect.x + previewRect.width; x = x + gridIncrement) {
+				cv::line(frame, Point2d(x, previewRect.y), Point2d(x, previewRect.y + previewRect.height), Scalar(75, 75, 75));
+			}
+			for(int y = previewRect.y; y < previewRect.y + previewRect.height; y = y + gridIncrement) {
+				cv::line(frame, Point2d(previewRect.x, y), Point2d(previewRect.x + previewRect.width, y), Scalar(75, 75, 75));
+			}
+		}
 		for(MarkerTracker *markerTracker : markerTrackers) {
 			MarkerPoint markerPoint = markerTracker->getCompletedMarkerPoint();
 			Point2d previewPoint = Point2d(

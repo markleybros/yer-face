@@ -6,7 +6,7 @@
       "performOpticalTracking": false,
       "trackingBoxPercentage": 0.75,
       "maxTrackerDriftPercentage": 0.25,
-      "poseSmoothingOverSeconds": 0.2,
+      "poseSmoothingOverSeconds": 0.1,
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.5,
       "poseTranslationLowRejectionThreshold": 4.0,
@@ -18,10 +18,30 @@
       "poseTranslationMinY": -125,
       "poseTranslationMaxZ": 1000,
       "poseTranslationMinZ": 450,
-      "poseRotationPlusMinusX": 17,
+      "poseRotationPlusMinusX": 19,
       "poseRotationPlusMinusY": 22,
       "poseRotationPlusMinusZ": 15,
-      "poseRejectionResetAfterSeconds": 0.1
+      "poseRejectionResetAfterSeconds": 0.1,
+      "solvePnPVertices": {
+        "vertexNoseSellion": [0.0, 0.0, 0.0],
+        "vertexEyeRightOuterCorner": [-65.5, 5.0, -20.0],
+        "vertexEyeLeftOuterCorner": [65.5, 5.0, -20.0],
+        "vertexRightEar": [-77.5, 6.0, -100.0],
+        "vertexLeftEar": [77.5, 6.0, -100.0],
+        "vertexNoseTip": [0.0, 48.0, 21.0],
+        "vertexStommion": [0.0, 75.0, 10.0],
+        "vertexMenton": [0.0, 133.0, 0.0]
+      },
+      "depthSlices": {
+        "A": -27,
+        "B": -25,
+        "C": -22,
+        "D": 0,
+        "E": 5,
+        "F": 10,
+        "G": 25,
+        "H": 25
+      }
     },
     "FaceMapper": {
       "performOpticalTracking": false

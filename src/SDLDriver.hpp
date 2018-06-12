@@ -8,7 +8,7 @@
 
 namespace YerFace {
 
-#define YERFACE_PREVIEW_DEBUG_DENSITY_MAX 4
+#define YERFACE_PREVIEW_DEBUG_DENSITY_MAX 5
 
 enum PreviewPositionInFrame {
 	BottomLeft,

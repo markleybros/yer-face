@@ -12,6 +12,7 @@
 
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
+#include "MarkerType.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
 #include "Metrics.hpp"
@@ -38,23 +39,18 @@ enum DlibFeatureIndexes {
 	IDX_MOUTH_CENTER_INNER_BOTTOM = 66
 };
 
-//Unit millimeters. Values roughly taken from https://en.wikipedia.org/wiki/Human_head
-#define VERTEX_NOSE_SELLION Point3d(0.0, 0.0, 0.0)
-#define VERTEX_EYE_RIGHT_OUTER_CORNER Point3d(-65.5, 5.0, -20.0)
-#define VERTEX_EYE_LEFT_OUTER_CORNER Point3d(65.5, 5.0, -20.0)
-#define VERTEX_RIGHT_EAR Point3d(-77.5, 6.0, -100.0)
-#define VERTEX_LEFT_EAR Point3d(77.5, 6.0, -100.0)
-#define VERTEX_NOSE_TIP Point3d(0.0, 48.0, 21.0)
-#define VERTEX_STOMMION Point3d(0.0, 75.0, 10.0)
-#define VERTEX_MENTON Point3d(0.0, 133.0, 0.0)
-
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
-	Point3d planePoint;
-	Vec3d planeNormal;
+	Vec3d facialPlaneNormal;
 	double timestamp;
 	bool set;
+};
+
+class FacialPlane {
+public:
+	Point3d planePoint;
+	Vec3d planeNormal;
 };
 
 class FacialRect {
@@ -122,6 +118,7 @@ public:
 	FacialCameraModel getFacialCameraModel(void);
 	FacialPose getWorkingFacialPose(void);
 	FacialPose getCompletedFacialPose(void);
+	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
 	void performInitializationOfTracker(void);
 	bool performTracking(void);
@@ -131,7 +128,7 @@ private:
 	void doIdentifyFeatures(void);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
-	void doCalculateFacialPlane(void);
+	void doPrecalculateFacialPlaneNormal(void);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
@@ -156,6 +153,15 @@ private:
 	double poseRotationPlusMinusX;
 	double poseRotationPlusMinusY;
 	double poseRotationPlusMinusZ;
+	Point3d vertexNoseSellion;
+	Point3d vertexEyeRightOuterCorner;
+	Point3d vertexEyeLeftOuterCorner;
+	Point3d vertexRightEar;
+	Point3d vertexLeftEar;
+	Point3d vertexNoseTip;
+	Point3d vertexMenton;
+	Point3d vertexStommion;
+	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
 	Metrics *metrics;
