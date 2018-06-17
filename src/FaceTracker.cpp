@@ -448,9 +448,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		reportNewPose = false;
 	}
 	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
-	if((angles[0] < 180.0 && angles[0] > poseRotationPlusMinusX) || (angles[0] > 180.0 && angles[0] < (360.0 - poseRotationPlusMinusX)) ||
-	  (angles[1] < 180.0 && angles[1] > poseRotationPlusMinusY) || (angles[1] > 180.0 && angles[1] < (360.0 - poseRotationPlusMinusY)) ||
-	  (angles[2] < 180.0 && angles[2] > poseRotationPlusMinusZ) || (angles[2] > 180.0 && angles[2] < (360.0 - poseRotationPlusMinusZ))) {
+
+	if(fabs(angles[0]) > poseRotationPlusMinusX || fabs(angles[1]) > poseRotationPlusMinusY || fabs(angles[2]) > poseRotationPlusMinusZ) {
 		logger->warn("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
 		reportNewPose = false;
 	}

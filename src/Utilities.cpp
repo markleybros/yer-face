@@ -55,7 +55,7 @@ double Utilities::radiansToDegrees(double radians, bool normalize) {
 	return degrees;
 }
 
-Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R, bool returnDegrees) {
+Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R, bool returnDegrees, bool degreesReflectAroundZero) {
 	double sy = std::sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0));
 
 	double x, y, z;
@@ -69,7 +69,15 @@ Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R, bool returnDegrees) {
 		z = 0;
 	}
 	if(returnDegrees) {
-		return Vec3d(Utilities::radiansToDegrees(x), Utilities::radiansToDegrees(y), Utilities::radiansToDegrees(z));
+		Vec3d angles = Vec3d(Utilities::radiansToDegrees(x), Utilities::radiansToDegrees(y), Utilities::radiansToDegrees(z));
+		if(degreesReflectAroundZero) {
+			for(int i = 0; i < 3; i++) {
+				if(angles[i] > 180.0) {
+					angles[i] = angles[i] - 360.0;
+				}
+			}
+		}
+		return angles;
 	}
 	return Vec3d(x, y, z);
 }

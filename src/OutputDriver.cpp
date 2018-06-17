@@ -218,11 +218,6 @@ void OutputDriver::handleCompletedFrame(void) {
 	if(facialPose.set) {
 		frame["pose"] = nullptr;
 		Vec3d angles = Utilities::rotationMatrixToEulerAngles(facialPose.rotationMatrix);
-		for(int i = 0; i < 3; i++) {
-			if(angles[i] > 180.0) {
-				angles[i] = angles[i] - 360.0;
-			}
-		}
 		frame["pose"]["rotation"] = { {"x", angles[0]}, {"y", angles[1]}, {"z", angles[2]} };
 		frame["pose"]["translation"] = { {"x", facialPose.translationVector.at<double>(0)}, {"y", facialPose.translationVector.at<double>(1)}, {"z", facialPose.translationVector.at<double>(2)} };
 	} else {

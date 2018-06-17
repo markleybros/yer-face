@@ -49,7 +49,7 @@ public:
 	static double lineDistance(Point3d a, Point3d b);
 	static double degreesToRadians(double degrees);
 	static double radiansToDegrees(double radians, bool normalize = true);
-	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true);
+	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true, bool degreesReflectAroundZero = true);
 	static Mat eulerAnglesToRotationMatrix(Vec3d &R, bool expectDegrees = true);
 	static double degreesDifferenceBetweenTwoRotationMatrices(Mat a, Mat b);
 	static Mat generateFakeCameraMatrix(double focalLength = 1.0, Point2d principalPoint = Point2d(0, 0));
