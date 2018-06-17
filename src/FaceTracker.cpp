@@ -493,29 +493,36 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	}
 
 	tempPose.set = true;
-	// angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
 	//// REJECT NOISY SOLUTIONS ////
 
-	reportNewPose = true;
 	if(working.previouslyReportedFacialPose.set) {
+		int i;
+		double delta;
+		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrix);
 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
-		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
-		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-		if(degreesDifference < scaledRotationThreshold && distance < scaledTranslationThreshold) {
-			// logger->verbose("Dropping facial pose due to low rotation (%.02lf) and low motion (%.02lf)!", degreesDifference, distance);
-			reportNewPose = false;
+
+		for(i = 0; i < 3; i++) {
+			delta = angles[i] - prevAngles[i];
+			if(fabs(delta) <= scaledRotationThreshold) {
+				angles[i] = prevAngles[i];
+			}
+		}
+		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
+
+		for(i = 0; i < 3; i++) {
+			delta = tempPose.translationVector.at<double>(i) - working.previouslyReportedFacialPose.translationVector.at<double>(i);
+			if(fabs(delta) <= scaledTranslationThreshold) {
+				tempPose.translationVector.at<double>(i) = working.previouslyReportedFacialPose.translationVector.at<double>(i);
+			}
 		}
 	}
 
-	if(reportNewPose) {
-		working.facialPose = tempPose;
-		working.previouslyReportedFacialPose = working.facialPose;
-	} else {
-		working.facialPose = working.previouslyReportedFacialPose;
-	}
+	working.facialPose = tempPose;
+	working.previouslyReportedFacialPose = working.facialPose;
 }
 
 void FaceTracker::doPrecalculateFacialPlaneNormal(void) {
