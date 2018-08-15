@@ -5,7 +5,7 @@ Dependencies
 Introduction
 ------------
 
-FIXME - These instructions are all from the perspective of Fedora (circa 26/27).
+FIXME - These instructions are all from the perspective of Fedora (circa 28).
 
 
 SDL2
@@ -22,6 +22,17 @@ CUDA
 Follow the directions at RPM Fusion:
 - https://rpmfusion.org/Howto/NVIDIA
 - https://rpmfusion.org/Howto/CUDA
+
+Specifically:
+
+- Install the NVIDIA driver according to the instructions.
+- Then install the Cuda repository for fedora 27: `sudo dnf install http://developer.download.nvidia.com/compute/cuda/repos/fedora27/x86_64/cuda-repo-fedora27-9.2.148-1.x86_64.rpm`
+- Then install the Software Collections repo: `sudo dnf install http://mirror.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-2.el7.centos.noarch.rpm`
+- Now install the Cuda metapackage: `sudo dnf install cuda`
+- Now install a compatible (GCC 7) toolchain: `sudo dnf install devtoolset-7-binutils devtoolset-7-gcc devtoolset-7-gcc-c++ devtoolset-7-libstdc++-devel devtoolset-7-runtime` (Not all of the toolchain will install, but we don't need everything.)
+
+
+**IMPORTANT:** From this point forward, every single step involving a compiler must be run inside of `scl enable devtoolset-7 bash` otherwise CUDA will not work and you will get weird linking errors.
 
 
 OpenCV
@@ -40,9 +51,9 @@ mkdir build
 cd build
 
 # Configure the source tree. (See below for CMAKE NOTES.)
-cmake -D CUDA_NVCC_FLAGS=--expt-relaxed-constexpr -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
+cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
 
-# Compile with a sufficient number of threads. (See below for COMPILE NOTES.)
+# Compile with a sufficient number of threads.
 make -j 8
 
 # Install on the system.
@@ -56,18 +67,7 @@ _NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes
 - tracking
 - calib3d
 - cudaimgproc
-- cudafilters.
-
-**COMPILE NOTES:**
-
-_NOTE:_ If you get errors like `identifier '__float128' is undefined` you need to apply this fix:
-- https://git.archlinux.org/svntogit/community.git/commit/trunk?h=packages/cuda&id=ae90e4d243510e9565e66e9e8e08c509f5719fe0
-- Basically just add this line "#define _BITS_FLOATN_H" to the top of this file: /usr/local/cuda/include/host_defines.h
-
-_NOTE:_ If you get errors like `/usr/bin/ccache: invalid option -- 'E'` you need to install the correct version of GCC:
-- https://rpmfusion.org/Howto/CUDA#GCC_version
-- http://mirror.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-2.el7.centos.noarch.rpm
-- `scl enable devtoolset-6 bash`
+- cudafilters
 
 
 Dlib
@@ -76,7 +76,7 @@ Dlib
 You will probably need to build Dlib from scratch, especially if you want Cuda to work.
 
 ```
-dnf -y install openblas openblas-devel
+sudo dnf -y install openblas openblas-devel
 ```
 
 You'll want to install cuDNN:
@@ -88,33 +88,33 @@ Then download the latest version of Dlib from:
 - http://dlib.net/
 
 ```
-# Configure the source tree. (See below for CMAKE NOTES.)
+# Configure the source tree.
 cmake --config Release ..
+
+# Compile with a sufficient number of threads.
+make -j 8
+
+# Install on the system.
+sudo make install
 ```
-
-**CMAKE NOTES:**
-
-_NOTE:_ If you get errors like `CUDA was found but your compiler failed to compile a simple CUDA program` you need to make sure you're using the correct version of GCC:
-- Check above in the OpenCV section for more information.
-- `scl enable devtoolset-6 bash`
 
 
 FFmpeg
 ------
 
-You might be able to get away with using FFmpeg packaged for your distro:
+**NOTE** At this time (Fedora 28) the version of ffmpeg available via DNF is new enough:
 
 ```
 dnf -y install ffmpeg ffmpeg-libs ffmpeg-devel
 ```
 
-If you **really** need to build FFmpeg from scratch, make sure its dependencies are installed first:
+It is **no longer required** to use a custom build of ffmpeg. If you **really** need to build FFmpeg from scratch, the following instructions apply:
 
 ```
 dnf -y install nasm yasm yasm-devel frei0r-plugins-opencv frei0r-plugins frei0r-devel gnutls gnutls-devel 'ladspa*' libass libass-devel libbluray libbluray-utils libbluray-devel gsm-devel lame lame-libs lame-devel openjpeg2 openjpeg2-tools openjpeg2-devel opus opus-devel opus-tools pulseaudio-libs pulseaudio-libs-devel soxr soxr-devel speex speex-tools speex-devel libtheora libtheora-devel theora-tools libv4l libv4l-devel vo-amrwbenc vo-amrwbenc-devel libvorbis libvorbis-devel vorbis-tools libvpx libvpx-devel libvpx-utils x264 x264-libs x264-devel x265 x265-libs x265-devel xvidcore xvodcore-devel openal-soft openal-soft-devel opencl-utils opencl-utils-devel opencl-headers ocl-icd ocl-icd-devel libgcrypt libgcrypt-devel libcdio libcdio-devel libcdio-paranoia libcdio-paranoia-devel
 ```
 
-Then you would do something like the following:
+Then something like...
 
 ```
 # Check out the desired FFmpeg release branch. (3.4 or the like.)
@@ -207,3 +207,4 @@ cd ../pocketsphinx
 make
 sudo make install
 ```
+
