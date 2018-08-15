@@ -185,7 +185,7 @@ void FaceMapper::renderPreviewHUD() {
 		Point2d previewCenter = Utilities::centerRect(previewRect);
 		previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
 		double previewPointScale = previewRect.width / 200;
-		rectangle(frame, previewRect, Scalar(10, 10, 10), CV_FILLED);
+		rectangle(frame, previewRect, Scalar(10, 10, 10), FILLED);
 		if(density > 4) {
 			for(int x = previewRect.x; x < previewRect.x + previewRect.width; x = x + gridIncrement) {
 				cv::line(frame, Point2d(x, previewRect.y), Point2d(x, previewRect.y + previewRect.height), Scalar(75, 75, 75));
