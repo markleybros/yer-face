@@ -36,7 +36,9 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	av_log_set_level(AV_LOG_INFO);
 	av_log_set_callback(av_log_default_callback);
 	avdevice_register_all();
-	av_register_all();
+	#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 9, 100)
+		av_register_all();
+	#endif
 	avformat_network_init();
 
 	logger->info("Opening media file %s...", inputFilename.c_str());
