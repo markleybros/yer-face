@@ -42,6 +42,7 @@ enum DlibFeatureIndexes {
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
+	Mat actualTranslationVector, actualRotationMatrix;
 	Vec3d facialPlaneNormal;
 	double timestamp;
 	bool set;

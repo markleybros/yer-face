@@ -498,6 +498,8 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	//// REJECT NOISY SOLUTIONS ////
 
+	tempPose.actualRotationMatrix = tempPose.rotationMatrix.clone();
+	tempPose.actualTranslationVector = tempPose.translationVector.clone();
 	if(working.previouslyReportedFacialPose.set) {
 		int i;
 		double delta;
