@@ -579,8 +579,8 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 		return;
 	}
 	Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
-	markerMat = markerMat - facialPose.actualTranslationVector;
-	markerMat = facialPose.actualRotationMatrix.inv() * markerMat;
+	markerMat = markerMat - facialPose.translationVectorInternal;
+	markerMat = facialPose.rotationMatrixInternal.inv() * markerMat;
 	working.markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
 	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
 }

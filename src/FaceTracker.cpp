@@ -66,6 +66,14 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if(poseTranslationLowRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseRotationLowRejectionThreshold cannot be less than or equal to zero.");
 	}
+	poseRotationLowRejectionThresholdInternal = config["YerFace"]["FaceTracker"]["poseRotationLowRejectionThresholdInternal"];
+	if(poseRotationLowRejectionThresholdInternal <= 0.0) {
+		throw invalid_argument("poseRotationLowRejectionThresholdInternal cannot be less than or equal to zero.");
+	}
+	poseTranslationLowRejectionThresholdInternal = config["YerFace"]["FaceTracker"]["poseTranslationLowRejectionThresholdInternal"];
+	if(poseTranslationLowRejectionThresholdInternal <= 0.0) {
+		throw invalid_argument("poseRotationLowRejectionThresholdInternal cannot be less than or equal to zero.");
+	}
 	poseRotationHighRejectionThreshold = config["YerFace"]["FaceTracker"]["poseRotationHighRejectionThreshold"];
 	if(poseRotationHighRejectionThreshold <= 0.0) {
 		throw invalid_argument("poseRotationHighRejectionThreshold cannot be less than or equal to zero.");
@@ -498,11 +506,13 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	//// REJECT NOISY SOLUTIONS ////
 
-	tempPose.actualRotationMatrix = tempPose.rotationMatrix.clone();
-	tempPose.actualTranslationVector = tempPose.translationVector.clone();
+	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
+	tempPose.translationVectorInternal = tempPose.translationVector.clone();
 	if(working.previouslyReportedFacialPose.set) {
 		int i;
 		double delta;
+
+		// Do the de-noising thing first for the externally-facing matrices
 		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrix);
 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
@@ -519,6 +529,26 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 			delta = tempPose.translationVector.at<double>(i) - working.previouslyReportedFacialPose.translationVector.at<double>(i);
 			if(fabs(delta) <= scaledTranslationThreshold) {
 				tempPose.translationVector.at<double>(i) = working.previouslyReportedFacialPose.translationVector.at<double>(i);
+			}
+		}
+
+		// Do the de-noising thing again, but for the internally-facing matrices
+		prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrixInternal);
+		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
+		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
+
+		for(i = 0; i < 3; i++) {
+			delta = angles[i] - prevAngles[i];
+			if(fabs(delta) <= scaledRotationThreshold) {
+				angles[i] = prevAngles[i];
+			}
+		}
+		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
+
+		for(i = 0; i < 3; i++) {
+			delta = tempPose.translationVectorInternal.at<double>(i) - working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
+			if(fabs(delta) <= scaledTranslationThreshold) {
+				tempPose.translationVectorInternal.at<double>(i) = working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
 			}
 		}
 	}

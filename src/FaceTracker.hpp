@@ -42,7 +42,7 @@ enum DlibFeatureIndexes {
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
-	Mat actualTranslationVector, actualRotationMatrix;
+	Mat translationVectorInternal, rotationMatrixInternal;
 	Vec3d facialPlaneNormal;
 	double timestamp;
 	bool set;
@@ -142,6 +142,8 @@ private:
 	double poseSmoothingExponent;
 	double poseRotationLowRejectionThreshold;
 	double poseTranslationLowRejectionThreshold;
+	double poseRotationLowRejectionThresholdInternal;
+	double poseTranslationLowRejectionThresholdInternal;
 	double poseRotationHighRejectionThreshold;
 	double poseTranslationHighRejectionThreshold;
 	double poseRejectionResetAfterSeconds;
