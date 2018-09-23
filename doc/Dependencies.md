@@ -1,11 +1,11 @@
-Dependencies
-============
+Fedora Dependencies
+===================
 
 
 Introduction
 ------------
 
-FIXME - These instructions are all from the perspective of Fedora (circa 28).
+This document is intended to serve as a rough guide for setting up your Fedora (circa 28) system for building Yer-Face. Hopefully this will only be necessary until we figure out a good binary packaging strategy. :)
 
 
 SDL2
@@ -20,19 +20,20 @@ CUDA
 ----
 
 Follow the directions at RPM Fusion:
-- https://rpmfusion.org/Howto/NVIDIA
 - https://rpmfusion.org/Howto/CUDA
 
-Specifically:
+In brief:
 
-- Install the NVIDIA driver according to the instructions.
-- Then install the Cuda repository for fedora 27: `sudo dnf install http://developer.download.nvidia.com/compute/cuda/repos/fedora27/x86_64/cuda-repo-fedora27-9.2.148-1.x86_64.rpm`
+- Do **not** install the Nvidia Driver from RPM Fusion's nonfree repository. You will need RPM Fusion, but just don't install the nvidia driver.
+- Then install the Cuda repository for fedora 27 (yes, 27): `sudo dnf install https://developer.download.nvidia.com/compute/cuda/repos/fedora27/x86_64/cuda-repo-fedora27-10.0.130-1.x86_64.rpm`
 - Then install the Software Collections repo: `sudo dnf install http://mirror.centos.org/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-2.el7.centos.noarch.rpm`
 - Now install the Cuda metapackage: `sudo dnf install cuda`
+  - This will install the Cuda tools as well as the Cuda libraries **and** the Nvidia driver to make everything work.
+  - You will want to **avoid** installing any Nvidia driver updates from RPM Fusion accidentally, as this seems to break things.
 - Now install a compatible (GCC 7) toolchain: `sudo dnf install devtoolset-7-binutils devtoolset-7-gcc devtoolset-7-gcc-c++ devtoolset-7-libstdc++-devel devtoolset-7-runtime` (Not all of the toolchain will install, but we don't need everything.)
 
 
-**IMPORTANT:** From this point forward, every single step involving a compiler must be run inside of `scl enable devtoolset-7 bash` otherwise CUDA will not work and you will get weird linking errors.
+**IMPORTANT:** From this point forward, every single step must be run inside of `scl enable devtoolset-7 bash` otherwise CUDA will not work and you will get weird linking errors. This even applies to running Blender!
 
 
 OpenCV
@@ -51,7 +52,7 @@ mkdir build
 cd build
 
 # Configure the source tree. (See below for CMAKE NOTES.)
-cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
+cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D BUILD_opencv_cudacodec=OFF -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
 
 # Compile with a sufficient number of threads.
 make -j 8
@@ -98,6 +99,7 @@ make -j 8
 sudo make install
 ```
 
+**CMAKE NOTES:** If you are running into a problem with cmake complaining about `cublas_device`, make sure you are running the latest version of cmake. See: https://github.com/davisking/dlib/issues/1490
 
 FFmpeg
 ------
