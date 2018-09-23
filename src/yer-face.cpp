@@ -44,6 +44,7 @@ String captureFile;
 String outputFile;
 String previewImgSeq;
 bool frameDrop;
+bool lowLatency;
 bool audioPreview;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
@@ -88,6 +89,7 @@ int main(int argc, const char** argv) {
 		"{outputFile||Output file for generated performance capture data.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{frameDrop||If true, will drop frames as necessary to keep up with frames coming from the input device. (Don't use this if the input is a file!)}"
+		"{lowLatency||If true, will tweak the input parameters to minimize latency.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		);
 
@@ -115,11 +117,12 @@ int main(int argc, const char** argv) {
 	outputFile = parser.get<string>("outputFile");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	frameDrop = parser.get<bool>("frameDrop");
+	lowLatency = parser.get<bool>("lowLatency");
 	audioPreview = parser.get<bool>("audioPreview");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, frameDrop, lowLatency);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);

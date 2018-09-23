@@ -10,7 +10,7 @@ using namespace std;
 
 namespace YerFace {
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency) {
 	int ret;
 	logger = new Logger("FFmpegDriver");
 
@@ -23,6 +23,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw invalid_argument("inputFilename must be a valid input filename");
 	}
 	frameDrop = myFrameDrop;
+	lowLatency = myLowLatency;
 
 	formatContext = NULL;
 	videoDecoderContext = NULL;
@@ -42,6 +43,14 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	avformat_network_init();
 
 	logger->info("Opening media file %s...", inputFilename.c_str());
+
+	if((formatContext = avformat_alloc_context()) == NULL) {
+		throw runtime_error("Failed to avformat_alloc_context");
+	}
+
+	if(lowLatency) {
+		formatContext->probesize = 32;
+	}
 
 	if((ret = avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL)) < 0) {
 		logAVErr("inputFilename could not be opened", ret);
@@ -103,6 +112,7 @@ FFmpegDriver::~FFmpegDriver() {
 	SDL_DestroyMutex(videoFrameBufferMutex);
 	avcodec_free_context(&videoDecoderContext);
 	avformat_close_input(&formatContext);
+	avformat_free_context(formatContext);
 	av_free(videoDestData[0]);
 	av_frame_free(&frame);
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {

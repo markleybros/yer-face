@@ -61,7 +61,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency);
 	~FFmpegDriver();
 	void rollDemuxerThread(void);
 	bool getIsAudioInputPresent(void);
@@ -82,7 +82,7 @@ private:
 
 	FrameDerivatives *frameDerivatives;
 	string inputFilename;
-	bool frameDrop;
+	bool frameDrop, lowLatency;
 
 	Logger *logger;
 
