@@ -50,6 +50,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 
 	if(lowLatency) {
 		formatContext->probesize = 32;
+		formatContext->flags |= AVFMT_FLAG_NOBUFFER;
 	}
 
 	if((ret = avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL)) < 0) {
