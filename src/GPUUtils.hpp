@@ -6,4 +6,4 @@
 #include "opencv2/cudaimgproc.hpp"
 #include "opencv2/cudaarithm.hpp"
 
-void inRangeGPU(cv::cuda::GpuMat &src, cv::Scalar &lowerb, cv::Scalar &upperb, cv::cuda::GpuMat &dst);
+void inRangeGPU(cv::InputArray _src, cv::Scalar &lowerb, cv::Scalar &upperb, cv::OutputArray _dst);

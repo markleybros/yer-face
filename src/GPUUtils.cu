@@ -1,6 +1,9 @@
 
 #include "GPUUtils.hpp"
 
+using namespace cv;
+using namespace cv::cuda;
+
 // Huge props to wykvictor for this solution https://github.com/opencv/opencv/issues/6295#issuecomment-246647886
 
 __global__ void inRangeCudaKernel(const cv::cuda::PtrStepSz<uchar3> src, cv::cuda::PtrStepSzb dst, int lbc0, int ubc0, int lbc1, int ubc1, int lbc2, int ubc2) {
@@ -16,12 +19,21 @@ __global__ void inRangeCudaKernel(const cv::cuda::PtrStepSz<uchar3> src, cv::cud
 		dst(y, x) = 0;
 }
 
-void inRangeGPU(cv::cuda::GpuMat &src, cv::Scalar &lowerb, cv::Scalar &upperb, cv::cuda::GpuMat &dst) {
+void inRangeGPU(cv::InputArray _src, cv::Scalar &lowerb, cv::Scalar &upperb, cv::OutputArray _dst) {
 	const int m = 32;
+
+	GpuMat src = _src.getGpuMat();
+	const int depth = _src.depth();
 	int numRows = src.rows, numCols = src.cols;
 
-	if(numRows == 0 || numCols == 0) return;
-	
+	CV_Assert( depth == CV_8U );
+	CV_Assert( src.channels() == 3 );
+	CV_Assert( numRows > 0 );
+	CV_Assert( numCols > 0 );
+
+	_dst.create(_src.size(), CV_8UC1);
+	GpuMat dst = _dst.getGpuMat();
+
 	// Attention! Cols Vs. Rows are reversed
 	const dim3 gridSize(ceil((float)numCols / m), ceil((float)numRows / m), 1);
 	const dim3 blockSize(m, m, 1);
