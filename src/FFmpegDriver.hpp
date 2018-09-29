@@ -113,6 +113,7 @@ private:
 	SDL_mutex *videoFrameBufferMutex;
 	list<VideoFrame> readyVideoFrameBuffer;
 	list<VideoFrameBacking *> allocatedVideoFrameBackings;
+	bool readyVideoFrameBufferEmptyWarning;
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
 };

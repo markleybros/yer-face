@@ -32,6 +32,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	audioStream = NULL;
 	frame = NULL;
 	swsContext = NULL;
+	readyVideoFrameBufferEmptyWarning = false;
 
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
@@ -212,10 +213,14 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			return false;
 		}
 
-		//Wait for the demuxer thread to generate more frames. In practice I have very rarely actually seen this happen.
+		//Wait for the demuxer thread to generate more frames. Usually this only happens in realtime scenarios with --frameDrop
 		YerFace_MutexUnlock(demuxerMutex);
-		logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
-		SDL_Delay(10);
+
+		if(!readyVideoFrameBufferEmptyWarning) {
+			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
+			readyVideoFrameBufferEmptyWarning = true;
+		}
+		SDL_Delay(1);
 		YerFace_MutexLock(demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();

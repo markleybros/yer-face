@@ -153,7 +153,9 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
 	while(segmentIterator != NULL) {
 		if(videoFrameIterator == videoFrames.end()) {
-			throw logic_error("We ran out of video frames trying to process recognized speech!");
+			// throw logic_error("We ran out of video frames trying to process recognized speech!");
+			logger->warn("We ran out of video frames trying to process recognized speech!");
+			break;
 		}
 
 		bool iterate = true;
