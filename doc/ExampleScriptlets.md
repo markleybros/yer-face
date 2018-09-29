@@ -36,6 +36,20 @@ In my case, I have a [Logitech Brio 4K](https://www.logitech.com/en-us/product/b
 v4l2-ctl -d "${INPUT_VIDEO}" --list-formats-ext
 ```
 
+Setting Camera Exposure
+-----------------------
+
+When trying to capture markers on the screen, it is pretty awful when the camera is automatically adjusting the exposure out from under you.
+
+To set and adjust manual exposure, you probably want a few commands like this:
+
+```
+v4l2-ctl -d "${INPUT_VIDEO}" -c exposure_auto=1
+v4l2-ctl -d "${INPUT_VIDEO}" -c exposure_absolute=300
+```
+
+On the other hand, you may find it more useful to use a GUI to adjust the camera's settings. In which case you can use `gtk-v4l` since it has an easy and straightforward interface.
+
 Previewing Camera Input
 -----------------------
 
@@ -57,7 +71,8 @@ Capturing Audio and Video
 Capturing directly to a file looks something like this:
 
 ```
-ffmpeg -framerate "${FPS}" -y -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut "${OUTPUT_VIDEO}"
+ffmpeg -framerate "${FPS}" -y -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" \
+    -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut "${OUTPUT_VIDEO}"
 ```
 
 This will produce [a NUT file](https://ffmpeg.org/nut.html) which you can play back via `ffplay` to confirm that your Audio and Video is working correctly and is synchronized.
@@ -70,9 +85,10 @@ Sending Live Video into YerFace
 Let's put it all together into a live video stream:
 
 ```
-ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut pipe:1 | \
-    tee "${OUTPUT_VIDEO}" | \
-	build/bin/yer-face --captureFile=- --frameDrop --lowLatency
+ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" \
+    -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut pipe:1 | \
+        tee "${OUTPUT_VIDEO}" | \
+        build/bin/yer-face --captureFile=- --frameDrop --lowLatency
 ```
 
 **NOTE:** As you can see, this command is the same capture command, but instead of saving to a file, we are outputting to the STDOUT pipe. The `tee` command saves a copy of the video to a file. The `--captureFile=-` flag tells YerFace to receive video from STDIN.
