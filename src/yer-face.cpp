@@ -5,20 +5,6 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/tracking.hpp"
 
-// FIXME - these notes don't belong here... they should be reorganized and moved into README.md
-// best available resolution / rate: ffplay -pixel_format mjpeg -video_size 1920x1080 /dev/video1
-// best recording solution: ffmpeg -framerate 30 -y -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video1 -f pulse -i default -acodec copy -vcodec copy /tmp/output.mkv
-// alternate: mencoder tv:// -tv driver=v4l2:width=1920:height=1080:device=/dev/video1:fps=30:outfmt=mjpeg:forceaudio:alsa=1:adevice=default -ovc copy -oac copy -o /tmp/output.mkv
-
-// On a sufficiently fast system (with CUDA hardware) and which has a sufficiently well-endowed camera, you can do something like this:
-// ffmpeg -framerate 60 -f video4linux2 -pixel_format mjpeg -video_size 1920x1080 -i /dev/video0 -vcodec copy -f nut pipe:1 | build/bin/yer-face --captureFile=- --frameDrop --lowLatency
-
-// On my laptop, however, which is not so well-endowed, we need to do something more like this:
-// ffmpeg -framerate 30 -f video4linux2 -pixel_format mjpeg -video_size 1280x720 -i /dev/video0 -vcodec copy -f nut pipe:1 | build/bin/yer-face --captureFile=- --frameDrop --lowLatency
-
-// Colors for yellow florescent paint:
-// INFO: MarkerSeparator: doEyedropper: Updated HSV color range to: <56.00, 104.00, 65.00> - <96.00, 255.00, 239.00>
-
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
