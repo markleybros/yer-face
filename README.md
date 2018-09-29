@@ -2,6 +2,11 @@ YerFace!
 ========
 A stupid facial performance capture engine for cartoon animation.
 
+Documentation
+-------------
+
+All of the documentation is in [the doc/ folder](doc/) so please check that out.
+
 Resources
 ---------
 
