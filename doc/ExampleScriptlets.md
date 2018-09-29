@@ -56,7 +56,8 @@ Previewing Camera Input
 To check the camera's connection and preview it, I use a command like this:
 
 ```
-ffplay -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}"
+ffplay -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" \
+    -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}"
 ```
 
 Note that, in my case, my camera supports up to `60 FPS` in `Full HD (1920x1080)` mode, when using `mjpeg` as the format.
@@ -71,8 +72,9 @@ Capturing Audio and Video
 Capturing directly to a file looks something like this:
 
 ```
-ffmpeg -framerate "${FPS}" -y -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" \
-    -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut "${OUTPUT_VIDEO}"
+ffmpeg -framerate "${FPS}" -y -f video4linux2 -pixel_format "${PIXEL_FORMAT}" \
+    -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default \
+    -acodec copy -vcodec copy -f nut "${OUTPUT_VIDEO}"
 ```
 
 This will produce [a NUT file](https://ffmpeg.org/nut.html) which you can play back via `ffplay` to confirm that your Audio and Video is working correctly and is synchronized.
@@ -85,8 +87,9 @@ Sending Live Video into YerFace
 Let's put it all together into a live video stream:
 
 ```
-ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" -video_size "${RESOLUTION}" \
-    -i "${INPUT_VIDEO}" -f pulse -i default -acodec copy -vcodec copy -f nut pipe:1 | \
+ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" \
+    -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default \
+    -acodec copy -vcodec copy -f nut pipe:1 | \
         tee "${OUTPUT_VIDEO}" | \
         build/bin/yer-face --captureFile=- --frameDrop --lowLatency
 ```
