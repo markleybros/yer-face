@@ -81,6 +81,12 @@
     "SphinxDriver": {
       "hiddenMarkovModel": "data/sphinx-models/en-us/en-us",
       "allPhoneLM": "data/sphinx-models/en-us/en-us-phone.lm.bin",
+      "lipFlapping": {
+        "targetPhoneme": "AI",
+        "responseThreshold": 0.075,
+        "nonLinearResponse": 0.8,
+        "notInSpeechScale": 0.75
+      },
       "sphinxToPrestonBlairPhonemeMapping": {
         "AA": "AI",
         "AE": "AI",

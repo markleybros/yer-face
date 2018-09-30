@@ -5,7 +5,7 @@ A stupid facial performance capture engine for cartoon animation.
 Documentation
 -------------
 
-All of the documentation is in [the doc/ folder](doc/) so please check that out.
+All of the documentation is in [the documentation folder](doc/) so please check that out for instructions on how to get _YerFace_ running on your system as well as how to use it.
 
 Resources
 ---------

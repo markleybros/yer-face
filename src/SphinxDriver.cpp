@@ -2,6 +2,8 @@
 #include "SphinxDriver.hpp"
 #include "Utilities.hpp"
 
+#include <cmath>
+
 using namespace std;
 using namespace PocketSphinx;
 
@@ -35,6 +37,10 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
+	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
+	lipFlappingResponseThreshold = config["YerFace"]["SphinxDriver"]["lipFlapping"]["responseThreshold"];
+	lipFlappingNonLinearResponse = config["YerFace"]["SphinxDriver"]["lipFlapping"]["nonLinearResponse"];
+	lipFlappingNotInSpeechScale = config["YerFace"]["SphinxDriver"]["lipFlapping"]["notInSpeechScale"];
 	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -232,10 +238,31 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	}
 }
 
-void SphinxDriver::processLipFlappingAudio(void) {
-	if(inSpeech) {
-		workingLipFlapping.percent["AI"] = 1.0; //FIXME - calculate an amount based on audio amplitude. Allow lip flapping phoneme to be configured.
+void SphinxDriver::processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples) {
+	double maxAmplitude = 0.0;
+	for(int i = 0; i < samples; i++) {
+		double amplitude = fabs((double)buf[i]) / (double)0x7FFF;
+		if(amplitude > maxAmplitude) {
+			maxAmplitude = amplitude;
+		}
 	}
+	if(maxAmplitude > 1.0) {
+		maxAmplitude = 1.0;
+	}
+	double lipFlappingAmount = 0.0; // FIXME - apply a non-linear curve, as well as a cutoff threshold, to this number.
+	double normalized = 0.0;
+	if(maxAmplitude >= lipFlappingResponseThreshold) {
+		normalized = Utilities::normalize(maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
+		double temp = pow(normalized, lipFlappingNonLinearResponse);
+		if(!inSpeech) {
+			temp = temp * lipFlappingNotInSpeechScale;
+		}
+		lipFlappingAmount = temp;
+	}
+	if(lipFlappingAmount > (double)workingLipFlapping.percent[lipFlappingTargetPhoneme]) {
+		workingLipFlapping.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
+	}
+	// logger->verbose("Lip Flapping... Samples: %d; maxAmplitude: %lf, normalized: %lf, lipFlappingAmount: %lf, output: %lf", samples, maxAmplitude, normalized, lipFlappingAmount, (double)workingLipFlapping.percent[lipFlappingTargetPhoneme]);
 }
 
 int SphinxDriver::runRecognitionLoop(void *ptr) {
@@ -251,9 +278,12 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
 				throw runtime_error("Failed processing audio samples in PocketSphinx");
 			}
+			self->inSpeech = ps_get_in_speech(self->pocketSphinx);
+			if(self->lowLatency) {
+				self->processLipFlappingAudio((int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples);
+			}
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
-			self->inSpeech = ps_get_in_speech(self->pocketSphinx);
 
 			if(self->inSpeech && self->utteranceRestarted) {
 				self->utteranceRestarted = false;
@@ -270,10 +300,6 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 					throw runtime_error("Failed to start PocketSphinx utterance");
 				}
 				self->utteranceRestarted = true;
-			}
-
-			if(self->lowLatency) {
-				self->processLipFlappingAudio();
 			}
 		}
 	}

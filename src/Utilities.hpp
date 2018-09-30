@@ -42,6 +42,7 @@ namespace YerFace {
 
 class Utilities {
 public:
+	static double normalize(double x, double length);
 	static Rect2d scaleRect(Rect2d rect, double scale);
 	static Rect2d insetBox(Rect2d originalBox, double scale);
 	static Point2d centerRect(Rect2d rect);

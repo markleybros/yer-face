@@ -54,12 +54,14 @@ private:
 	void initializeRecognitionThread(void);
 	void handleProcessedVideoFrames(void);
 	void processUtteranceHypothesis(void);
-	void processLipFlappingAudio(void);
+	void processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
 	
 	string hiddenMarkovModel, allPhoneLM;
+	string lipFlappingTargetPhoneme;
+	double lipFlappingResponseThreshold, lipFlappingNonLinearResponse, lipFlappingNotInSpeechScale;
 	json sphinxToPrestonBlairPhonemeMapping;
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;

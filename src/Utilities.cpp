@@ -8,6 +8,10 @@ using namespace cv;
 
 namespace YerFace {
 
+double Utilities::normalize(double x, double length) {
+	return (1.0/length) * x;
+}
+
 Rect2d Utilities::scaleRect(Rect2d rect, double scale) {
 	return Rect2d(
 		rect.x * scale,
@@ -131,7 +135,7 @@ Mat Utilities::generateFakeCameraMatrix(double focalLength, Point2d principalPoi
 }
 
 bool Utilities::rayPlaneIntersection(Point3d &intersection, Point3d rayOrigin, Vec3d rayVector, Point3d planePoint, Vec3d planeNormal) {
-	Vec3d rayVectorNormalized = normalize(rayVector);
+	Vec3d rayVectorNormalized = cv::normalize(rayVector);
 
 	Mat rayOriginMat, rayVectorMat, planeNormalMat, planePointMat;
 	rayOriginMat = (Mat_<double>(3, 1) << rayOrigin.x, rayOrigin.y, rayOrigin.z);
