@@ -22,17 +22,20 @@ namespace YerFace {
 
 class OutputFrameContainer {
 public:
-	bool ready;
+	bool isReady(void);
+	json waitingOn;
 	json frame;
 };
 
 class OutputDriver {
 public:
-	OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
 	void handleCompletedFrame(void);
 	void drainPipelineDataNow(void);
+	void registerLateFrameData(string key);
 	void updateLateFrameData(signed long frameNumber, string key, json value);
+	void insertCompletedFrameData(string key, json value);
 private:
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);
@@ -41,7 +44,6 @@ private:
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void serverSetQuitPollTimer(void);
 
-	bool sphinxEnabled;
 	String outputFilename;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
@@ -70,6 +72,10 @@ private:
 	array<OutputFrameContainer *, OUTPUTDRIVER_RINGBUFFER_SIZE> outputBuf;
 	unsigned long outputBufWriterThreadPosition, outputBufFrameHandlerPosition;
 	SDL_mutex *outputBufMutex;
+
+	list<string> lateFrameWaitOn;
+
+	json extraFrameData;
 };
 
 }; //namespace YerFace

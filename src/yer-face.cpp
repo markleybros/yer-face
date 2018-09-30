@@ -113,9 +113,9 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(config, ffmpegDriver->getIsAudioInputPresent(), outputFile, frameDerivatives, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, outputFile, frameDerivatives, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
-		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver);
+		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver, lowLatency);
 	}
 	ffmpegDriver->rollDemuxerThread();
 

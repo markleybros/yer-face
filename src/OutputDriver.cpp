@@ -16,13 +16,21 @@ using websocketpp::lib::bind;
 
 namespace YerFace {
 
-OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+bool OutputFrameContainer::isReady(void) {
+	for(auto waitingForMe : waitingOn) {
+		if(waitingForMe) {
+			return false;
+		}
+	}
+	return true;
+}
+
+OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	serverThread = NULL;
 	writerThread = NULL;
 	writerMutex = NULL;
 	writerCond = NULL;
 	outputBufMutex = NULL;
-	sphinxEnabled = mySphinxEnabled;
 	outputFilename = myOutputFilename;
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
@@ -95,6 +103,8 @@ OutputDriver::OutputDriver(json config, bool mySphinxEnabled, String myOutputFil
 		}
 	}
 
+	extraFrameData = json::object();
+
 	logger->debug("OutputDriver object constructed and ready to go!");
 };
 
@@ -148,7 +158,7 @@ int OutputDriver::writeOutputBufferToFile(void *data) {
 		YerFace_MutexLock(self->outputBufMutex);
 		while(self->outputBufWriterThreadPosition < self->outputBufFrameHandlerPosition) {
 			unsigned long idx = self->outputBufWriterThreadPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
-			if(!self->outputBuf[idx]->ready) {
+			if(!self->outputBuf[idx]->isReady()) {
 				break;
 			}
 			self->outputFilestream << self->outputBuf[idx]->frame.dump(-1, ' ', true) << "\n";
@@ -207,7 +217,7 @@ void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
 void OutputDriver::handleCompletedFrame(void) {
 	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
 
-	json frame;
+	json frame = extraFrameData;
 	frame["meta"] = nullptr;
 	frame["meta"]["frameNumber"] = frameTimestamps.frameNumber;
 	frame["meta"]["startTime"] = frameTimestamps.startTimestamp;
@@ -272,9 +282,8 @@ void OutputDriver::handleCompletedFrame(void) {
 
 	if(writerThread) {
 		OutputFrameContainer *container = new OutputFrameContainer();
-		container->ready = false;
-		if(!sphinxEnabled) {
-			container->ready = true;
+		for(string waitOn : lateFrameWaitOn) {
+			container->waitingOn[waitOn] = true;
 		}
 		container->frame = frame;
 		YerFace_MutexLock(writerMutex);
@@ -293,6 +302,12 @@ void OutputDriver::handleCompletedFrame(void) {
 		YerFace_MutexUnlock(writerMutex);
 		SDL_CondSignal(writerCond);
 	}
+
+	extraFrameData = json::object();
+}
+
+void OutputDriver::registerLateFrameData(string key) {
+	lateFrameWaitOn.push_back(key);
 }
 
 void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json value) {
@@ -305,8 +320,12 @@ void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json
 		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
 	}
 	outputBuf[idx]->frame[key] = value;
-	outputBuf[idx]->ready = true;
+	outputBuf[idx]->waitingOn[key] = false;
 	YerFace_MutexUnlock(outputBufMutex);
+}
+
+void OutputDriver::insertCompletedFrameData(string key, json value) {
+	extraFrameData[key] = value;
 }
 
 void OutputDriver::drainPipelineDataNow(void) {

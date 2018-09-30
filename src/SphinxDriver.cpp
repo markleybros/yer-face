@@ -32,7 +32,7 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 	};
 }
 
-SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver) {
+SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
@@ -47,6 +47,10 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	outputDriver = myOutputDriver;
 	if(outputDriver == NULL) {
 		throw invalid_argument("outputDriver cannot be NULL");
+	}
+	lowLatency = myLowLatency;
+	if(!lowLatency) {
+		outputDriver->registerLateFrameData("phonemes");
 	}
 	logger = new Logger("SphinxDriver");
 	
@@ -85,7 +89,7 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 
 	initializeRecognitionThread();
 
-	logger->debug("SphinxDriver object constructed and ready to go!");
+	logger->debug("SphinxDriver object constructed in %s mode!", lowLatency ? "realtime lip flapping" : "offline phoneme breakdown");
 }
 
 SphinxDriver::~SphinxDriver() {
@@ -112,16 +116,25 @@ void SphinxDriver::initializeRecognitionThread(void) {
 
 void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
-	// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
-	SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
-	sphinxVideoFrame->processed = false;
-	sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
-	if(videoFrames.size() > 0) {
-		videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
-	}
-	videoFrames.push_back(sphinxVideoFrame);
 
-	handleProcessedVideoFrames();
+	if(lowLatency) {
+		PrestonBlairPhonemes empty;
+		completedLipFlapping = workingLipFlapping;
+		workingLipFlapping = empty;
+
+		outputDriver->insertCompletedFrameData("phonemes", completedLipFlapping.percent);
+	} else {
+		// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
+		SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
+		sphinxVideoFrame->processed = false;
+		sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
+		if(videoFrames.size() > 0) {
+			videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
+		}
+		videoFrames.push_back(sphinxVideoFrame);
+
+		handleProcessedVideoFrames();
+	}
 
 	YerFace_MutexUnlock(myWrkMutex);
 }
@@ -153,9 +166,7 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
 	while(segmentIterator != NULL) {
 		if(videoFrameIterator == videoFrames.end()) {
-			// throw logic_error("We ran out of video frames trying to process recognized speech!");
-			logger->warn("We ran out of video frames trying to process recognized speech!");
-			break;
+			throw logic_error("We ran out of video frames trying to process recognized speech!");
 		}
 
 		bool iterate = true;
@@ -221,6 +232,12 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	}
 }
 
+void SphinxDriver::processLipFlappingAudio(void) {
+	if(inSpeech) {
+		workingLipFlapping.percent["AI"] = 1.0; //FIXME - calculate an amount based on audio amplitude. Allow lip flapping phoneme to be configured.
+	}
+}
+
 int SphinxDriver::runRecognitionLoop(void *ptr) {
 	SphinxDriver *self = (SphinxDriver *)ptr;
 	self->logger->verbose("Speech Recognition Thread alive!");
@@ -237,6 +254,7 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 			self->inSpeech = ps_get_in_speech(self->pocketSphinx);
+
 			if(self->inSpeech && self->utteranceRestarted) {
 				self->utteranceRestarted = false;
 			}
@@ -244,12 +262,18 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 				if(ps_end_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to end PocketSphinx utterance");
 				}
-				self->processUtteranceHypothesis();
+				if(!self->lowLatency) {
+					self->processUtteranceHypothesis();
+				}
 				self->utteranceIndex++;
 				if(ps_start_utt(self->pocketSphinx) < 0) {
 					throw runtime_error("Failed to start PocketSphinx utterance");
 				}
 				self->utteranceRestarted = true;
+			}
+
+			if(self->lowLatency) {
+				self->processLipFlappingAudio();
 			}
 		}
 	}
@@ -257,11 +281,13 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 	if(ps_end_utt(self->pocketSphinx) < 0) {
 		throw runtime_error("Failed to end PocketSphinx utterance");
 	}
-	self->processUtteranceHypothesis();
-	for(SphinxVideoFrame *frame : self->videoFrames) {
-		frame->processed = true;
+	if(!self->lowLatency) {
+		self->processUtteranceHypothesis();
+		for(SphinxVideoFrame *frame : self->videoFrames) {
+			frame->processed = true;
+		}
+		self->handleProcessedVideoFrames();
 	}
-	self->handleProcessedVideoFrames();
 
 	YerFace_MutexUnlock(self->myWrkMutex);
 	self->logger->verbose("Speech Recognition Thread quitting...");

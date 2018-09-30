@@ -46,7 +46,7 @@ public:
 
 class SphinxDriver {
 public:
-	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver);
+	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency);
 	~SphinxDriver();
 	void advanceWorkingToCompleted(void);
 	void drainPipelineDataNow(void);
@@ -54,6 +54,7 @@ private:
 	void initializeRecognitionThread(void);
 	void handleProcessedVideoFrames(void);
 	void processUtteranceHypothesis(void);
+	void processLipFlappingAudio(void);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
@@ -63,6 +64,7 @@ private:
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
 	OutputDriver *outputDriver;
+	bool lowLatency;
 
 	Logger *logger;
 
@@ -78,6 +80,7 @@ private:
 	int utteranceIndex;
 	double timestampOffset;
 	bool timestampOffsetSet;
+	PrestonBlairPhonemes workingLipFlapping, completedLipFlapping;
 
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
