@@ -91,7 +91,7 @@ ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" \
     -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default \
     -acodec copy -vcodec copy -f nut pipe:1 | \
         tee "${OUTPUT_VIDEO}" | \
-        build/bin/yer-face --captureFile=- --frameDrop --lowLatency
+        build/bin/yer-face --captureFile=- --lowLatency
 ```
 
 **NOTE:** As you can see, this command is the same capture command, but instead of saving to a file, we are outputting to the STDOUT pipe. The `tee` command saves a copy of the video to a file. The `--captureFile=-` flag tells YerFace to receive video from STDIN.
