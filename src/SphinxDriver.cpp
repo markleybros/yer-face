@@ -249,7 +249,7 @@ void SphinxDriver::processLipFlappingAudio(PocketSphinx::int16 const *buf, int s
 	if(maxAmplitude > 1.0) {
 		maxAmplitude = 1.0;
 	}
-	double lipFlappingAmount = 0.0; // FIXME - apply a non-linear curve, as well as a cutoff threshold, to this number.
+	double lipFlappingAmount = 0.0;
 	double normalized = 0.0;
 	if(maxAmplitude >= lipFlappingResponseThreshold) {
 		normalized = Utilities::normalize(maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
