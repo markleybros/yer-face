@@ -59,6 +59,7 @@ public:
 	static void drawX(Mat frame, Point2d markerPoint, Scalar color = Scalar(0, 0, 255), int lineLength = 5, int thickness = 1);
 	static cv::Scalar scalarColorFromJSONArray(String jsonArrayString);
 	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
+	static json JSONArrayFromScalarColor(cv::Scalar color);
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
 };
 

@@ -5,6 +5,7 @@
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "SDLDriver.hpp"
+#include "EventLogger.hpp"
 #include "Utilities.hpp"
 
 #define ASIO_STANDALONE
@@ -20,6 +21,8 @@ namespace YerFace {
 
 #define OUTPUTDRIVER_RINGBUFFER_SIZE 3600
 
+class EventLogger;
+
 class OutputFrameContainer {
 public:
 	bool isReady(void);
@@ -31,12 +34,14 @@ class OutputDriver {
 public:
 	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
+	void setEventLogger(EventLogger *myEventLogger);
 	void handleCompletedFrame(void);
 	void drainPipelineDataNow(void);
 	void registerLateFrameData(string key);
 	void updateLateFrameData(signed long frameNumber, string key, json value);
 	void insertCompletedFrameData(string key, json value);
 private:
+	void handleBasisEvent(void);
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
@@ -48,6 +53,7 @@ private:
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
+	EventLogger *eventLogger;
 	Logger *logger;
 
 	ofstream outputFilestream;

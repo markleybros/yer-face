@@ -13,12 +13,15 @@
 #include "FaceTracker.hpp"
 #include "MarkerType.hpp"
 #include "Metrics.hpp"
+#include "EventLogger.hpp"
 #include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
 
 namespace YerFace {
+
+class EventLogger;
 
 class MarkerSeparated {
 public:
@@ -37,8 +40,11 @@ class MarkerSeparator {
 public:
 	MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
 	~MarkerSeparator();
-	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
-	void widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax);
+	void setEventLogger(EventLogger *myEventLogger);
+	void setHSVRange(json myHSVRangeMinJsonArray, json myHSVRangeMaxJsonArray, bool propagate = true);
+	void setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool propagate = true);
+	void widenHSVRange(json myHSVRangeMinJsonArray, json myHSVRangeMaxJsonArray, bool propagate = true);
+	void widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool propagate = true);
 	void processCurrentFrame(bool debug = false);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
@@ -51,6 +57,7 @@ private:
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	FaceTracker *faceTracker;
+	EventLogger *eventLogger;
 	double faceSizePercentageX, faceSizePercentageY;
 	double minTargetMarkerAreaPercentage;
 	double maxTargetMarkerAreaPercentage;

@@ -14,6 +14,7 @@ using namespace cv;
 namespace YerFace {
 
 class MarkerTracker;
+class MarkerSeparator;
 
 class EyeRect {
 public:

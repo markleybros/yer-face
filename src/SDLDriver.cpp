@@ -233,7 +233,7 @@ void SDLDriver::doHandleEvents(void) {
 						incrementPreviewDebugDensity();
 						break;
 					case SDLK_RETURN:
-						logger->info("Received Basis Flag keyboard event. Rebroadcasting...");
+						logger->verbose("Received Basis Flag keyboard event. Rebroadcasting...");
 						YerFace_MutexLock(onBasisFlagCallbacksMutex);
 						for(auto callback : onBasisFlagCallbacks) {
 							callback();

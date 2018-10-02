@@ -31,6 +31,7 @@ MarkerSeparator::MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDeriv
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
 	}
+	eventLogger = NULL;
 	minTargetMarkerAreaPercentage = config["YerFace"]["MarkerSeparator"]["minTargetMarkerAreaPercentage"];
 	if(minTargetMarkerAreaPercentage <= 0.0 || minTargetMarkerAreaPercentage > 1.0) {
 		throw invalid_argument("minTargetMarkerAreaPercentage is out of range.");
@@ -67,9 +68,7 @@ MarkerSeparator::MarkerSeparator(json config, SDLDriver *mySDLDriver, FrameDeriv
 	}
 	working.markerList.clear();
 	complete.markerList.clear();
-	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMin"]);
-	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray((json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMax"]);
-	setHSVRange(myHSVRangeMin, myHSVRangeMax);
+	setHSVRange((json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMin"], (json)config["YerFace"]["MarkerSeparator"]["markerHSVRangeMax"], false);
 	sdlDriver->onEyedropperEvent([this] (bool reset, int x, int y) -> void {
 		this->logger->info("Got an Eyedropper event. [ %s, %d, %d ] Handling...", reset ? "RESETTING" : "Adding Color", x, y);
 		this->doEyedropper(reset, x, y);
@@ -94,15 +93,90 @@ MarkerSeparator::~MarkerSeparator() {
 	delete logger;
 }
 
-void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+void MarkerSeparator::setEventLogger(EventLogger *myEventLogger) {
+	eventLogger = myEventLogger;
+	if(eventLogger == NULL) {
+		throw invalid_argument("eventLogger cannot be NULL");
+	}
+
+	auto replayCallback = [this] (string eventName, json eventPayload) -> void {
+		if(eventName != "setHSVRange" && eventName != "widenHSVRange") {
+			this->logger->warn("Got an unsupported replay event!");
+			return;
+		}
+		this->logger->verbose("Received replayed HSV color range event. Rebroadcasting...");
+		if(eventName == "setHSVRange") {
+			this->setHSVRange((json)eventPayload["min"], (json)eventPayload["max"], false);
+		} else {
+			this->widenHSVRange((json)eventPayload["min"], (json)eventPayload["max"], false);
+		}
+	};
+
+	EventType setEvent;
+	setEvent.name = "setHSVRange";
+	setEvent.replayCallback = replayCallback;
+	eventLogger->registerEventType(setEvent);
+	EventType widenEvent;
+	widenEvent.name = "widenHSVRange";
+	widenEvent.replayCallback = replayCallback;
+	eventLogger->registerEventType(widenEvent);
+	EventType resetEvent;
+	resetEvent.name = "resetHSVRange";
+	resetEvent.replayCallback = [this] (string eventName, json eventPayload) -> void {
+		if(eventName != "resetHSVRange" && (bool)eventPayload != true) {
+			this->logger->warn("Got an unsupported replay event!");
+			return;
+		}
+		this->logger->verbose("Received replayed HSV reset range event. Rebroadcasting...");
+		YerFace_MutexLock(this->myEyedropperMutex);
+		this->HSVRangeReset = true;
+		YerFace_MutexUnlock(this->myEyedropperMutex);
+	};
+	eventLogger->registerEventType(resetEvent);
+
+	eventLogger->logEvent("setHSVRange", (json){
+		{"min", Utilities::JSONArrayFromScalarColor(HSVRangeMin)},
+		{"max", Utilities::JSONArrayFromScalarColor(HSVRangeMax)}
+	});
+	}
+
+void MarkerSeparator::setHSVRange(json myHSVRangeMinJsonArray, json myHSVRangeMaxJsonArray, bool propagate) {
+	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray(myHSVRangeMinJsonArray);
+	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray(myHSVRangeMaxJsonArray);
+	this->setHSVRange(myHSVRangeMin, myHSVRangeMax, propagate);
+}
+
+void MarkerSeparator::setHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool propagate) {
+	if(this->eventLogger != NULL && propagate) {
+		this->eventLogger->logEvent("setHSVRange", (json){
+			{"min", Utilities::JSONArrayFromScalarColor(myHSVRangeMin)},
+			{"max", Utilities::JSONArrayFromScalarColor(myHSVRangeMax)}
+		});
+	}
+
 	YerFace_MutexLock(myEyedropperMutex);
 	HSVRangeMin = myHSVRangeMin;
 	HSVRangeMax = myHSVRangeMax;
 	HSVRangeReset = false;
 	YerFace_MutexUnlock(myEyedropperMutex);
+
+	logger->info("setHSVRange: Reset HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
 }
 
-void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) {
+void MarkerSeparator::widenHSVRange(json myHSVRangeMinJsonArray, json myHSVRangeMaxJsonArray, bool propagate) {
+	Scalar myHSVRangeMin = Utilities::scalarColorFromJSONArray(myHSVRangeMinJsonArray);
+	Scalar myHSVRangeMax = Utilities::scalarColorFromJSONArray(myHSVRangeMaxJsonArray);
+	this->widenHSVRange(myHSVRangeMin, myHSVRangeMax, propagate);
+}
+
+void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax, bool propagate) {
+	if(this->eventLogger != NULL && propagate) {
+		this->eventLogger->logEvent("widenHSVRange", (json){
+			{"min", Utilities::JSONArrayFromScalarColor(myHSVRangeMin)},
+			{"max", Utilities::JSONArrayFromScalarColor(myHSVRangeMax)}
+		});
+	}
+
 	YerFace_MutexLock(myEyedropperMutex);
 	for(int i = 0; i < 3; i++) {
 		if(myHSVRangeMin[i] < HSVRangeMin[i]) {
@@ -113,6 +187,8 @@ void MarkerSeparator::widenHSVRange(Scalar myHSVRangeMin, Scalar myHSVRangeMax) 
 		}
 	}
 	YerFace_MutexUnlock(myEyedropperMutex);
+
+	logger->info("widenHSVRange: Updated HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
 }
 
 void MarkerSeparator::processCurrentFrame(bool debug) {
@@ -311,6 +387,9 @@ void MarkerSeparator::doEyedropper(bool reset, int x, int y) {
 	if(reset) {
 		HSVRangeReset = true;
 		YerFace_MutexUnlock(myEyedropperMutex);
+		if(this->eventLogger != NULL) {
+			this->eventLogger->logEvent("resetHSVRange", (json)true);
+		}
 		return;
 	}
 	Mat frame = frameDerivatives->getCompletedFrame();
@@ -356,10 +435,8 @@ void MarkerSeparator::doEyedropper(bool reset, int x, int y) {
 
 	if(HSVRangeReset) {
 		setHSVRange(Scalar(minHue, minSaturation, minValue), Scalar(maxHue, maxSaturation, maxValue));
-		logger->info("doEyedropper: Reset HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
 	} else {
 		widenHSVRange(Scalar(minHue, minSaturation, minValue), Scalar(maxHue, maxSaturation, maxValue));
-		logger->info("doEyedropper: Updated HSV color range to: <%.02f, %.02f, %.02f> - <%.02f, %.02f, %.02f>", HSVRangeMin[0], HSVRangeMin[1], HSVRangeMin[2], HSVRangeMax[0], HSVRangeMax[1], HSVRangeMax[2]);
 	}
 
 	YerFace_MutexUnlock(myEyedropperMutex);

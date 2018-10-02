@@ -128,6 +128,9 @@
         "Z": "etc",
         "ZH": "etc"
       }
+    },
+    "EventLogger": {
+      "eventTimestampAdjustment": 0.003
     }
   }
 }

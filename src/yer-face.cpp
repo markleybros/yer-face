@@ -15,6 +15,7 @@
 #include "Utilities.hpp"
 #include "OutputDriver.hpp"
 #include "SphinxDriver.hpp"
+#include "EventLogger.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -27,6 +28,7 @@ using namespace YerFace;
 
 String configFile;
 String captureFile;
+String eventFile;
 String outputFile;
 String previewImgSeq;
 bool lowLatency;
@@ -48,6 +50,7 @@ FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 OutputDriver *outputDriver = NULL;
 SphinxDriver *sphinxDriver = NULL;
+EventLogger *eventLogger = NULL;
 
 unsigned long workingFrameNumber = 0;
 SDL_mutex *flipWorkingCompletedMutex;
@@ -71,6 +74,7 @@ int main(int argc, const char** argv) {
 		"{help h||Usage message.}"
 		"{configFile C|data/config.json|Required configuration file.}"
 		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
+		"{eventFile||Event replay file. (Previously generated outputFile, for re-processing recorded sessions.)}"
 		"{outputFile||Output file for generated performance capture data.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is a file!)}"
@@ -98,6 +102,7 @@ int main(int argc, const char** argv) {
 	if(captureFile == "-") {
 		captureFile = "pipe:0";
 	}
+	eventFile = parser.get<string>("eventFile");
 	outputFile = parser.get<string>("outputFile");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	lowLatency = parser.get<bool>("lowLatency");
@@ -114,6 +119,11 @@ int main(int argc, const char** argv) {
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver, lowLatency);
 	}
+	eventLogger = new EventLogger(config, eventFile, outputDriver, frameDerivatives);
+
+	outputDriver->setEventLogger(eventLogger);
+	faceMapper->getMarkerSeparator()->setEventLogger(eventLogger);
+
 	ffmpegDriver->rollDemuxerThread();
 
 	sdlWindowRenderer.window = NULL;
@@ -170,6 +180,7 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
+	delete eventLogger;
 	if(sphinxDriver != NULL) {
 		delete sphinxDriver;
 	}
@@ -213,6 +224,8 @@ int runCaptureLoop(void *ptr) {
 			frameDerivatives->setWorkingFrame(videoFrame.frameCV, videoFrame.timestamp);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
+			eventLogger->startNewFrame();
+
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
@@ -230,6 +243,8 @@ int runCaptureLoop(void *ptr) {
 			if(sphinxDriver != NULL) {
 				sphinxDriver->advanceWorkingToCompleted();
 			}
+
+			eventLogger->handleCompletedFrame();
 			outputDriver->handleCompletedFrame();
 
 			//If requested, write image sequence.

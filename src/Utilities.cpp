@@ -198,6 +198,15 @@ cv::Scalar Utilities::scalarColorFromJSONArray(json jsonArray) {
 	return s;
 }
 
+json Utilities::JSONArrayFromScalarColor(cv::Scalar color) {
+	json result = json::array({
+		(int)color[0],
+		(int)color[1],
+		(int)color[2]
+	});
+	return result;
+}
+
 cv::Point3d Utilities::Point3dFromJSONArray(json jsonArray) {
 	if(!jsonArray.is_array() || jsonArray.size() != 3) {
 		throw invalid_argument("jsonArray must be an array with three numbers");

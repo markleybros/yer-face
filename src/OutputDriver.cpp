@@ -44,6 +44,7 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivative
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
+	eventLogger = NULL;
 	if((streamFlagsMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
@@ -59,10 +60,10 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivative
 	autoBasisTransmitted = false;
 	basisFlagged = false;
 	sdlDriver->onBasisFlagEvent([this] (void) -> void {
-		this->logger->info("Got a Basis Flag event. Handling...");
-		YerFace_MutexLock(this->streamFlagsMutex);
-		this->basisFlagged = true;
-		YerFace_MutexUnlock(this->streamFlagsMutex);
+		if(this->eventLogger != NULL) {
+			this->eventLogger->logEvent("basis", (json)true);
+		}
+		this->handleBasisEvent();
 	});
 	logger = new Logger("OutputDriver");
 
@@ -125,6 +126,32 @@ OutputDriver::~OutputDriver() {
 		SDL_DestroyCond(writerCond);
 	}
 	delete logger;
+}
+
+void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
+	eventLogger = myEventLogger;
+	if(eventLogger == NULL) {
+		throw invalid_argument("eventLogger cannot be NULL");
+	}
+
+	EventType basisEvent;
+	basisEvent.name = "basis";
+	basisEvent.replayCallback = [this] (string eventName, json eventPayload) -> void {
+		if(eventName != "basis" || (bool)eventPayload != true) {
+			this->logger->warn("Got an unsupported replay event!");
+			return;
+		}
+		this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
+		this->handleBasisEvent();
+	};
+	eventLogger->registerEventType(basisEvent);
+}
+
+void OutputDriver::handleBasisEvent(void) {
+	this->logger->verbose("Got a Basis Flag event. Handling...");
+	YerFace_MutexLock(streamFlagsMutex);
+	basisFlagged = true;
+	YerFace_MutexUnlock(streamFlagsMutex);
 }
 
 int OutputDriver::launchWebSocketServer(void *data) {

@@ -22,6 +22,8 @@ using namespace cv;
 
 namespace YerFace {
 
+class MarkerSeparated;
+
 class MarkerCandidate {
 public:
 	RotatedRect marker;
