@@ -322,57 +322,51 @@ void FaceTracker::doIdentifyFeatures(void) {
 
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
 
+	working.facialFeatures.featuresExposed.features.clear();
+	working.facialFeatures.featuresExposed.features.resize(result.num_parts());
+
 	working.facialFeatures.features.clear();
 	working.facialFeatures.features3D.clear();
 	dlib::point part;
 	Point2d partPoint;
-	std::vector<int> featureIndexes = {IDX_NOSE_SELLION, IDX_EYE_RIGHT_OUTER_CORNER, IDX_EYE_LEFT_OUTER_CORNER, IDX_EYE_RIGHT_INNER_CORNER, IDX_EYE_LEFT_INNER_CORNER, IDX_JAW_RIGHT_TOP, IDX_JAW_LEFT_TOP, IDX_NOSE_TIP, IDX_MENTON};
-	for(int featureIndex : featureIndexes) {
+	for(unsigned long featureIndex = 0; featureIndex < result.num_parts(); featureIndex++) {
 		part = result.part(featureIndex);
 		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint)) {
 			trackerState = LOST;
 			return;
 		}
 
-		bool pushCorrelationPoint = true;
+		working.facialFeatures.featuresExposed.features[featureIndex] = partPoint;
+
+		bool pushCorrelationPoint = false;
 		switch(featureIndex) {
-			default:
-				throw logic_error("bad facial feature index");
 			case IDX_NOSE_SELLION:
 				working.facialFeatures.features3D.push_back(vertexNoseSellion);
-				working.facialFeatures.featuresExposed.noseSellion = partPoint;
+				pushCorrelationPoint = true;
 				break;
-			case IDX_EYE_RIGHT_OUTER_CORNER:
+			case IDX_RIGHTEYE_OUTER_CORNER:
 				working.facialFeatures.features3D.push_back(vertexEyeRightOuterCorner);
-				working.facialFeatures.featuresExposed.eyeRightOuterCorner = partPoint;
+				pushCorrelationPoint = true;
 				break;
-			case IDX_EYE_LEFT_OUTER_CORNER:
+			case IDX_LEFTEYE_OUTER_CORNER:
 				working.facialFeatures.features3D.push_back(vertexEyeLeftOuterCorner);
-				working.facialFeatures.featuresExposed.eyeLeftOuterCorner = partPoint;
+				pushCorrelationPoint = true;
 				break;
-			case IDX_EYE_RIGHT_INNER_CORNER:
-				working.facialFeatures.featuresExposed.eyeRightInnerCorner = partPoint;
-				pushCorrelationPoint = false;
-				break;
-			case IDX_EYE_LEFT_INNER_CORNER:
-				working.facialFeatures.featuresExposed.eyeLeftInnerCorner = partPoint;
-				pushCorrelationPoint = false;
-				break;
-			case IDX_JAW_RIGHT_TOP:
+			case IDX_JAWLINE_0:
 				working.facialFeatures.features3D.push_back(vertexRightEar);
-				working.facialFeatures.featuresExposed.jawRightTop = partPoint;
+				pushCorrelationPoint = true;
 				break;
-			case IDX_JAW_LEFT_TOP:
+			case IDX_JAWLINE_16:
 				working.facialFeatures.features3D.push_back(vertexLeftEar);
-				working.facialFeatures.featuresExposed.jawLeftTop = partPoint;
+				pushCorrelationPoint = true;
 				break;
 			case IDX_NOSE_TIP:
 				working.facialFeatures.features3D.push_back(vertexNoseTip);
-				working.facialFeatures.featuresExposed.noseTip = partPoint;
+				pushCorrelationPoint = true;
 				break;
-			case IDX_MENTON:
+			case IDX_JAWLINE_8:
 				working.facialFeatures.features3D.push_back(vertexMenton);
-				working.facialFeatures.featuresExposed.menton = partPoint;
+				pushCorrelationPoint = true;
 				break;
 		}
 		if(pushCorrelationPoint) {
@@ -381,13 +375,13 @@ void FaceTracker::doIdentifyFeatures(void) {
 	}
 
 	//Stommion needs a little extra help.
-	part = result.part(IDX_MOUTH_CENTER_INNER_TOP);
+	part = result.part(IDX_MOUTHIN_CENTER_TOP);
 	Point2d mouthTop;
 	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop)) {
 		trackerState = LOST;
 		return;
 	}
-	part = result.part(IDX_MOUTH_CENTER_INNER_BOTTOM);
+	part = result.part(IDX_MOUTHIN_CENTER_BOTTOM);
 	Point2d mouthBottom;
 	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom)) {
 		trackerState = LOST;
@@ -395,7 +389,6 @@ void FaceTracker::doIdentifyFeatures(void) {
 	}
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
 	working.facialFeatures.features.push_back(partPoint);
-	working.facialFeatures.featuresExposed.stommion = partPoint;
 	working.facialFeatures.features3D.push_back(vertexStommion);
 	working.facialFeatures.set = true;
 	working.facialFeatures.featuresExposed.set = true;
@@ -579,8 +572,6 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType
 		case EyelidLeftBottom:
 		case EyelidRightTop:
 		case EyelidRightBottom:
-		case CheekLeft:
-		case CheekRight:
 			depth = depthSliceG;
 			break;
 		case EyebrowLeftInner:
@@ -671,7 +662,8 @@ void FaceTracker::renderPreviewHUD(void) {
 	}
 	if(density > 3) {
 		if(complete.facialFeatures.set) {
-			for(auto feature : complete.facialFeatures.features) {
+			for(auto feature : complete.facialFeatures.featuresExposed.features) {
+			// for(auto feature : complete.facialFeatures.features) {
 				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
 			}
 		}
@@ -705,13 +697,6 @@ void FaceTracker::renderPreviewHUD(void) {
 		}
 	}
 	YerFace_MutexUnlock(myCmpMutex);
-}
-
-TrackerState FaceTracker::getTrackerState(void) {
-	YerFace_MutexLock(myWrkMutex);
-	TrackerState val = trackerState;
-	YerFace_MutexUnlock(myWrkMutex);
-	return val;
 }
 
 FacialRect FaceTracker::getFacialBoundingBox(void) {

@@ -32,9 +32,6 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	if((audioFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((onEyedropperCallbacksMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
@@ -46,7 +43,6 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
-	onEyedropperCallbacks.clear();
 	onBasisFlagCallbacks.clear();
 
 	frameDerivatives = myFrameDerivatives;
@@ -128,7 +124,6 @@ SDLDriver::~SDLDriver() {
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	SDL_DestroyMutex(previewDebugDensityMutex);
 	SDL_DestroyMutex(audioFramesMutex);
-	SDL_DestroyMutex(onEyedropperCallbacksMutex);
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(audioFrame->buf != NULL) {
@@ -242,22 +237,6 @@ void SDLDriver::doHandleEvents(void) {
 						break;
 				}
 				break;
-			case SDL_MOUSEBUTTONDOWN:
-				if(SDL_GetModState() & KMOD_CTRL) {
-					bool reset = false;
-					if(event.button.button == SDL_BUTTON_LEFT) {
-						logger->info("Got an Eyedropper event at screen coordinates %dx%d. Rebroadcasting...", event.button.x, event.button.y);
-					} else if(event.button.button == SDL_BUTTON_RIGHT) {
-						logger->info("Got an Eyedropper RESET event. Rebroadcasting...");
-						reset = true;
-					}
-					YerFace_MutexLock(onEyedropperCallbacksMutex);
-					for(auto callback : onEyedropperCallbacks) {
-						callback(reset, event.button.x, event.button.y);
-					}
-					YerFace_MutexUnlock(onEyedropperCallbacksMutex);
-				}
-				break;
 		}
 	}
 }
@@ -363,12 +342,6 @@ int SDLDriver::getPreviewDebugDensity(void) {
 	int status = previewDebugDensity;
 	YerFace_MutexUnlock(previewDebugDensityMutex);
 	return status;
-}
-
-void SDLDriver::onEyedropperEvent(function<void(bool reset, int x, int y)> callback) {
-	YerFace_MutexLock(onEyedropperCallbacksMutex);
-	onEyedropperCallbacks.push_back(callback);
-	YerFace_MutexUnlock(onEyedropperCallbacksMutex);
 }
 
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {

@@ -45,21 +45,9 @@
         "H": 25
       }
     },
-    "FaceMapper": {
-      "performOpticalTracking": false
-    },
     "FrameDerivatives": {
       "classificationBoundingBox": 320,
       "classificationScaleFactor": 0.0
-    },
-    "MarkerSeparator": {
-      "markerHSVRangeMin": [56, 29, 80],
-      "markerHSVRangeMax": [100, 211, 255],
-      "faceSizePercentageX": 1.5,
-      "faceSizePercentageY": 2.0,
-      "minTargetMarkerAreaPercentage": 0.00001,
-      "maxTargetMarkerAreaPercentage": 0.01,
-      "markerBoxInflatePixels": 1.5
     },
     "MarkerTracker": {
       "trackingBoxPercentage": 1.5,

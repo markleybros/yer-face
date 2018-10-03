@@ -47,10 +47,6 @@ const char *MarkerType::asString(const MarkerTypeEnum myType) {
 			return "EyebrowRightMiddle";
 		case EyebrowRightOuter:
 			return "EyebrowRightOuter";
-		case CheekLeft:
-			return "CheekLeft";
-		case CheekRight:
-			return "CheekRight";
 		case LipsLeftCorner:
 			return "LipsLeftCorner";
 		case LipsLeftTop:
