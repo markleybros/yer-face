@@ -55,7 +55,7 @@ private:
 	Metrics *metrics;
 	Mat workingFrame, completedFrame; //BGR format, at the native resolution of the input.
 	bool workingFrameSet, completedFrameSet;
-	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.
+	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
 	Mat workingPreviewFrame, completedPreviewFrameSource, completedPreviewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
 	bool workingPreviewFrameSet, completedPreviewFrameSet;
 	Size workingFrameSize;

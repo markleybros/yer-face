@@ -136,7 +136,6 @@ public:
 
 class FaceTrackerWorkingVariables {
 public:
-	FacialClassificationBox classificationBox;
 	FacialRect faceRect;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
@@ -154,7 +153,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives);
+	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency);
 	~FaceTracker();
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -172,11 +171,12 @@ private:
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
 	void doPrecalculateFacialPlaneNormal(void);
-	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
+	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
+	bool lowLatency;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
@@ -210,8 +210,6 @@ private:
 	Logger *logger;
 	Metrics *metrics;
 
-	double classificationScaleFactor;
-
 	bool usingDNNFaceDetection;
 
 	FacialCameraModel facialCameraModel;
@@ -221,11 +219,12 @@ private:
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
 	FaceDetectionModel faceDetectionModel;
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
+
+	FacialClassificationBox newestClassificationBox;
 
 	FaceTrackerWorkingVariables working, complete;
 
-	SDL_mutex *myCmpMutex;
+	SDL_mutex *myCmpMutex, *myClassificationMutex;
 };
 
 }; //namespace YerFace

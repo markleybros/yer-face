@@ -112,7 +112,7 @@ int main(int argc, const char** argv) {
 	frameDerivatives = new FrameDerivatives(config);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, lowLatency, lowLatency);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives);
+	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, false);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(config, outputFile, frameDerivatives, faceTracker, sdlDriver);
