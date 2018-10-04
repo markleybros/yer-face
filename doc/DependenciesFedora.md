@@ -67,8 +67,6 @@ _NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes
 - core
 - tracking
 - calib3d
-- cudaimgproc
-- cudafilters
 
 
 Dlib

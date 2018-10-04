@@ -14,8 +14,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/lib/pkgconfig:/opt/local/lib/pkgconfig:/sw/lib/pkgconfig")
 
-option(USE_CUDA "Use CUDA, default to true" 1)
-
 set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/SphinxDriver.cpp src/OutputDriver.cpp src/FaceTracker.cpp src/FaceMapper.cpp src/MarkerType.cpp src/MarkerTracker.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp src/EventLogger.cpp )
 
 include(CTest)
@@ -59,18 +57,7 @@ include_directories("src" "${asio_SOURCE_DIR}/asio/include")
 
 include_directories("src" "${websocketpp_SOURCE_DIR}")
 
-set( _OPENCV_REQUIRED_MODULES core tracking calib3d )
-
-if(USE_CUDA)
-	enable_language(CUDA)
-	list(APPEND _OPENCV_REQUIRED_MODULES cudaimgproc cudafilters )
-	add_definitions(-DHAVE_CUDA)
-	add_library( yer-face-cuda STATIC src/GPUUtils.cu )
-else()
-	unset(CUDA_FOUND)
-endif()
-
-find_package( OpenCV 4 REQUIRED COMPONENTS ${_OPENCV_REQUIRED_MODULES} )
+find_package( OpenCV 4 REQUIRED COMPONENTS core tracking calib3d )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 find_package( FFmpeg REQUIRED )
@@ -87,10 +74,6 @@ add_executable( yer-face ${YERFACE_MODULES} )
 target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRARIES} ${FFMPEG_LIBAVCODEC} ${FFMPEG_LIBAVFORMAT} ${FFMPEG_LIBAVDEVICE} ${FFMPEG_LIBAVUTIL} ${FFMPEG_LIBSWSCALE} ${FFMPEG_LIBSWRESAMPLE} ${POCKETSPHINX_LIBRARIES} )
 
 target_compile_features( yer-face PUBLIC cxx_std_11 )
-
-if( USE_CUDA )
-	target_link_libraries( yer-face yer-face-cuda )
-endif()
 
 #Adapted from http://qrikko.blogspot.com/2016/05/cmake-and-how-to-copy-resources-during.html
 set (source "${CMAKE_SOURCE_DIR}/data")
