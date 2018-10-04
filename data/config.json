@@ -53,8 +53,8 @@
       "trackingBoxPercentage": 1.5,
       "maxTrackerDriftPercentage": 0.75,
       "pointSmoothingOverSeconds": 0.1,
-      "pointSmoothingExponent": 3,
-      "pointMotionLowRejectionThreshold": 5.0,
+      "pointSmoothingExponent": 1.25,
+      "pointMotionLowRejectionThreshold": 1.25,
       "pointMotionHighRejectionThreshold": 20.0,
       "markerRejectionResetAfterSeconds": 0.1
     },
