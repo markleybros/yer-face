@@ -14,23 +14,12 @@
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
 #include "TrackerState.hpp"
-#include "MarkerSeparator.hpp"
 #include "Utilities.hpp"
 
 using namespace std;
 using namespace cv;
 
 namespace YerFace {
-
-class MarkerSeparated;
-
-class MarkerCandidate {
-public:
-	RotatedRect marker;
-	unsigned int markerListIndex;
-	double distanceFromPointOfInterest;
-	double sqrtArea;
-};
 
 class MarkerPoint {
 public:
@@ -42,10 +31,6 @@ public:
 
 class MarkerTrackerWorkingVariables {
 public:
-	MarkerCandidate markerDetected;
-	bool markerDetectedSet;
-	Rect2d trackingBox;
-	bool trackingBoxSet;
 	MarkerPoint markerPoint;
 	MarkerPoint previouslyReportedMarkerPoint;
 };
@@ -54,30 +39,19 @@ class FaceMapper;
 
 class MarkerTracker {
 public:
-	MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *myFaceMapper, bool myPerformOpticalTracking);
+	MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *myFaceMapper);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
-	TrackerState processCurrentFrame(void);
+	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
-	TrackerState getTrackerState(void);
-	MarkerPoint getWorkingMarkerPoint(void);
 	MarkerPoint getCompletedMarkerPoint(void);
 	static vector<MarkerTracker *> getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
-	static bool sortMarkerCandidatesByDistanceFromPointOfInterest(const MarkerCandidate a, const MarkerCandidate b);
 private:
-	void performTrackToSeparatedCorrelation(void);
-	void performDetection(void);
-	void performInitializationOfTracker(void);
-	bool performTracking(void);
-	bool trackerDriftingExcessively(void);
-	bool claimMarkerCandidate(MarkerCandidate markerCandidate, double setExclusionRadius = 0.0);
-	bool claimFirstAvailableMarkerCandidate(list<MarkerCandidate> *markerCandidateList, double setExclusionRadius = 0.0);
 	void assignMarkerPoint(void);
 	void calculate3dMarkerPoint(void);
 	void performMarkerPointValidationAndSmoothing(void);
-	void generateMarkerCandidateList(list<MarkerCandidate> *markerCandidateList, Point2d pointOfInterest, Rect2d *boundingRect = NULL, double proposedExclusionRadius = 0.0, bool overrideExclusionZone = false, bool debug = false);
 	
 	static vector<MarkerTracker *> markerTrackers;
 	static SDL_mutex *myStaticMutex;
@@ -94,17 +68,12 @@ private:
 	double markerRejectionResetAfterSeconds;
 
 	Logger *logger;
-	SDL_mutex *myWrkMutex, *myCmpMutex;
+	SDL_mutex *myCmpMutex;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
-	MarkerSeparator *markerSeparator;
 	FaceTracker *faceTracker;
 
 	list<MarkerPoint> markerPointSmoothingBuffer;
-
-	Ptr<Tracker> tracker;
-	vector<MarkerSeparated> *markerList;
-	TrackerState trackerState;
 
 	MarkerTrackerWorkingVariables working, complete;
 };

@@ -13,8 +13,6 @@ enum MarkerTypeEnum {
 	EyebrowRightInner,
 	EyebrowRightMiddle,
 	EyebrowRightOuter,
-	CheekLeft,
-	CheekRight,
 	LipsLeftCorner,
 	LipsLeftTop,
 	LipsLeftBottom,

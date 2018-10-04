@@ -56,7 +56,6 @@ public:
 	SDL_Texture *getPreviewTexture(void);
 	void doRenderPreviewFrame(void);
 	void doHandleEvents(void);
-	void onEyedropperEvent(function<void(bool reset, int x, int y)> callback);
 	void onBasisFlagEvent(function<void(void)> callback);
 	void setIsRunning(bool newisRunning);
 	bool getIsRunning(void);
@@ -97,9 +96,6 @@ private:
 	SDL_mutex *audioFramesMutex;
 	list<SDLAudioFrame *> audioFrameQueue;
 	list<SDLAudioFrame *> audioFramesAllocated;
-
-	SDL_mutex *onEyedropperCallbacksMutex;
-	std::vector<function<void(bool reset, int x, int y)>> onEyedropperCallbacks;
 
 	SDL_mutex *onBasisFlagCallbacksMutex;
 	std::vector<function<void(void)>> onBasisFlagCallbacks;

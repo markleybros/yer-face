@@ -35,6 +35,16 @@ Point2d Utilities::centerRect(Rect2d rect) {
 	return rect.tl() + center;
 }
 
+Point2d Utilities::averagePoint(vector<Point2d> points) {
+	Point2d result = Point2d(0.0, 0.0);
+	double scale = (double)1.0 / (double)points.size();
+	for(Point2d point : points) {
+		result.x += point.x * scale;
+		result.y += point.y * scale;
+	}
+	return result;
+}
+
 double Utilities::lineDistance(Point2d a, Point2d b) {
     Point2d d = a - b;
     return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));

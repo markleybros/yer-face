@@ -122,7 +122,6 @@ int main(int argc, const char** argv) {
 	eventLogger = new EventLogger(config, eventFile, outputDriver, frameDerivatives);
 
 	outputDriver->setEventLogger(eventLogger);
-	faceMapper->getMarkerSeparator()->setEventLogger(eventLogger);
 
 	ffmpegDriver->rollDemuxerThread();
 
