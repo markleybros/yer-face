@@ -3,7 +3,6 @@
     "FaceTracker": {
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
       "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat",
-      "performOpticalTracking": false,
       "trackingBoxPercentage": 0.75,
       "maxTrackerDriftPercentage": 0.25,
       "poseSmoothingOverSeconds": 0.1,
