@@ -13,7 +13,6 @@
 #include "FaceMapper.hpp"
 #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
-#include "TrackerState.hpp"
 #include "Utilities.hpp"
 
 using namespace std;

@@ -39,7 +39,7 @@ In brief:
 OpenCV
 ------
 
-You will probably need to build OpenCV from scratch. :(
+You will probably need to build OpenCV from scratch. :( **FIXME:** Now that we only require OpenCV modules `core` and `calib3d`, is this _really_ still necessary??
 
 ```
 # Clone the OpenCV and OpenCV Contrib Modules projects. Make sure you clone them into these exact directories!
@@ -65,7 +65,6 @@ sudo make install
 
 _NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes:
 - core
-- tracking
 - calib3d
 
 

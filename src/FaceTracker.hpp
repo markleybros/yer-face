@@ -14,7 +14,6 @@
 #include "SDLDriver.hpp"
 #include "MarkerType.hpp"
 #include "FrameDerivatives.hpp"
-#include "TrackerState.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 
@@ -138,7 +137,6 @@ public:
 class FaceTrackerWorkingVariables {
 public:
 	FacialClassificationBox classificationBox;
-	FacialRect trackingBox;
 	FacialRect faceRect;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
@@ -158,7 +156,7 @@ class FaceTracker {
 public:
 	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives);
 	~FaceTracker();
-	TrackerState processCurrentFrame(void);
+	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	FacialRect getFacialBoundingBox(void);
@@ -168,9 +166,6 @@ public:
 	FacialPose getCompletedFacialPose(void);
 	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
-	void performInitializationOfTracker(void);
-	bool performTracking(void);
-	bool trackerDriftingExcessively(void);
 	void doClassifyFace(void);
 	void assignFaceRect(void);
 	void doIdentifyFeatures(void);
@@ -182,7 +177,6 @@ private:
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
-	bool performOpticalTracking;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
@@ -215,13 +209,10 @@ private:
 
 	Logger *logger;
 	Metrics *metrics;
-	TrackerState trackerState;
 
 	double classificationScaleFactor;
 
 	bool usingDNNFaceDetection;
-
-	Ptr<Tracker> tracker;
 
 	FacialCameraModel facialCameraModel;
 
@@ -234,7 +225,7 @@ private:
 
 	FaceTrackerWorkingVariables working, complete;
 
-	SDL_mutex *myWrkMutex, *myCmpMutex;
+	SDL_mutex *myCmpMutex;
 };
 
 }; //namespace YerFace
