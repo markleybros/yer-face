@@ -5,6 +5,7 @@
 #include "json.hpp"
 
 #include <exception>
+#include <vector>
 
 using namespace std;
 using namespace cv;
@@ -46,7 +47,7 @@ public:
 	static Rect2d scaleRect(Rect2d rect, double scale);
 	static Rect2d insetBox(Rect2d originalBox, double scale);
 	static Point2d centerRect(Rect2d rect);
-	static Point2d averagePoint(vector<Point2d> points);
+	static Point2d averagePoint(std::vector<Point2d> points);
 	static double lineDistance(Point2d a, Point2d b);
 	static double lineDistance(Point3d a, Point3d b);
 	static double degreesToRadians(double degrees);

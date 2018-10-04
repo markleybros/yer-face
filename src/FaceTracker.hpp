@@ -131,6 +131,7 @@ class FacialClassificationBox {
 public:
 	Rect2d box;
 	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
+	signed long frameNumber; //The frame number when the classification was run.
 	bool set;
 };
 
@@ -154,7 +155,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 class FaceTracker {
 public:
 	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency);
-	~FaceTracker();
+	~FaceTracker() noexcept(false);
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
@@ -165,13 +166,14 @@ public:
 	FacialPose getCompletedFacialPose(void);
 	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
-	void doClassifyFace(void);
+	void doClassifyFace(ClassificationFrame classificationFrame);
 	void assignFaceRect(void);
-	void doIdentifyFeatures(void);
+	void doIdentifyFeatures(ClassificationFrame classificationFrame);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
 	void doPrecalculateFacialPlaneNormal(void);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor);
+	static int runClassificationLoop(void *ptr);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
@@ -225,6 +227,8 @@ private:
 	FaceTrackerWorkingVariables working, complete;
 
 	SDL_mutex *myCmpMutex, *myClassificationMutex;
+	SDL_Thread *classifierThread;
+	bool classifierRunning;
 };
 
 }; //namespace YerFace
