@@ -186,9 +186,7 @@ void FaceTracker::advanceWorkingToCompleted(void) {
 }
 
 void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
-	YerFace_MutexLock(myClassificationMutex);
 	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
-	newestClassificationBox.set = false;
 	std::vector<dlib::rectangle> faces;
 
 	if(usingDNNFaceDetection) {
@@ -222,6 +220,8 @@ void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
 			bestFaceBoxNormalSize = tempBoxNormalSize;
 		}
 	}
+	YerFace_MutexLock(myClassificationMutex);
+	newestClassificationBox.set = false;
 	if(bestFace >= 0) {
 		newestClassificationBox.box = bestFaceBox;
 		newestClassificationBox.boxNormalSize = bestFaceBoxNormalSize;
@@ -655,8 +655,6 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 	signed long lastClassificationFrameNumber = -1;
 
 	while(true) {
-		YerFace_MutexLock(self->myClassificationMutex);
-
 		ClassificationFrame classificationFrame = self->frameDerivatives->getClassificationFrame();
 
 		if(classificationFrame.set && classificationFrame.timestamps.set &&
@@ -665,6 +663,7 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
 		}
 
+		YerFace_MutexLock(self->myClassificationMutex);
 		if(!self->classifierRunning) {
 			YerFace_MutexUnlock(self->myClassificationMutex);
 			break;
