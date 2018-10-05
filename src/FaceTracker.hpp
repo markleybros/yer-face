@@ -131,12 +131,13 @@ class FacialClassificationBox {
 public:
 	Rect2d box;
 	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	bool set;
+	signed long frameNumber; //The frame number when the classification was run.
+	bool run; //Did the classifier run?
+	bool set; //Is the box valid?
 };
 
 class FaceTrackerWorkingVariables {
 public:
-	FacialClassificationBox classificationBox;
 	FacialRect faceRect;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
@@ -154,8 +155,8 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives);
-	~FaceTracker();
+	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency);
+	~FaceTracker() noexcept(false);
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
@@ -166,17 +167,19 @@ public:
 	FacialPose getCompletedFacialPose(void);
 	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
-	void doClassifyFace(void);
+	void doClassifyFace(ClassificationFrame classificationFrame);
 	void assignFaceRect(void);
-	void doIdentifyFeatures(void);
+	void doIdentifyFeatures(ClassificationFrame classificationFrame);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
 	void doPrecalculateFacialPlaneNormal(void);
-	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst);
+	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor);
+	static int runClassificationLoop(void *ptr);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
+	bool lowLatency;
 	float trackingBoxPercentage;
 	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
@@ -210,8 +213,6 @@ private:
 	Logger *logger;
 	Metrics *metrics;
 
-	double classificationScaleFactor;
-
 	bool usingDNNFaceDetection;
 
 	FacialCameraModel facialCameraModel;
@@ -221,11 +222,14 @@ private:
 	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
 	FaceDetectionModel faceDetectionModel;
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame;
+
+	FacialClassificationBox newestClassificationBox;
 
 	FaceTrackerWorkingVariables working, complete;
 
-	SDL_mutex *myCmpMutex;
+	SDL_mutex *myCmpMutex, *myClassificationMutex;
+	SDL_Thread *classifierThread;
+	bool classifierRunning;
 };
 
 }; //namespace YerFace

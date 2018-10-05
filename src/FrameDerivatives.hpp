@@ -25,6 +25,14 @@ public:
 	bool set;
 };
 
+class ClassificationFrame {
+public:
+	FrameTimestamps timestamps;
+	Mat frame;
+	double scaleFactor;
+	bool set;
+};
+
 class Metrics;
 
 class FrameDerivatives {
@@ -35,11 +43,10 @@ public:
 	Mat getWorkingFrame(void);
 	Mat getCompletedFrame(void);
 	void advanceWorkingFrameToCompleted(void);
-	Mat getClassificationFrame(void);
+	ClassificationFrame getClassificationFrame(void);
 	Mat getWorkingPreviewFrame(void);
 	Mat getCompletedPreviewFrame(void);
 	void resetCompletedPreviewFrame(void);
-	double getClassificationScaleFactor(void);
 	Size getWorkingFrameSize(void);
 	FrameTimestamps getWorkingFrameTimestamps(void);
 	FrameTimestamps getCompletedFrameTimestamps(void);
@@ -55,7 +62,7 @@ private:
 	Metrics *metrics;
 	Mat workingFrame, completedFrame; //BGR format, at the native resolution of the input.
 	bool workingFrameSet, completedFrameSet;
-	Mat classificationFrame; //Grayscale, scaled down to ClassificationScaleFactor.
+	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
 	Mat workingPreviewFrame, completedPreviewFrameSource, completedPreviewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
 	bool workingPreviewFrameSet, completedPreviewFrameSet;
 	Size workingFrameSize;

@@ -15,19 +15,19 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives) {
+FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
 	faceDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceDetector"];
-	working.classificationBox.set = false;
 	working.faceRect.set = false;
 	working.facialFeatures.set = false;
 	working.facialFeatures.featuresExposed.set = false;
 	working.facialPose.set = false;
 	working.previouslyReportedFacialPose.set = false;
-	complete.classificationBox.set = false;
 	complete.faceRect.set = false;
 	complete.facialFeatures.set = false;
 	complete.facialPose.set = false;
+	newestClassificationBox.run = false;
+	newestClassificationBox.set = false;
 	facialCameraModel.set = false;
 
 	sdlDriver = mySDLDriver;
@@ -38,6 +38,7 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
+	lowLatency = myLowLatency;
 	trackingBoxPercentage = config["YerFace"]["FaceTracker"]["trackingBoxPercentage"];
 	if(trackingBoxPercentage <= 0.0) {
 		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
@@ -114,6 +115,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((myClassificationMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
 	deserialize(featureDetectionModelFileName.c_str()) >> shapePredictor;
 	if(faceDetectionModelFileName.length() > 0) {
@@ -123,12 +127,28 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 		usingDNNFaceDetection = false;
 		frontalFaceDetector = get_frontal_face_detector();
 	}
-	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s", usingDNNFaceDetection ? "DNN" : "HOG");
+
+	classifierRunning = false;
+	if(lowLatency) {
+		classifierRunning = true;
+		if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
+			throw runtime_error("Failed starting thread!");
+		}
+	}
+
+	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s, Low Latency Mode: %s", usingDNNFaceDetection ? "DNN" : "HOG", lowLatency ? "Enabled" : "Disabled");
 }
 
-FaceTracker::~FaceTracker() {
+FaceTracker::~FaceTracker() noexcept(false) {
 	logger->debug("FaceTracker object destructing...");
+	if(lowLatency) {
+		YerFace_MutexLock(myClassificationMutex);
+		classifierRunning = false;
+		YerFace_MutexUnlock(myClassificationMutex);
+		SDL_WaitThread(classifierThread, NULL);
+	}
 	SDL_DestroyMutex(myCmpMutex);
+	SDL_DestroyMutex(myClassificationMutex);
 	delete metrics;
 	delete logger;
 }
@@ -139,14 +159,27 @@ FaceTracker::~FaceTracker() {
 void FaceTracker::processCurrentFrame(void) {
 	metrics->startClock();
 
-	classificationScaleFactor = frameDerivatives->getClassificationScaleFactor();
-	dlibClassificationFrame = cv_image<bgr_pixel>(frameDerivatives->getClassificationFrame());
+	ClassificationFrame classificationFrame = frameDerivatives->getClassificationFrame();
 
-	doClassifyFace();
+	if(!lowLatency) {
+		doClassifyFace(classificationFrame);
+	} else {
+		static bool didClassifierRun = false;
+		while(!didClassifierRun) {
+			YerFace_MutexLock(myClassificationMutex);
+			if(newestClassificationBox.run) {
+				YerFace_MutexUnlock(myClassificationMutex);
+				didClassifierRun = true;
+				break;
+			}
+			YerFace_MutexUnlock(myClassificationMutex);
+			SDL_Delay(10);
+		}
+	}
 
 	assignFaceRect();
 
-	doIdentifyFeatures();
+	doIdentifyFeatures(classificationFrame);
 
 	doCalculateFacialTransformation();
 
@@ -159,15 +192,14 @@ void FaceTracker::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myCmpMutex);
 	complete = working;
 	YerFace_MutexUnlock(myCmpMutex);
-	working.classificationBox.set = false;
 	working.faceRect.set = false;
 	working.facialFeatures.set = false;
 	working.facialFeatures.featuresExposed.set = false;
 	working.facialPose.set = false;
 }
 
-void FaceTracker::doClassifyFace(void) {
-	working.classificationBox.set = false;
+void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
+	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
 	std::vector<dlib::rectangle> faces;
 
 	if(usingDNNFaceDetection) {
@@ -193,7 +225,7 @@ void FaceTracker::doClassifyFace(void) {
 		tempBox.y = face.top();
 		tempBox.width = face.right() - tempBox.x;
 		tempBox.height = face.bottom() - tempBox.y;
-		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationScaleFactor);
+		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationFrame.scaleFactor);
 		if((int)face.area() > bestFaceArea) {
 			bestFace = i;
 			bestFaceArea = face.area();
@@ -201,33 +233,40 @@ void FaceTracker::doClassifyFace(void) {
 			bestFaceBoxNormalSize = tempBoxNormalSize;
 		}
 	}
+	YerFace_MutexLock(myClassificationMutex);
+	newestClassificationBox.run = true;
+	newestClassificationBox.set = false;
 	if(bestFace >= 0) {
-		working.classificationBox.box = bestFaceBox;
-		working.classificationBox.boxNormalSize = bestFaceBoxNormalSize;
-		working.classificationBox.set = true;
+		newestClassificationBox.box = bestFaceBox;
+		newestClassificationBox.boxNormalSize = bestFaceBoxNormalSize;
+		newestClassificationBox.set = true;
 	}
+	YerFace_MutexUnlock(myClassificationMutex);
 }
 
 void FaceTracker::assignFaceRect(void) {
+	YerFace_MutexLock(myClassificationMutex);
 	working.faceRect.set = false;
-	if(working.classificationBox.set) {
-		working.faceRect.rect = working.classificationBox.boxNormalSize;
+	if(newestClassificationBox.set) {
+		working.faceRect.rect = newestClassificationBox.boxNormalSize;
 		working.faceRect.set = true;
 	} else {
 		logger->warn("Lost face completely! Will keep searching...");
 	}
+	YerFace_MutexUnlock(myClassificationMutex);
 }
 
-void FaceTracker::doIdentifyFeatures(void) {
+void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 	working.facialFeatures.set = false;
 	if(!working.faceRect.set) {
 		return;
 	}
+	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
 	dlib::rectangle dlibClassificationBox = dlib::rectangle(
-		working.faceRect.rect.x * classificationScaleFactor,
-		working.faceRect.rect.y * classificationScaleFactor,
-		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationScaleFactor,
-		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationScaleFactor);
+		working.faceRect.rect.x * classificationFrame.scaleFactor,
+		working.faceRect.rect.y * classificationFrame.scaleFactor,
+		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
+		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
 
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
 
@@ -240,7 +279,7 @@ void FaceTracker::doIdentifyFeatures(void) {
 	Point2d partPoint;
 	for(unsigned long featureIndex = 0; featureIndex < result.num_parts(); featureIndex++) {
 		part = result.part(featureIndex);
-		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint)) {
+		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, classificationFrame.scaleFactor)) {
 			return;
 		}
 
@@ -285,12 +324,12 @@ void FaceTracker::doIdentifyFeatures(void) {
 	//Stommion needs a little extra help.
 	part = result.part(IDX_MOUTHIN_CENTER_TOP);
 	Point2d mouthTop;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, classificationFrame.scaleFactor)) {
 		return;
 	}
 	part = result.part(IDX_MOUTHIN_CENTER_BOTTOM);
 	Point2d mouthBottom;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, classificationFrame.scaleFactor)) {
 		return;
 	}
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
@@ -520,7 +559,7 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType
 	return facialPlane;
 }
 
-bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst) {
+bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor) {
 	if(*src == OBJECT_PART_NOT_PRESENT) {
 		return false;
 	}
@@ -556,11 +595,6 @@ void FaceTracker::renderPreviewHUD(void) {
 	if(density > 1) {
 		if(complete.faceRect.set) {
 			cv::rectangle(frame, complete.faceRect.rect, Scalar(255, 255, 0), 1);
-		}
-	}
-	if(density > 2) {
-		if(complete.classificationBox.set) {
-			cv::rectangle(frame, complete.classificationBox.boxNormalSize, Scalar(0, 255, 0), 1);
 		}
 	}
 	if(density > 3) {
@@ -626,6 +660,34 @@ FacialPose FaceTracker::getCompletedFacialPose(void) {
 	FacialPose val = complete.facialPose;
 	YerFace_MutexUnlock(myCmpMutex);
 	return val;
+}
+
+int FaceTracker::runClassificationLoop(void *ptr) {
+	FaceTracker *self = (FaceTracker *)ptr;
+	self->logger->verbose("Face Tracker Classification Thread alive!");
+
+	signed long lastClassificationFrameNumber = -1;
+
+	while(true) {
+		ClassificationFrame classificationFrame = self->frameDerivatives->getClassificationFrame();
+
+		if(classificationFrame.set && classificationFrame.timestamps.set &&
+		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {
+			self->doClassifyFace(classificationFrame);
+			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
+		}
+
+		YerFace_MutexLock(self->myClassificationMutex);
+		if(!self->classifierRunning) {
+			YerFace_MutexUnlock(self->myClassificationMutex);
+			break;
+		}
+		YerFace_MutexUnlock(self->myClassificationMutex);
+		SDL_Delay(1);
+	}
+
+	self->logger->verbose("Face Tracker Classification Thread quitting...");
+	return 0;
 }
 
 }; //namespace YerFace
