@@ -26,6 +26,7 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	complete.faceRect.set = false;
 	complete.facialFeatures.set = false;
 	complete.facialPose.set = false;
+	newestClassificationBox.run = false;
 	newestClassificationBox.set = false;
 	facialCameraModel.set = false;
 
@@ -162,6 +163,18 @@ void FaceTracker::processCurrentFrame(void) {
 
 	if(!lowLatency) {
 		doClassifyFace(classificationFrame);
+	} else {
+		static bool didClassifierRun = false;
+		while(!didClassifierRun) {
+			YerFace_MutexLock(myClassificationMutex);
+			if(newestClassificationBox.run) {
+				YerFace_MutexUnlock(myClassificationMutex);
+				didClassifierRun = true;
+				break;
+			}
+			YerFace_MutexUnlock(myClassificationMutex);
+			SDL_Delay(10);
+		}
 	}
 
 	assignFaceRect();
@@ -221,6 +234,7 @@ void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
 		}
 	}
 	YerFace_MutexLock(myClassificationMutex);
+	newestClassificationBox.run = true;
 	newestClassificationBox.set = false;
 	if(bestFace >= 0) {
 		newestClassificationBox.box = bestFaceBox;

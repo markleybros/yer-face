@@ -22,7 +22,7 @@ Metrics::Metrics(json config, const char *myName, FrameDerivatives *myFrameDeriv
 	if(averageOverSeconds < 1.0) {
 		throw invalid_argument("reportEverySeconds cannot be less than one");
 	}
-	lastReport = -1.0 - reportEverySeconds;
+	lastReport = 0.0;
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
 	fps = 0.0;

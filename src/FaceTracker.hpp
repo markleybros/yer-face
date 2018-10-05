@@ -132,7 +132,8 @@ public:
 	Rect2d box;
 	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	signed long frameNumber; //The frame number when the classification was run.
-	bool set;
+	bool run; //Did the classifier run?
+	bool set; //Is the box valid?
 };
 
 class FaceTrackerWorkingVariables {

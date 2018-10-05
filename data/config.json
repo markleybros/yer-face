@@ -59,7 +59,7 @@
     },
     "Metrics": {
       "averageOverSeconds": 1.0,
-      "reportEverySeconds": 10.0
+      "reportEverySeconds": 3.0
     },
     "OutputDriver": {
       "websocketServerEnabled": true,
