@@ -122,7 +122,7 @@ int main(int argc, const char** argv) {
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, inVideo, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, lowLatency, lowLatency);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
@@ -135,7 +135,7 @@ int main(int argc, const char** argv) {
 
 	outputDriver->setEventLogger(eventLogger);
 
-	ffmpegDriver->rollDemuxerThread();
+	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, true);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
@@ -208,6 +208,8 @@ int main(int argc, const char** argv) {
 
 int runCaptureLoop(void *ptr) {
 	VideoFrame videoFrame;
+
+	ffmpegDriver->rollDemuxerThread();
 
 	bool didSetFrameSizeValid = false;
 	while(sdlDriver->getIsRunning()) {

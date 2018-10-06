@@ -10,26 +10,18 @@ using namespace std;
 
 namespace YerFace {
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInVideo, String myInVideoFormat, String myInVideoSize, String myInVideoRate, String myInVideoCodec, bool myFrameDrop, bool myLowLatency) {
-	int ret;
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	inVideo = myInVideo;
-	if(inVideo.length() < 1) {
-		throw invalid_argument("inVideo must be a valid input filename");
-	}
-	inVideoFormat = myInVideoFormat;
-	inVideoSize = myInVideoSize;
-	inVideoRate = myInVideoRate;
-	inVideoCodec = myInVideoCodec;
 	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
 
-	formatContext = NULL;
+	videoFormatContext = NULL;
+	audioFormatContext = NULL;
 	videoDecoderContext = NULL;
 	videoStream = NULL;
 	audioDecoderContext = NULL;
@@ -47,104 +39,37 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInVide
 	#endif
 	avformat_network_init();
 
-	logger->info("Opening inVideo media file %s...", inVideo.c_str());
-
-	inputVideoFormatStruct = NULL;
-	if(inVideoFormat.length() > 0) {
-		inputVideoFormatStruct = av_find_input_format(inVideoFormat.c_str());
-		if(!inputVideoFormatStruct) {
-			throw invalid_argument("inVideoFormat could not be resolved");
-		}
-	}
-
-	if((formatContext = avformat_alloc_context()) == NULL) {
-		throw runtime_error("Failed to avformat_alloc_context");
-	}
-	AVDictionary *inputVideoOptions = NULL;
-
-	if(inVideoCodec.length() > 0) {
-		AVCodec *vCodec = avcodec_find_decoder_by_name(inVideoCodec.c_str());
-		if(!vCodec) {
-			throw invalid_argument("inVideoCodec could not be resolved");
-		}
-		formatContext->video_codec = vCodec;
-		formatContext->video_codec_id = vCodec->id;
-	}
-
-	if(lowLatency) {
-		formatContext->probesize = 32;
-		formatContext->flags |= AVFMT_FLAG_NOBUFFER;
-	}
-
-	if(inVideoSize.length() > 0) {
-		av_dict_set(&inputVideoOptions, "video_size", inVideoSize.c_str(), 0);
-	}
-	if(inVideoRate.length() > 0) {
-		av_dict_set(&inputVideoOptions, "framerate", inVideoRate.c_str(), 0);
-	}
-
-	if((ret = avformat_open_input(&formatContext, inVideo.c_str(), inputVideoFormatStruct, &inputVideoOptions)) < 0) {
-		logAVErr("inVideo could not be opened", ret);
-		throw runtime_error("inVideo could not be opened");
-	}
-	av_dict_free(&inputVideoOptions);
-
-	if((ret = avformat_find_stream_info(formatContext, NULL)) < 0) {
-		logAVErr("failed finding input stream information for inVideo", ret);
-		throw runtime_error("failed finding input stream information for inVideo");
-	}
-
-	try {
-		this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
-		audioStream = formatContext->streams[audioStreamIndex];
-		audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
-		// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
-	} catch(exception &e) {
-		logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
-	}
-
-	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
-	videoStream = formatContext->streams[videoStreamIndex];
-	videoStreamTimeBase = (double)videoStream->time_base.num / (double)videoStream->time_base.den;
-	// logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
-
-	width = videoDecoderContext->width;
-	height = videoDecoderContext->height;
-	pixelFormat = videoDecoderContext->pix_fmt;
-	if((videoDestBufSize = av_image_alloc(videoDestData, videoDestLineSize, width, height, pixelFormat, 1)) < 0) {
-		throw runtime_error("failed allocating memory for decoded frame");
-	}
-
-	av_dump_format(formatContext, 0, inVideo.c_str(), 0);
-
-	pixelFormatBacking = AV_PIX_FMT_BGR24;
-	if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
-		throw runtime_error("failed creating software scaling context");
-	}
-
 	if(!(frame = av_frame_alloc())) {
 		throw runtime_error("failed allocating frame");
 	}
 
-	for(int i = 0; i < YERFACE_INITIAL_VIDEO_BACKING_FRAMES; i++) {
-		allocateNewVideoFrameBacking();
-	}
 	if((videoFrameBufferMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating video frame buffer mutex!");
 	}
 
 	initializeDemuxerThread();
 
-	logger->debug("FFmpegDriver object constructed and ready to go! Frame Drop is %s.", frameDrop ? "ENABLED" : "DISABLED");
+	logger->debug("FFmpegDriver object constructed and ready to go! Low Latency mode is %s.", lowLatency ? "ENABLED" : "DISABLED");
 }
 
 FFmpegDriver::~FFmpegDriver() {
 	logger->debug("FFmpegDriver object destructing...");
 	destroyDemuxerThread();
 	SDL_DestroyMutex(videoFrameBufferMutex);
-	avcodec_free_context(&videoDecoderContext);
-	avformat_close_input(&formatContext);
-	avformat_free_context(formatContext);
+	if(videoDecoderContext != NULL) {
+		avcodec_free_context(&videoDecoderContext);
+	}
+	if(videoFormatContext != NULL) {
+		avformat_close_input(&videoFormatContext);
+		avformat_free_context(videoFormatContext);
+	}
+	if(audioDecoderContext != NULL) {
+		avcodec_free_context(&audioDecoderContext);
+	}
+	if(audioFormatContext != NULL) {
+		avformat_close_input(&audioFormatContext);
+		avformat_free_context(audioFormatContext);
+	}
 	av_free(videoDestData[0]);
 	av_frame_free(&frame);
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
@@ -163,6 +88,113 @@ FFmpegDriver::~FFmpegDriver() {
 		delete handler;
 	}
 	delete logger;
+}
+
+void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inRate, String inCodec, bool tryAudio) {
+	int ret;
+	if(inFile.length() < 1) {
+		throw invalid_argument("specified input video/audio file must be a valid input filename");
+	}
+	logger->info("Opening media %s...", inFile.c_str());
+
+	AVInputFormat *inputFormat = NULL;
+	if(inFormat.length() > 0) {
+		inputFormat = av_find_input_format(inFormat.c_str());
+		if(!inputFormat) {
+			throw invalid_argument("specified input video/audio format could not be resolved");
+		}
+	}
+
+	AVFormatContext **formatCtxPP = NULL;
+	if(type == AVMEDIA_TYPE_AUDIO) {
+		formatCtxPP = &audioFormatContext;
+	} else {
+		formatCtxPP = &videoFormatContext;
+	}
+
+	if((*formatCtxPP = avformat_alloc_context()) == NULL) {
+		throw runtime_error("Failed to avformat_alloc_context");
+	}
+	AVDictionary *options = NULL;
+
+	if(inCodec.length() > 0) {
+		AVCodec *codec = avcodec_find_decoder_by_name(inCodec.c_str());
+		if(!codec) {
+			throw invalid_argument("specified input video/audio codec could not be resolved");
+		}
+		if(type == AVMEDIA_TYPE_VIDEO) {
+			(*formatCtxPP)->video_codec = codec;
+			(*formatCtxPP)->video_codec_id = codec->id;
+		} else if(type == AVMEDIA_TYPE_AUDIO) {
+			(*formatCtxPP)->audio_codec = codec;
+			(*formatCtxPP)->audio_codec_id = codec->id;
+		}
+	}
+
+	if(lowLatency) {
+		(*formatCtxPP)->probesize = 32;
+		(*formatCtxPP)->flags |= AVFMT_FLAG_NOBUFFER;
+	}
+
+	if(inSize.length() > 0) {
+		av_dict_set(&options, "video_size", inSize.c_str(), 0);
+	}
+	if(inRate.length() > 0) {
+		av_dict_set(&options, "framerate", inRate.c_str(), 0);
+	}
+
+	if((ret = avformat_open_input(formatCtxPP, inFile.c_str(), inputFormat, &options)) < 0) {
+		logAVErr("input file could not be opened", ret);
+		throw runtime_error("input file could not be opened");
+	}
+	av_dict_free(&options);
+
+	if((ret = avformat_find_stream_info(*formatCtxPP, NULL)) < 0) {
+		logAVErr("failed finding input stream information for input video/audio", ret);
+		throw runtime_error("failed finding input stream information for input video/audio");
+	}
+
+	if(type == AVMEDIA_TYPE_AUDIO || (type == AVMEDIA_TYPE_VIDEO && tryAudio)) {
+		if(audioDecoderContext) {
+			throw runtime_error("Trying to open an audio context, but one is already open?!");
+		}
+		try {
+			this->openCodecContext(&audioStreamIndex, &audioDecoderContext, *formatCtxPP, AVMEDIA_TYPE_AUDIO);
+			audioStream = videoFormatContext->streams[audioStreamIndex];
+			audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
+			// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
+		} catch(exception &e) {
+			logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
+		}
+	}
+
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		if(videoDecoderContext) {
+			throw runtime_error("Trying to open a video context, but one is already open?!");
+		}
+		this->openCodecContext(&videoStreamIndex, &videoDecoderContext, *formatCtxPP, AVMEDIA_TYPE_VIDEO);
+		videoStream = videoFormatContext->streams[videoStreamIndex];
+		videoStreamTimeBase = (double)videoStream->time_base.num / (double)videoStream->time_base.den;
+		// logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
+
+		width = videoDecoderContext->width;
+		height = videoDecoderContext->height;
+		pixelFormat = videoDecoderContext->pix_fmt;
+		if((videoDestBufSize = av_image_alloc(videoDestData, videoDestLineSize, width, height, pixelFormat, 1)) < 0) {
+			throw runtime_error("failed allocating memory for decoded frame");
+		}
+
+		pixelFormatBacking = AV_PIX_FMT_BGR24;
+		if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
+			throw runtime_error("failed creating software scaling context");
+		}
+
+		for(int i = 0; i < YERFACE_INITIAL_VIDEO_BACKING_FRAMES; i++) {
+			allocateNewVideoFrameBacking();
+		}
+	}
+
+	av_dump_format(*formatCtxPP, 0, inFile.c_str(), 0);
 }
 
 void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type) {
@@ -468,7 +500,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
 		while((driver->getIsVideoFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning && !driver->demuxerDraining) {
-			if(av_read_frame(driver->formatContext, &packet) < 0) {
+			if(av_read_frame(driver->videoFormatContext, &packet) < 0) {
 				driver->logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
 				driver->demuxerDraining = true;
 				driver->decodePacket(NULL, driver->videoStreamIndex);
@@ -500,18 +532,18 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 			driver->demuxerRunning = false;
 		}
 		
-		if(driver->frameDrop) {
-			YerFace_MutexUnlock(driver->demuxerMutex);
-			SDL_Delay(0);
-			YerFace_MutexLock(driver->demuxerMutex);
-		}
-		
-		if(driver->demuxerRunning && !driver->frameDrop) {
-			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
-			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
-				throw runtime_error("Failed waiting on condition.");
+		if(driver->demuxerRunning) {
+			if(driver->frameDrop) {
+				YerFace_MutexUnlock(driver->demuxerMutex);
+				SDL_Delay(0);
+				YerFace_MutexLock(driver->demuxerMutex);
+			} else {
+				// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
+				if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
+					throw runtime_error("Failed waiting on condition.");
+				}
+				// driver->logger->verbose("Demuxer Thread is awake now!");
 			}
-			// driver->logger->verbose("Demuxer Thread is awake now!");
 		}
 	}
 
