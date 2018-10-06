@@ -61,7 +61,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInVideo, String myInVideoFormat, String myInVideoSize, String myInVideoRate, String myInVideoCodec, bool myFrameDrop, bool myLowLatency);
 	~FFmpegDriver();
 	void rollDemuxerThread(void);
 	bool getIsAudioInputPresent(void);
@@ -81,7 +81,7 @@ private:
 	static int runDemuxerLoop(void *ptr);
 
 	FrameDerivatives *frameDerivatives;
-	string inputFilename;
+	string inVideo, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec;
 	bool frameDrop, lowLatency;
 
 	Logger *logger;
@@ -97,6 +97,7 @@ private:
 	double videoStreamTimeBase;
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
+	AVInputFormat *inputVideoFormatStruct;
 	AVFormatContext *formatContext;
 	AVFrame *frame;
 	struct SwsContext *swsContext;

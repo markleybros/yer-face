@@ -27,9 +27,13 @@ using namespace cv;
 using namespace YerFace;
 
 String configFile;
-String captureFile;
-String eventFile;
-String outputFile;
+String inVideo;
+String inVideoFormat;
+String inVideoSize;
+String inVideoRate;
+String inVideoCodec;
+String inEvents;
+String outData;
 String previewImgSeq;
 bool lowLatency;
 bool audioPreview;
@@ -73,12 +77,16 @@ int main(int argc, const char** argv) {
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
 		"{configFile C|data/config.json|Required configuration file.}"
-		"{captureFile|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
-		"{eventFile||Event replay file. (Previously generated outputFile, for re-processing recorded sessions.)}"
-		"{outputFile||Output file for generated performance capture data.}"
-		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
-		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is a file!)}"
+		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is pre-recorded!)}"
+		"{inVideo|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
+		"{inVideoFormat||Tell libav to use a specific format to interpret the inVideo. Leave blank for auto-detection.}"
+		"{inVideoSize||Tell libav to attempt a specific resolution when interpreting inVideo. Leave blank for auto-detection.}"
+		"{inVideoRate||Tell libav to attempt a specific framerate when interpreting inVideo. Leave blank for auto-detection.}"
+		"{inVideoCodec||Tell libav to attempt a specific codec when interpreting inVideo. Leave blank for auto-detection.}"
+		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
+		"{outData||Output file for generated performance capture data.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
+		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -98,28 +106,32 @@ int main(int argc, const char** argv) {
 		logger->error("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
 		return 1;
 	}
-	captureFile = parser.get<string>("captureFile");
-	if(captureFile == "-") {
-		captureFile = "pipe:0";
+	inVideo = parser.get<string>("inVideo");
+	if(inVideo == "-") {
+		inVideo = "pipe:0";
 	}
-	eventFile = parser.get<string>("eventFile");
-	outputFile = parser.get<string>("outputFile");
+	inVideoFormat = parser.get<string>("inVideoFormat");
+	inVideoSize = parser.get<string>("inVideoSize");
+	inVideoRate = parser.get<string>("inVideoRate");
+	inVideoCodec = parser.get<string>("inVideoCodec");
+	inEvents = parser.get<string>("inEvents");
+	outData = parser.get<string>("outData");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	lowLatency = parser.get<bool>("lowLatency");
 	audioPreview = parser.get<bool>("audioPreview");
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, captureFile, lowLatency, lowLatency);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, inVideo, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, lowLatency, lowLatency);
 	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(config, outputFile, frameDerivatives, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, outData, frameDerivatives, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver, lowLatency);
 	}
-	eventLogger = new EventLogger(config, eventFile, outputDriver, frameDerivatives);
+	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives);
 
 	outputDriver->setEventLogger(eventLogger);
 

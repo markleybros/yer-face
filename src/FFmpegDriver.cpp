@@ -10,7 +10,7 @@ using namespace std;
 
 namespace YerFace {
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInVideo, String myInVideoFormat, String myInVideoSize, String myInVideoRate, String myInVideoCodec, bool myFrameDrop, bool myLowLatency) {
 	int ret;
 	logger = new Logger("FFmpegDriver");
 
@@ -18,10 +18,14 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	inputFilename = myInputFilename;
-	if(inputFilename.length() < 1) {
-		throw invalid_argument("inputFilename must be a valid input filename");
+	inVideo = myInVideo;
+	if(inVideo.length() < 1) {
+		throw invalid_argument("inVideo must be a valid input filename");
 	}
+	inVideoFormat = myInVideoFormat;
+	inVideoSize = myInVideoSize;
+	inVideoRate = myInVideoRate;
+	inVideoCodec = myInVideoCodec;
 	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
 
@@ -43,10 +47,28 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	#endif
 	avformat_network_init();
 
-	logger->info("Opening media file %s...", inputFilename.c_str());
+	logger->info("Opening inVideo media file %s...", inVideo.c_str());
+
+	inputVideoFormatStruct = NULL;
+	if(inVideoFormat.length() > 0) {
+		inputVideoFormatStruct = av_find_input_format(inVideoFormat.c_str());
+		if(!inputVideoFormatStruct) {
+			throw invalid_argument("inVideoFormat could not be resolved");
+		}
+	}
 
 	if((formatContext = avformat_alloc_context()) == NULL) {
 		throw runtime_error("Failed to avformat_alloc_context");
+	}
+	AVDictionary *inputVideoOptions = NULL;
+
+	if(inVideoCodec.length() > 0) {
+		AVCodec *vCodec = avcodec_find_decoder_by_name(inVideoCodec.c_str());
+		if(!vCodec) {
+			throw invalid_argument("inVideoCodec could not be resolved");
+		}
+		formatContext->video_codec = vCodec;
+		formatContext->video_codec_id = vCodec->id;
 	}
 
 	if(lowLatency) {
@@ -54,14 +76,22 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		formatContext->flags |= AVFMT_FLAG_NOBUFFER;
 	}
 
-	if((ret = avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL)) < 0) {
-		logAVErr("inputFilename could not be opened", ret);
-		throw runtime_error("inputFilename could not be opened");
+	if(inVideoSize.length() > 0) {
+		av_dict_set(&inputVideoOptions, "video_size", inVideoSize.c_str(), 0);
+	}
+	if(inVideoRate.length() > 0) {
+		av_dict_set(&inputVideoOptions, "framerate", inVideoRate.c_str(), 0);
 	}
 
+	if((ret = avformat_open_input(&formatContext, inVideo.c_str(), inputVideoFormatStruct, &inputVideoOptions)) < 0) {
+		logAVErr("inVideo could not be opened", ret);
+		throw runtime_error("inVideo could not be opened");
+	}
+	av_dict_free(&inputVideoOptions);
+
 	if((ret = avformat_find_stream_info(formatContext, NULL)) < 0) {
-		logAVErr("failed finding input stream information for inputFilename", ret);
-		throw runtime_error("failed finding input stream information for inputFilename");
+		logAVErr("failed finding input stream information for inVideo", ret);
+		throw runtime_error("failed finding input stream information for inVideo");
 	}
 
 	try {
@@ -85,7 +115,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 		throw runtime_error("failed allocating memory for decoded frame");
 	}
 
-	av_dump_format(formatContext, 0, inputFilename.c_str(), 0);
+	av_dump_format(formatContext, 0, inVideo.c_str(), 0);
 
 	pixelFormatBacking = AV_PIX_FMT_BGR24;
 	if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
