@@ -22,6 +22,23 @@ namespace YerFace {
 #define YERFACE_INITIAL_AUDIO_BACKING_FRAMES 10
 #define YERFACE_RESAMPLE_BUFFER_HEADROOM 8192
 
+class MediaContext {
+public:
+	MediaContext(void);
+	
+	AVFormatContext *formatContext;
+
+	int videoStreamIndex;
+	AVCodecContext *videoDecoderContext;
+	AVStream *videoStream;
+
+	int audioStreamIndex;
+	AVCodecContext *audioDecoderContext;
+	AVStream *audioStream;
+
+	bool demuxerDraining;
+};
+
 class VideoFrameBacking {
 public:
 	AVFrame *frameBGR;
@@ -76,10 +93,11 @@ private:
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
-	bool decodePacket(const AVPacket *packet, int streamIndex);
+	bool decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex);
 	void initializeDemuxerThread(void);
 	void destroyDemuxerThread(void);
 	static int runDemuxerLoop(void *ptr);
+	void pumpDemuxer(MediaContext *context, AVPacket *packet);
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;
@@ -89,21 +107,16 @@ private:
 	SDL_mutex *demuxerMutex;
 	SDL_cond *demuxerCond;
 	SDL_Thread *demuxerThread;
-	bool demuxerRunning, demuxerDraining;
+	bool demuxerRunning;
 
-	int videoStreamIndex;
-	AVCodecContext *videoDecoderContext;
-	AVStream *videoStream;
+	MediaContext videoContext, audioContext;
+
 	double videoStreamTimeBase;
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
-	AVFormatContext *videoFormatContext, *audioFormatContext;
 	AVFrame *frame;
 	struct SwsContext *swsContext;
 
-	int audioStreamIndex;
-	AVCodecContext *audioDecoderContext;
-	AVStream *audioStream;
 	double audioStreamTimeBase;
 
 	uint8_t *videoDestData[4];
