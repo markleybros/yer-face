@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
+SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -35,6 +35,9 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	previewRatio = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewRatio"];
+	previewWidthPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewWidthPercentage"];
+	previewCenterHeightPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
 	setIsRunning(true);
 	setIsPaused(false);
@@ -342,6 +345,24 @@ int SDLDriver::getPreviewDebugDensity(void) {
 	int status = previewDebugDensity;
 	YerFace_MutexUnlock(previewDebugDensityMutex);
 	return status;
+}
+
+void SDLDriver::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter) {
+	previewRect->width = frameSize.width * previewWidthPercentage;
+	previewRect->height = previewRect->width * previewRatio;
+	PreviewPositionInFrame previewPosition = getPreviewPositionInFrame();
+	if(previewPosition == BottomRight || previewPosition == TopRight) {
+		previewRect->x = frameSize.width - previewRect->width;
+	} else {
+		previewRect->x = 0;
+	}
+	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
+		previewRect->y = frameSize.height - previewRect->height;
+	} else {
+		previewRect->y = 0;
+	}
+	*previewCenter = Utilities::centerRect(*previewRect);
+	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
 }
 
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {

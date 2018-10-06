@@ -49,7 +49,7 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview = true);
+	SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -68,6 +68,7 @@ public:
 	void setPreviewDebugDensity(int newDensity);
 	int incrementPreviewDebugDensity(void);
 	int getPreviewDebugDensity(void);
+	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
 private:
@@ -87,6 +88,7 @@ private:
 	SDL_mutex *previewPositionInFrameMutex;
 	int previewDebugDensity;
 	SDL_mutex *previewDebugDensityMutex;
+	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;

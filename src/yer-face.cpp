@@ -32,11 +32,17 @@ String inVideoFormat;
 String inVideoSize;
 String inVideoRate;
 String inVideoCodec;
+String inAudio;
+String inAudioFormat;
+String inAudioRate;
+String inAudioCodec;
 String inEvents;
 String outData;
 String previewImgSeq;
-bool lowLatency;
-bool audioPreview;
+bool lowLatency = false;
+bool audioPreview = false;
+bool tryAudioInVideo = false;
+bool openInputAudio = false;
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 json config = NULL;
@@ -83,6 +89,10 @@ int main(int argc, const char** argv) {
 		"{inVideoSize||Tell libav to attempt a specific resolution when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoRate||Tell libav to attempt a specific framerate when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoCodec||Tell libav to attempt a specific codec when interpreting inVideo. Leave blank for auto-detection.}"
+		"{inAudio||Audio file, URL, or device to open. (Or '-' for STDIN.) (If you leave this blank, we will try to read the audio from inVideo.)}"
+		"{inAudioFormat||Tell libav to use a specific format to interpret the inAudio. Leave blank for auto-detection.}"
+		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
+		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
 		"{outData||Output file for generated performance capture data.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
@@ -114,6 +124,18 @@ int main(int argc, const char** argv) {
 	inVideoSize = parser.get<string>("inVideoSize");
 	inVideoRate = parser.get<string>("inVideoRate");
 	inVideoCodec = parser.get<string>("inVideoCodec");
+	inAudio = parser.get<string>("inAudio");
+	if(inAudio == "-") {
+		inAudio = "pipe:0";
+	}
+	if(inAudio.length() > 0) {
+		openInputAudio = true;
+	} else {
+		tryAudioInVideo = true;
+	}
+	inAudioFormat = parser.get<string>("inAudioFormat");
+	inAudioRate = parser.get<string>("inAudioRate");
+	inAudioCodec = parser.get<string>("inAudioCodec");
 	inEvents = parser.get<string>("inEvents");
 	outData = parser.get<string>("outData");
 	previewImgSeq = parser.get<string>("previewImgSeq");
@@ -123,7 +145,11 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency);
-	sdlDriver = new SDLDriver(frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
+	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, tryAudioInVideo);
+	if(openInputAudio) {
+		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioRate, inAudioCodec, true);
+	}
+	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
@@ -134,8 +160,6 @@ int main(int argc, const char** argv) {
 	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives);
 
 	outputDriver->setEventLogger(eventLogger);
-
-	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, true);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;

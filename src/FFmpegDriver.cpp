@@ -164,7 +164,7 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 			audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
 			// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
 		} catch(exception &e) {
-			logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
+			logger->warn("Failed to open audio stream in %s!", inFile.c_str());
 		}
 	}
 
@@ -493,6 +493,10 @@ void FFmpegDriver::destroyDemuxerThread(void) {
 int FFmpegDriver::runDemuxerLoop(void *ptr) {
 	FFmpegDriver *driver = (FFmpegDriver *)ptr;
 	driver->logger->verbose("Demuxer Thread alive!");
+
+	if(!driver->getIsAudioInputPresent()) {
+		driver->logger->warn("==== NO AUDIO STREAM IS PRESENT! We can still proceed, but mouth shapes won't be informed by audible speech. ====");
+	}
 
 	AVPacket packet;
 	av_init_packet(&packet);
