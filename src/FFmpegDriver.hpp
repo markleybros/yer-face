@@ -109,6 +109,7 @@ private:
 	double calculateEstimatedEndTimestamp(double startTimestamp);
 	bool flushAudioHandlers(bool draining);
 	bool getIsAudioDraining(void);
+	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;
@@ -124,16 +125,23 @@ private:
 
 	MediaContext videoContext, audioContext;
 
-	double videoStreamTimeBase;
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	AVFrame *frame;
 	struct SwsContext *swsContext;
-	double videoStreamTimestampStart;
+	double videoStreamTimeBase;
+	double videoStreamRealStartTime;
+	double videoStreamSyncDelta;
+	double videoStreamInitialTimestamp;
+	bool videoStreamRealStartTimeSet, videoStreamInitialTimestampSet;
 	double newestVideoFrameTimestamp;
 	double newestVideoFrameEstimatedEndTimestamp;
 
 	double audioStreamTimeBase;
+	double audioStreamRealStartTime;
+	double audioStreamSyncDelta;
+	double audioStreamInitialTimestamp;
+	bool audioStreamRealStartTimeSet, audioStreamInitialTimestampSet;
 	double newestAudioFrameTimestamp;
 
 	uint8_t *videoDestData[4];

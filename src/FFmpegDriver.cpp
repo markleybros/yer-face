@@ -34,6 +34,12 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	frame = NULL;
 	swsContext = NULL;
 	readyVideoFrameBufferEmptyWarning = false;
+	videoStreamRealStartTimeSet = false;
+	videoStreamInitialTimestampSet = false;
+	videoStreamSyncDelta = 0.0;
+	audioStreamRealStartTimeSet = false;
+	audioStreamInitialTimestampSet = false;
+	audioStreamSyncDelta = 0.0;
 	newestVideoFrameTimestamp = -1.0;
 	newestVideoFrameEstimatedEndTimestamp = 0.0;
 	newestAudioFrameTimestamp = 0.0;
@@ -174,7 +180,7 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 			this->openCodecContext(&context->audioStreamIndex, &context->audioDecoderContext, context->formatContext, AVMEDIA_TYPE_AUDIO);
 			context->audioStream = context->formatContext->streams[context->audioStreamIndex];
 			audioStreamTimeBase = (double)context->audioStream->time_base.num / (double)context->audioStream->time_base.den;
-			// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
+			// logger->verbose("Audio Stream open with... Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, context->audioStream->time_base.num, context->audioStream->time_base.den);
 		} catch(exception &e) {
 			logger->warn("Failed to open audio stream in %s!", inFile.c_str());
 		}
@@ -187,7 +193,7 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 		this->openCodecContext(&context->videoStreamIndex, &context->videoDecoderContext, context->formatContext, AVMEDIA_TYPE_VIDEO);
 		context->videoStream = context->formatContext->streams[context->videoStreamIndex];
 		videoStreamTimeBase = (double)context->videoStream->time_base.num / (double)context->videoStream->time_base.den;
-		// logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
+		// logger->verbose("Video Stream open with... Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, context->videoStream->time_base.num, context->videoStream->time_base.den);
 
 		width = context->videoDecoderContext->width;
 		height = context->videoDecoderContext->height;
@@ -364,6 +370,7 @@ VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
 
 bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex) {
 	int ret;
+	double timestamp;
 
 	if(context->videoStream != NULL && streamIndex == context->videoStreamIndex) {
 		// logger->verbose("Got video %s. Sending to codec...", packet ? "packet" : "flush call");
@@ -373,14 +380,15 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 		}
 
 		while(avcodec_receive_frame(context->videoDecoderContext, frame) == 0) {
-			// logger->verbose("Received decoded video frame with timestamp %.04lf (%ld units)!", frame->pts * videoStreamTimeBase, frame->pts);
 			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
 				return false;
 			}
 
+			timestamp = resolveFrameTimestamp(context, frame, AVMEDIA_TYPE_VIDEO);
+
 			VideoFrame videoFrame;
-			videoFrame.timestamp = (double)frame->pts * videoStreamTimeBase;
+			videoFrame.timestamp = timestamp;
 			videoFrame.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp);
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
 			newestVideoFrameTimestamp = videoFrame.timestamp;
@@ -405,10 +413,10 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 		}
 
 		while(avcodec_receive_frame(context->audioDecoderContext, frame) == 0) {
-			double frameTimestamp = frame->pts * audioStreamTimeBase;
-			newestAudioFrameTimestamp = frameTimestamp;
+			timestamp = resolveFrameTimestamp(context, frame, AVMEDIA_TYPE_AUDIO);
+			newestAudioFrameTimestamp = timestamp;
 			int frameNumSamples = frame->nb_samples * frame->channels;
-			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
+			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, timestamp);
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
 				if(handler->resampler.swrContext == NULL) {
 					int inputChannelLayout = context->audioStream->codecpar->channel_layout;
@@ -437,7 +445,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				}
 
 				AudioFrameBacking audioFrameBacking;
-				audioFrameBacking.timestamp = frameTimestamp;
+				audioFrameBacking.timestamp = timestamp;
 				audioFrameBacking.bufferArray = NULL;
 				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
@@ -517,6 +525,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
+		// driver->logger->verbose("newestAudioFrameTimestamp: %lf, newestVideoFrameTimestamp: %lf, newestVideoFrameEstimatedEndTimestamp: %lf", driver->newestAudioFrameTimestamp, driver->newestVideoFrameTimestamp, driver->newestVideoFrameEstimatedEndTimestamp);
 		if(driver->audioContext.formatContext != NULL && !driver->audioContext.demuxerDraining && \
 		  (driver->newestAudioFrameTimestamp < driver->newestVideoFrameEstimatedEndTimestamp || driver->videoContext.demuxerDraining)) {
 			driver->pumpDemuxer(&driver->audioContext, &packet);
@@ -627,6 +636,63 @@ double FFmpegDriver::calculateEstimatedEndTimestamp(double startTimestamp) {
 		return startTimestamp + (1.0 / 120.0);
 	}
 	return startTimestamp + (accum / (double)deltaCount);
+}
+
+double FFmpegDriver::resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type) {
+	double *timeBase = &videoStreamTimeBase;
+	double *initialFrameTimestamp = &videoStreamInitialTimestamp;
+	bool *initialFrameTimestampSet = &videoStreamInitialTimestampSet;
+	double *streamRealStartTime = &videoStreamRealStartTime;
+	bool *streamRealStartTimeSet = &videoStreamRealStartTimeSet;
+	double *streamSyncDelta = &videoStreamSyncDelta;
+	if(type == AVMEDIA_TYPE_AUDIO) {
+		timeBase = &audioStreamTimeBase;
+		initialFrameTimestamp = &audioStreamInitialTimestamp;
+		initialFrameTimestampSet = &audioStreamInitialTimestampSet;
+		streamRealStartTime = &audioStreamRealStartTime;
+		streamRealStartTimeSet = &audioStreamRealStartTimeSet;
+		streamSyncDelta = &audioStreamSyncDelta;
+	}
+
+	if(!*streamRealStartTimeSet) {
+		if(context->formatContext->start_time_realtime == AV_NOPTS_VALUE) {
+			std::chrono::time_point<std::chrono::_V2::system_clock, std::chrono::nanoseconds> now = std::chrono::system_clock::now();
+			*streamRealStartTime = (double)now.time_since_epoch().count() * ((double)std::chrono::nanoseconds::period::num / (double)std::chrono::nanoseconds::period::den);
+			// logger->verbose("%s Stream has no start_time_realtime! Guessing based on the clock... %lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", *streamRealStartTime);
+		} else {
+			*streamRealStartTime = (double)context->formatContext->start_time_realtime / (double)1000.0;
+		}
+		// logger->verbose("%s Stream Real Start Time set to %lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", *streamRealStartTime);
+		*streamRealStartTimeSet = true;
+
+		if(videoStreamRealStartTimeSet && audioStreamRealStartTimeSet) {
+			double delta = audioStreamRealStartTime - videoStreamRealStartTime;
+			if(delta > 0.0) {
+				videoStreamSyncDelta = delta;
+			} else if(delta < 0.0) {
+				audioStreamSyncDelta = delta * (-1.0);
+			}
+		}
+	}
+
+	double timestamp = (double)frame->pts * *timeBase;
+
+	// logger->verbose("Calculating timestamp for %s frame with timestamp %.04lf (%ld units)!", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp, frame->pts);
+
+	if(!*initialFrameTimestampSet) {
+		// logger->verbose("Setting initial %s timestamp to %.04lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+		*initialFrameTimestamp = timestamp;
+		*initialFrameTimestampSet = true;
+	}
+	timestamp = timestamp - *initialFrameTimestamp;
+	// logger->verbose("After compensating for initial offset, %s frame timestamp is calculated to be %.04lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+
+	if(*streamSyncDelta != 0.0) {
+		timestamp = timestamp + *streamSyncDelta;
+		// logger->verbose("After compensating for stream sync delta, %s frame timestamp is calculated to be %.04lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+	}
+
+	return timestamp;
 }
 
 }; //namespace YerFace
