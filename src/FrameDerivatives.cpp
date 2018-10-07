@@ -40,10 +40,10 @@ FrameDerivatives::~FrameDerivatives() {
 	delete logger;
 }
 
-void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
+void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 	YerFace_MutexLock(myMutex);
 	metrics->startClock();
-	workingFrame = newFrame.clone();
+	workingFrame = videoFrame->frameCV.clone();
 
 	Size frameSize = workingFrame.size();
 
@@ -51,8 +51,8 @@ void FrameDerivatives::setWorkingFrame(Mat newFrame, double timestamp) {
 	workingFrameSizeSet = true;
 
 	workingFrameTimestamps.frameNumber++;
-	workingFrameTimestamps.startTimestamp = timestamp;
-	workingFrameTimestamps.estimatedEndTimestamp = calculateEstimatedEndTimestamp(timestamp);
+	workingFrameTimestamps.startTimestamp = videoFrame->timestamp;
+	workingFrameTimestamps.estimatedEndTimestamp = videoFrame->estimatedEndTimestamp;
 	workingFrameTimestamps.set = true;
 	// logger->verbose("Set Working Frame Timestamps... Start: %.04lf, Estimated End: %.04lf", workingFrameTimestamps.startTimestamp, workingFrameTimestamps.estimatedEndTimestamp);
 
@@ -212,28 +212,6 @@ bool FrameDerivatives::getCompletedFrameSet(void) {
 	bool status = completedFrameSet;
 	YerFace_MutexUnlock(myMutex);
 	return status;
-}
-
-double FrameDerivatives::calculateEstimatedEndTimestamp(double startTimestamp) {
-	frameStartTimes.push_back(startTimestamp);
-	while(frameStartTimes.size() > YERFACE_FRAME_DURATION_ESTIMATE_BUFFER) {
-		frameStartTimes.pop_front();
-	}
-	int count = 0, deltaCount = 0;
-	double lastTimestamp, delta, accum = 0.0;
-	for(double timestamp : frameStartTimes) {
-		if(count > 0) {
-			delta = (timestamp - lastTimestamp);
-			accum += delta;
-			deltaCount++;
-		}
-		lastTimestamp = timestamp;
-		count++;
-	}
-	if(deltaCount == 0) {
-		return startTimestamp;
-	}
-	return startTimestamp + (accum / (double)deltaCount);
 }
 
 }; //namespace YerFace

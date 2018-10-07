@@ -18,9 +18,10 @@ extern "C" {
 
 namespace YerFace {
 
+#define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
-#define YERFACE_INITIAL_AUDIO_BACKING_FRAMES 10
-#define YERFACE_RESAMPLE_BUFFER_HEADROOM 8192
+
+class FrameDerivatives;
 
 class MediaContext {
 public:
@@ -48,7 +49,7 @@ public:
 
 class VideoFrame {
 public:
-	double timestamp;
+	double timestamp, estimatedEndTimestamp;
 	VideoFrameBacking *frameBacking;
 	Mat frameCV;
 };
@@ -62,12 +63,19 @@ public:
 	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp)> callback;
 };
 
+class AudioFrameBacking {
+public:
+	double timestamp;
+	uint8_t **bufferArray;
+	int bufferSamples, bufferLineSize;
+	int audioSamples, audioBytes;
+};
+
 class AudioFrameResampler {
 public:
 	int numChannels;
 	SwrContext *swrContext;
-	uint8_t **bufferArray;
-	int bufferSamples, bufferLineSize;
+	list<AudioFrameBacking> audioFrameBackings;
 };
 
 class AudioFrameHandler {
@@ -98,6 +106,9 @@ private:
 	void destroyDemuxerThread(void);
 	static int runDemuxerLoop(void *ptr);
 	void pumpDemuxer(MediaContext *context, AVPacket *packet);
+	double calculateEstimatedEndTimestamp(double startTimestamp);
+	bool flushAudioHandlers(bool draining);
+	bool getIsAudioDraining(void);
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;
@@ -109,6 +120,8 @@ private:
 	SDL_Thread *demuxerThread;
 	bool demuxerRunning;
 
+	std::list<double> frameStartTimes;
+
 	MediaContext videoContext, audioContext;
 
 	double videoStreamTimeBase;
@@ -116,8 +129,12 @@ private:
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	AVFrame *frame;
 	struct SwsContext *swsContext;
+	double videoStreamTimestampStart;
+	double newestVideoFrameTimestamp;
+	double newestVideoFrameEstimatedEndTimestamp;
 
 	double audioStreamTimeBase;
+	double newestAudioFrameTimestamp;
 
 	uint8_t *videoDestData[4];
 	int videoDestLineSize[4];

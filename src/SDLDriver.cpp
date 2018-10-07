@@ -414,12 +414,10 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	}
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
-		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d", len, streamPos, remaining);
-		if(self->audioFrameQueue.size() > 0) {
-			while(self->audioFrameQueue.back()->timestamp < frameTimestamps.startTimestamp) {
-				self->audioFrameQueue.back()->inUse = false;
-				self->audioFrameQueue.pop_back();
-			}
+		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < frameTimestamps.startTimestamp) {
+			self->audioFrameQueue.back()->inUse = false;
+			self->audioFrameQueue.pop_back();
 		}
 		if(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
 			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
@@ -448,7 +446,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 
 void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
 	SDLDriver *self = (SDLDriver *)userdata;
-	// self->logger->verbose("AudioFrameCallback fired!");
+	// self->logger->verbose("AudioFrameCallback fired! Frame timestamp is %lf.", timestamp);
 	YerFace_MutexLock(self->audioFramesMutex);
 	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
 	memcpy(audioFrame->buf, buf, audioBytes);

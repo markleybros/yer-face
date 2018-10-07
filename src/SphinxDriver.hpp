@@ -44,14 +44,22 @@ public:
 	PrestonBlairPhonemes phonemes;
 };
 
+class SphinxPhoneme {
+public:
+	string pbPhoneme;
+	double startTime, endTime;
+	int utteranceIndex;
+};
+
 class SphinxDriver {
 public:
 	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency);
-	~SphinxDriver();
+	~SphinxDriver() noexcept(false);
 	void advanceWorkingToCompleted(void);
 	void drainPipelineDataNow(void);
 private:
 	void initializeRecognitionThread(void);
+	void processPhonemesIntoVideoFrames(bool draining);
 	void handleProcessedVideoFrames(void);
 	void processUtteranceHypothesis(void);
 	void processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples);
@@ -83,6 +91,8 @@ private:
 	double timestampOffset;
 	bool timestampOffsetSet;
 	PrestonBlairPhonemes workingLipFlapping, completedLipFlapping;
+
+	list<SphinxPhoneme> phonemeBuffer;
 
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;

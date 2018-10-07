@@ -34,6 +34,9 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	frame = NULL;
 	swsContext = NULL;
 	readyVideoFrameBufferEmptyWarning = false;
+	newestVideoFrameTimestamp = -1.0;
+	newestVideoFrameEstimatedEndTimestamp = 0.0;
+	newestAudioFrameTimestamp = 0.0;
 
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
@@ -81,9 +84,11 @@ FFmpegDriver::~FFmpegDriver() {
 		delete backing;
 	}
 	for(AudioFrameHandler *handler : audioFrameHandlers) {
-		if(handler->resampler.bufferArray != NULL) {
-			av_freep(&handler->resampler.bufferArray[0]);
-			av_freep(&handler->resampler.bufferArray);
+		while(handler->resampler.audioFrameBackings.size()) {
+			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
+			av_freep(&nextFrame.bufferArray[0]);
+			av_freep(&nextFrame.bufferArray);
+			handler->resampler.audioFrameBackings.pop_back();
 		}
 		if(handler->resampler.swrContext != NULL) {
 			swr_free(&handler->resampler.swrContext);
@@ -303,8 +308,7 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	AudioFrameHandler *handler = new AudioFrameHandler();
 	handler->audioFrameCallback = audioFrameCallback;
 	handler->resampler.swrContext = NULL;
-	handler->resampler.bufferArray = NULL;
-	handler->resampler.bufferSamples = 0;
+	handler->resampler.audioFrameBackings.clear();
 	audioFrameHandlers.push_back(handler);
 
 	YerFace_MutexUnlock(demuxerMutex);
@@ -371,7 +375,12 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 			VideoFrame videoFrame;
 			videoFrame.timestamp = (double)frame->pts * videoStreamTimeBase;
+			videoFrame.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp);
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
+			newestVideoFrameTimestamp = videoFrame.timestamp;
+			newestVideoFrameEstimatedEndTimestamp = videoFrame.estimatedEndTimestamp;
+			// logger->verbose("Inserted a VideoFrame with timestamps: %.04lf - (estimated) %.04lf", videoFrame.timestamp, videoFrame.estimatedEndTimestamp);
+
 			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
 
@@ -391,6 +400,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 		while(avcodec_receive_frame(context->audioDecoderContext, frame) == 0) {
 			double frameTimestamp = frame->pts * audioStreamTimeBase;
+			newestAudioFrameTimestamp = frameTimestamp;
 			int frameNumSamples = frame->nb_samples * frame->channels;
 			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
@@ -419,33 +429,28 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 					throw runtime_error("Internal error in FFmpeg software resampler!");
 					return false;
 				}
-				if(handler->resampler.bufferArray == NULL || handler->resampler.bufferSamples < expectedOutputSamples) {
-					handler->resampler.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
-					handler->resampler.bufferSamples += YERFACE_RESAMPLE_BUFFER_HEADROOM;
 
-					if(handler->resampler.bufferArray != NULL) {
-						av_freep(&handler->resampler.bufferArray[0]);
-						av_freep(&handler->resampler.bufferArray);
-					}
+				AudioFrameBacking audioFrameBacking;
+				audioFrameBacking.timestamp = frameTimestamp;
+				audioFrameBacking.bufferArray = NULL;
+				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
-					if(av_samples_alloc_array_and_samples(&handler->resampler.bufferArray, &handler->resampler.bufferLineSize, handler->resampler.numChannels, handler->resampler.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
-						throw runtime_error("Failed allocating audio buffer!");
-					}
-
-					logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
+				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &audioFrameBacking.bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
+					throw runtime_error("Failed allocating audio buffer!");
 				}
 
-				int audioSamples;
-				if((audioSamples = swr_convert(handler->resampler.swrContext, handler->resampler.bufferArray, handler->resampler.bufferSamples, (const uint8_t **)frame->data, frame->nb_samples)) < 0) {
+				// logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
+
+				if((audioFrameBacking.audioSamples = swr_convert(handler->resampler.swrContext, audioFrameBacking.bufferArray, audioFrameBacking.bufferSamples, (const uint8_t **)frame->data, frame->nb_samples)) < 0) {
 					throw runtime_error("Failed running swr_convert() for audio resampling");
 				}
 
-				int audioBytes;
-				if((audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioSamples, handler->audioFrameCallback.sampleFormat, 0)) < 0) {
+				if((audioFrameBacking.audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioFrameBacking.audioSamples, handler->audioFrameCallback.sampleFormat, 0)) < 0) {
 					throw runtime_error("Failed calculating output buffer size");
 				}
 				
-				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, handler->resampler.bufferArray[0], audioSamples, audioBytes, handler->resampler.bufferLineSize, frameTimestamp);
+				handler->resampler.audioFrameBackings.push_front(audioFrameBacking);
+				// logger->verbose("Pushed a resampled audio frame for handler. Frame queue depth is %d", handler->resampler.audioFrameBackings.size());
 			}
 			av_frame_unref(frame);
 		}
@@ -506,23 +511,20 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 
 	YerFace_MutexLock(driver->demuxerMutex);
 	while(driver->demuxerRunning) {
-		if(driver->audioContext.formatContext != NULL) {
-			while(!driver->audioContext.demuxerDraining && !driver->getIsVideoFrameBufferEmpty() && driver->demuxerRunning) {
-				driver->pumpDemuxer(&driver->audioContext, &packet);
-			}
+		if(driver->audioContext.formatContext != NULL && !driver->audioContext.demuxerDraining && \
+		  (driver->newestAudioFrameTimestamp < driver->newestVideoFrameEstimatedEndTimestamp || driver->videoContext.demuxerDraining)) {
+			driver->pumpDemuxer(&driver->audioContext, &packet);
 		}
-		if(driver->videoContext.formatContext != NULL) {
-			while(!driver->videoContext.demuxerDraining && (driver->getIsVideoFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning) {
-				driver->pumpDemuxer(&driver->videoContext, &packet);
-				if(driver->frameDrop) {
-					YerFace_MutexUnlock(driver->demuxerMutex);
-					SDL_Delay(0);
-					YerFace_MutexLock(driver->demuxerMutex);
-				}
-			}
+		if(driver->videoContext.formatContext != NULL && !driver->videoContext.demuxerDraining && \
+		  (driver->newestAudioFrameTimestamp > driver->newestVideoFrameTimestamp || driver->getIsAudioDraining()) && \
+		  (driver->getIsVideoFrameBufferEmpty() || driver->frameDrop)) {
+			driver->pumpDemuxer(&driver->videoContext, &packet);
 		}
 
-		if(driver->videoContext.demuxerDraining && driver->getIsVideoFrameBufferEmpty()) {
+		driver->flushAudioHandlers(driver->getIsAudioDraining());
+
+		if((driver->videoContext.demuxerDraining || driver->videoContext.formatContext == NULL) && \
+		  driver->getIsVideoFrameBufferEmpty()) {
 			driver->logger->verbose("Draining complete. Demuxer thread terminating...");
 			driver->demuxerRunning = false;
 		}
@@ -532,7 +534,7 @@ int FFmpegDriver::runDemuxerLoop(void *ptr) {
 				YerFace_MutexUnlock(driver->demuxerMutex);
 				SDL_Delay(0);
 				YerFace_MutexLock(driver->demuxerMutex);
-			} else {
+			} else if(!driver->getIsVideoFrameBufferEmpty()) {
 				// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
 				if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
 					throw runtime_error("Failed waiting on condition.");
@@ -571,8 +573,54 @@ void FFmpegDriver::pumpDemuxer(MediaContext *context, AVPacket *packet) {
 	}
 }
 
+bool FFmpegDriver::flushAudioHandlers(bool draining) {
+	bool completelyFlushed = true;
+	for(AudioFrameHandler *handler : audioFrameHandlers) {
+		while(handler->resampler.audioFrameBackings.size()) {
+			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
+			if(nextFrame.timestamp < newestVideoFrameEstimatedEndTimestamp || draining) {
+				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.bufferLineSize, nextFrame.timestamp);
+				av_freep(&nextFrame.bufferArray[0]);
+				av_freep(&nextFrame.bufferArray);
+				handler->resampler.audioFrameBackings.pop_back();
+			} else {
+				completelyFlushed = false;
+				break;
+			}
+		}
+	}
+	return completelyFlushed;
+}
+
 bool FFmpegDriver::getIsAudioInputPresent(void) {
 	return (videoContext.audioStream != NULL) || (audioContext.audioStream != NULL);
+}
+
+bool FFmpegDriver::getIsAudioDraining(void) {
+	return (audioContext.formatContext != NULL && audioContext.demuxerDraining) || \
+		(videoContext.formatContext != NULL && videoContext.demuxerDraining);
+}
+
+double FFmpegDriver::calculateEstimatedEndTimestamp(double startTimestamp) {
+	frameStartTimes.push_back(startTimestamp);
+	while(frameStartTimes.size() > YERFACE_FRAME_DURATION_ESTIMATE_BUFFER) {
+		frameStartTimes.pop_front();
+	}
+	int count = 0, deltaCount = 0;
+	double lastTimestamp, delta, accum = 0.0;
+	for(double timestamp : frameStartTimes) {
+		if(count > 0) {
+			delta = (timestamp - lastTimestamp);
+			accum += delta;
+			deltaCount++;
+		}
+		lastTimestamp = timestamp;
+		count++;
+	}
+	if(deltaCount == 0) {
+		return startTimestamp + (1.0 / 120.0);
+	}
+	return startTimestamp + (accum / (double)deltaCount);
 }
 
 }; //namespace YerFace

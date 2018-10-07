@@ -258,7 +258,7 @@ int runCaptureLoop(void *ptr) {
 			// Start timer
 			metrics->startClock();
 
-			frameDerivatives->setWorkingFrame(videoFrame.frameCV, videoFrame.timestamp);
+			frameDerivatives->setWorkingFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
 			eventLogger->startNewFrame();
