@@ -450,14 +450,14 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	YerFace_MutexUnlock(self->audioFramesMutex);
 }
 
-void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
+void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp) {
 	SDLDriver *self = (SDLDriver *)userdata;
 	if(self->audioFramesMutex == NULL) {
 		return;
 	}
 	// self->logger->verbose("AudioFrameCallback fired! Frame timestamp is %lf.", timestamp);
 	YerFace_MutexLock(self->audioFramesMutex);
-	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
+	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(audioBytes);
 	memcpy(audioFrame->buf, buf, audioBytes);
 	audioFrame->audioSamples = audioSamples;
 	audioFrame->audioBytes = audioBytes;

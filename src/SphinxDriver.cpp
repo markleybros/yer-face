@@ -376,7 +376,7 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 	return audioFrame;
 }
 
-void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
+void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp) {
 	SphinxDriver *self = (SphinxDriver *)userdata;
 	if(self->myWrkMutex == NULL) {
 		return;
@@ -387,7 +387,7 @@ void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, 
 		self->timestampOffsetSet = true;
 		self->logger->info("Received first audio frame. Set initial timestamp offset to %.04lf seconds.", self->timestampOffset);
 	}
-	SphinxAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
+	SphinxAudioFrame *audioFrame = self->getNextAvailableAudioFrame(audioBytes);
 	memcpy(audioFrame->buf, buf, audioBytes);
 	audioFrame->audioSamples = audioSamples;
 	audioFrame->audioBytes = audioBytes;

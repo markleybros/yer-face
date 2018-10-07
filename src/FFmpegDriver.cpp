@@ -415,8 +415,6 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 		while(avcodec_receive_frame(context->audioDecoderContext, frame) == 0) {
 			timestamp = resolveFrameTimestamp(context, frame, AVMEDIA_TYPE_AUDIO);
 			newestAudioFrameTimestamp = timestamp;
-			int frameNumSamples = frame->nb_samples * frame->channels;
-			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, timestamp);
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
 				if(handler->resampler.swrContext == NULL) {
 					int inputChannelLayout = context->audioStream->codecpar->channel_layout;
@@ -438,18 +436,15 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 					}
 					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->audioFrameCallback.channelLayout);
 				}
-				int expectedOutputSamples = swr_get_out_samples(handler->resampler.swrContext, frameNumSamples);
-				if(expectedOutputSamples < 0) {
-					throw runtime_error("Internal error in FFmpeg software resampler!");
-					return false;
-				}
 
+				int bufferLineSize;
 				AudioFrameBacking audioFrameBacking;
 				audioFrameBacking.timestamp = timestamp;
 				audioFrameBacking.bufferArray = NULL;
-				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
+				//bufferSamples represents the expected number of samples produced by swr_convert() *PER CHANNEL*
+				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
-				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &audioFrameBacking.bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
+				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
 					throw runtime_error("Failed allocating audio buffer!");
 				}
 
@@ -459,9 +454,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 					throw runtime_error("Failed running swr_convert() for audio resampling");
 				}
 
-				if((audioFrameBacking.audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioFrameBacking.audioSamples, handler->audioFrameCallback.sampleFormat, 0)) < 0) {
-					throw runtime_error("Failed calculating output buffer size");
-				}
+				audioFrameBacking.audioBytes = audioFrameBacking.audioSamples * handler->resampler.numChannels * av_get_bytes_per_sample(handler->audioFrameCallback.sampleFormat);
 				
 				handler->resampler.audioFrameBackings.push_front(audioFrameBacking);
 				// logger->verbose("Pushed a resampled audio frame for handler. Frame queue depth is %d", handler->resampler.audioFrameBackings.size());
@@ -594,7 +587,7 @@ bool FFmpegDriver::flushAudioHandlers(bool draining) {
 		while(handler->resampler.audioFrameBackings.size()) {
 			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
 			if(nextFrame.timestamp < newestVideoFrameEstimatedEndTimestamp || draining) {
-				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.bufferLineSize, nextFrame.timestamp);
+				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
 				av_freep(&nextFrame.bufferArray[0]);
 				av_freep(&nextFrame.bufferArray);
 				handler->resampler.audioFrameBackings.pop_back();

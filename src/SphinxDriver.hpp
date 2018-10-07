@@ -65,7 +65,7 @@ private:
 	void processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
-	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
+	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
 	
 	string hiddenMarkovModel, allPhoneLM;
 	string lipFlappingTargetPhoneme;

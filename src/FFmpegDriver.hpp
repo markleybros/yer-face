@@ -60,14 +60,14 @@ public:
 	enum AVSampleFormat sampleFormat;
 	int sampleRate;
 	void *userdata;
-	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp)> callback;
+	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> callback;
 };
 
 class AudioFrameBacking {
 public:
 	double timestamp;
 	uint8_t **bufferArray;
-	int bufferSamples, bufferLineSize;
+	int bufferSamples;
 	int audioSamples, audioBytes;
 };
 

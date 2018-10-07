@@ -70,7 +70,7 @@ public:
 	int getPreviewDebugDensity(void);
 	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
-	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp);
+	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
