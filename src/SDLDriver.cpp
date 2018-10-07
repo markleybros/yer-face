@@ -114,6 +114,7 @@ SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDr
 SDLDriver::~SDLDriver() {
 	logger->debug("SDLDriver object destructing...");
 	if(audioDevice.opened) {
+		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
 		SDL_CloseAudioDevice(audioDevice.deviceID);
 	}
 	if(previewWindow.window != NULL) {
@@ -464,6 +465,12 @@ void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
 	YerFace_MutexUnlock(self->audioFramesMutex);
+}
+
+void SDLDriver::stopAudioDriverNow(void) {
+	if(audioDevice.opened) {
+		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
+	}
 }
 
 }; //namespace YerFace

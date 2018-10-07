@@ -43,6 +43,7 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	newestVideoFrameTimestamp = -1.0;
 	newestVideoFrameEstimatedEndTimestamp = 0.0;
 	newestAudioFrameTimestamp = 0.0;
+	audioCallbacksOkay = true;
 
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
@@ -494,6 +495,7 @@ void FFmpegDriver::rollDemuxerThread(void) {
 void FFmpegDriver::destroyDemuxerThread(void) {
 	YerFace_MutexLock(demuxerMutex);
 	demuxerRunning = false;
+	audioCallbacksOkay = false;
 	videoContext.demuxerDraining = true;
 	audioContext.demuxerDraining = true;
 	SDL_CondSignal(demuxerCond);
@@ -587,7 +589,9 @@ bool FFmpegDriver::flushAudioHandlers(bool draining) {
 		while(handler->resampler.audioFrameBackings.size()) {
 			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
 			if(nextFrame.timestamp < newestVideoFrameEstimatedEndTimestamp || draining) {
-				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
+				if(audioCallbacksOkay) {
+					handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
+				}
 				av_freep(&nextFrame.bufferArray[0]);
 				av_freep(&nextFrame.bufferArray);
 				handler->resampler.audioFrameBackings.pop_back();
@@ -686,6 +690,12 @@ double FFmpegDriver::resolveFrameTimestamp(MediaContext *context, AVFrame *frame
 	}
 
 	return timestamp;
+}
+
+void FFmpegDriver::stopAudioCallbacksNow(void) {
+	YerFace_MutexLock(demuxerMutex);
+	audioCallbacksOkay = false;
+	YerFace_MutexUnlock(demuxerMutex);
 }
 
 }; //namespace YerFace

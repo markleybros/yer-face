@@ -71,6 +71,7 @@ public:
 	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
+	void stopAudioDriverNow(void);
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 

@@ -96,6 +96,7 @@ public:
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	void releaseVideoFrame(VideoFrame videoFrame);
 	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
+	void stopAudioCallbacksNow(void);
 private:
 	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
@@ -154,6 +155,7 @@ private:
 	bool readyVideoFrameBufferEmptyWarning;
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
+	bool audioCallbacksOkay;
 };
 
 }; //namespace YerFace

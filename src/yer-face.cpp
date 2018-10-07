@@ -299,6 +299,9 @@ int runCaptureLoop(void *ptr) {
 		}
 	}
 
+	sdlDriver->stopAudioDriverNow();
+	ffmpegDriver->stopAudioCallbacksNow();
+
 	if(sphinxDriver != NULL) {
 		sphinxDriver->drainPipelineDataNow();
 	}
