@@ -378,6 +378,9 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 
 void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
 	SphinxDriver *self = (SphinxDriver *)userdata;
+	if(self->myWrkMutex == NULL) {
+		return;
+	}
 	YerFace_MutexLock(self->myWrkMutex);
 	if(!self->timestampOffsetSet) {
 		self->timestampOffset = timestamp;

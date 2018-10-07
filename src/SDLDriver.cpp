@@ -123,11 +123,17 @@ SDLDriver::~SDLDriver() {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
 	SDL_DestroyMutex(isRunningMutex);
+	isRunningMutex = NULL;
 	SDL_DestroyMutex(isPausedMutex);
+	isPausedMutex = NULL;
 	SDL_DestroyMutex(previewPositionInFrameMutex);
+	previewPositionInFrameMutex = NULL;
 	SDL_DestroyMutex(previewDebugDensityMutex);
+	previewDebugDensityMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
+	audioFramesMutex = NULL;
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
+	onBasisFlagCallbacksMutex = NULL;
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(audioFrame->buf != NULL) {
 			av_freep(&audioFrame->buf);
@@ -446,6 +452,9 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 
 void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
 	SDLDriver *self = (SDLDriver *)userdata;
+	if(self->audioFramesMutex == NULL) {
+		return;
+	}
 	// self->logger->verbose("AudioFrameCallback fired! Frame timestamp is %lf.", timestamp);
 	YerFace_MutexLock(self->audioFramesMutex);
 	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
