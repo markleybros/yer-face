@@ -142,11 +142,17 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 		context->formatContext->flags |= AVFMT_FLAG_NOBUFFER;
 	}
 
-	if(inSize.length() > 0) {
-		av_dict_set(&options, "video_size", inSize.c_str(), 0);
-	}
-	if(inRate.length() > 0) {
-		av_dict_set(&options, "framerate", inRate.c_str(), 0);
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		if(inSize.length() > 0) {
+			av_dict_set(&options, "video_size", inSize.c_str(), 0);
+		}
+		if(inRate.length() > 0) {
+			av_dict_set(&options, "framerate", inRate.c_str(), 0);
+		}
+	} else {
+		if(inRate.length() > 0) {
+			av_dict_set(&options, "ar", inRate.c_str(), 0);
+		}
 	}
 
 	if((ret = avformat_open_input(&context->formatContext, inFile.c_str(), inputFormat, &options)) < 0) {
