@@ -423,10 +423,9 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 		int remaining = len - streamPos;
 		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 
-		double audioLateGracePeriod = (frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) * YERFACE_AUDIO_LATE_GRACE;
-		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - audioLateGracePeriod;
+		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - YERFACE_AUDIO_LATE_GRACE;
 		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
-			self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, audioLateGracePeriod);
+			// self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, audioLateGracePeriod);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 		}
