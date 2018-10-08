@@ -123,7 +123,6 @@ private:
 	bool getIsAudioDraining(void);
 	bool getIsVideoDraining(void);
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
-	void resolveStreamStartTime(MediaContext *context, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 
 	FrameDerivatives *frameDerivatives;
@@ -142,18 +141,16 @@ private:
 	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
 	double videoStreamRealStartTime;
-	double videoStreamSyncDelta;
 	double videoStreamInitialTimestamp;
-	bool videoStreamRealStartTimeSet, videoStreamInitialTimestampSet;
+	bool videoStreamInitialTimestampSet;
 	double newestVideoFrameTimestamp;
 	double newestVideoFrameEstimatedEndTimestamp;
 
 	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
 	double audioStreamRealStartTime;
-	double audioStreamSyncDelta;
 	double audioStreamInitialTimestamp;
-	bool audioStreamRealStartTimeSet, audioStreamInitialTimestampSet;
+	bool audioStreamInitialTimestampSet;
 	double newestAudioFrameTimestamp;
 
 	uint8_t *videoDestData[4];

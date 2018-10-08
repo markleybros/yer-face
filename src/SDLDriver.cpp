@@ -430,7 +430,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 			self->audioFrameQueue.pop_back();
 		}
 
-		if(self->audioFrameQueue.size() > 0) { // && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp) { // && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
+		if(self->audioFrameQueue.size() > 0) {
 			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
 			int consumeBytes = remaining;
 			int frameRemainingBytes = self->audioFrameQueue.back()->audioBytes - self->audioFrameQueue.back()->pos;
