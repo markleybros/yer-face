@@ -3,6 +3,7 @@
 #include "Metrics.hpp"
 #include "Logger.hpp"
 #include "Utilities.hpp"
+#include "FFmpegDriver.hpp"
 
 #include <list>
 
@@ -15,7 +16,7 @@ using namespace cv;
 
 namespace YerFace {
 
-#define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
+class VideoFrame;
 
 class FrameTimestamps {
 public:
@@ -39,7 +40,7 @@ class FrameDerivatives {
 public:
 	FrameDerivatives(json config);
 	~FrameDerivatives();
-	void setWorkingFrame(Mat newFrame, double timestamp); //Expected to be in BGR format, at the native resolution of the input. Timestamp is in seconds.
+	void setWorkingFrame(VideoFrame *videoFrame);
 	Mat getWorkingFrame(void);
 	Mat getCompletedFrame(void);
 	void advanceWorkingFrameToCompleted(void);
@@ -53,8 +54,6 @@ public:
 	bool getCompletedFrameSet(void);
 
 private:
-	double calculateEstimatedEndTimestamp(double startTimestamp);
-	
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;
@@ -69,8 +68,6 @@ private:
 	bool workingFrameSizeSet;
 	FrameTimestamps workingFrameTimestamps;
 	FrameTimestamps completedFrameTimestamps;
-
-	std::list<double> frameStartTimes;
 };
 
 }; //namespace YerFace

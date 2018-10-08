@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
+SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -35,6 +35,9 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	previewRatio = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewRatio"];
+	previewWidthPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewWidthPercentage"];
+	previewCenterHeightPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
 	setIsRunning(true);
 	setIsPaused(false);
@@ -111,6 +114,7 @@ SDLDriver::SDLDriver(FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpe
 SDLDriver::~SDLDriver() {
 	logger->debug("SDLDriver object destructing...");
 	if(audioDevice.opened) {
+		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
 		SDL_CloseAudioDevice(audioDevice.deviceID);
 	}
 	if(previewWindow.window != NULL) {
@@ -120,11 +124,17 @@ SDLDriver::~SDLDriver() {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
 	SDL_DestroyMutex(isRunningMutex);
+	isRunningMutex = NULL;
 	SDL_DestroyMutex(isPausedMutex);
+	isPausedMutex = NULL;
 	SDL_DestroyMutex(previewPositionInFrameMutex);
+	previewPositionInFrameMutex = NULL;
 	SDL_DestroyMutex(previewDebugDensityMutex);
+	previewDebugDensityMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
+	audioFramesMutex = NULL;
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
+	onBasisFlagCallbacksMutex = NULL;
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(audioFrame->buf != NULL) {
 			av_freep(&audioFrame->buf);
@@ -344,6 +354,24 @@ int SDLDriver::getPreviewDebugDensity(void) {
 	return status;
 }
 
+void SDLDriver::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter) {
+	previewRect->width = frameSize.width * previewWidthPercentage;
+	previewRect->height = previewRect->width * previewRatio;
+	PreviewPositionInFrame previewPosition = getPreviewPositionInFrame();
+	if(previewPosition == BottomRight || previewPosition == TopRight) {
+		previewRect->x = frameSize.width - previewRect->width;
+	} else {
+		previewRect->x = 0;
+	}
+	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
+		previewRect->y = frameSize.height - previewRect->height;
+	} else {
+		previewRect->y = 0;
+	}
+	*previewCenter = Utilities::centerRect(*previewRect);
+	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
+}
+
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {
 	YerFace_MutexLock(onBasisFlagCallbacksMutex);
 	onBasisFlagCallbacks.push_back(callback);
@@ -393,14 +421,16 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	}
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
-		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d", len, streamPos, remaining);
-		if(self->audioFrameQueue.size() > 0) {
-			while(self->audioFrameQueue.back()->timestamp < frameTimestamps.startTimestamp) {
-				self->audioFrameQueue.back()->inUse = false;
-				self->audioFrameQueue.pop_back();
-			}
+		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+
+		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - YERFACE_AUDIO_LATE_GRACE;
+		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
+			// self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, audioLateGracePeriod);
+			self->audioFrameQueue.back()->inUse = false;
+			self->audioFrameQueue.pop_back();
 		}
-		if(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
+
+		if(self->audioFrameQueue.size() > 0) {
 			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
 			int consumeBytes = remaining;
 			int frameRemainingBytes = self->audioFrameQueue.back()->audioBytes - self->audioFrameQueue.back()->pos;
@@ -417,7 +447,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 			}
 			streamPos += consumeBytes;
 		} else {
-			// self->logger->verbose("Filling the rest of the buffer with silence.");
+			// self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
 			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
 			streamPos += remaining;
 		}
@@ -425,17 +455,26 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	YerFace_MutexUnlock(self->audioFramesMutex);
 }
 
-void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp) {
+void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp) {
 	SDLDriver *self = (SDLDriver *)userdata;
-	// self->logger->verbose("AudioFrameCallback fired!");
+	if(self->audioFramesMutex == NULL) {
+		return;
+	}
+	// self->logger->verbose("AudioFrameCallback fired! Frame timestamp is %lf.", timestamp);
 	YerFace_MutexLock(self->audioFramesMutex);
-	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(bufferSize);
+	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(audioBytes);
 	memcpy(audioFrame->buf, buf, audioBytes);
 	audioFrame->audioSamples = audioSamples;
 	audioFrame->audioBytes = audioBytes;
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
 	YerFace_MutexUnlock(self->audioFramesMutex);
+}
+
+void SDLDriver::stopAudioDriverNow(void) {
+	if(audioDevice.opened) {
+		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
+	}
 }
 
 }; //namespace YerFace

@@ -115,25 +115,10 @@ void FaceMapper::renderPreviewHUD() {
 		markerTracker->renderPreviewHUD();
 	}
 	if(density > 0) {
-		Size frameSize = frame.size();
-		double previewRatio = 1.25, previewWidthPercentage = 0.2, previewCenterHeightPercentage = 0.2; // FIXME - magic numbers
-		int gridIncrement = 15; //FIXME - more magic numbers
+		int gridIncrement = 15; //FIXME - magic numbers
 		Rect2d previewRect;
-		previewRect.width = frameSize.width * previewWidthPercentage;
-		previewRect.height = previewRect.width * previewRatio;
-		PreviewPositionInFrame previewPosition = sdlDriver->getPreviewPositionInFrame();
-		if(previewPosition == BottomRight || previewPosition == TopRight) {
-			previewRect.x = frameSize.width - previewRect.width;
-		} else {
-			previewRect.x = 0;
-		}
-		if(previewPosition == BottomLeft || previewPosition == BottomRight) {
-			previewRect.y = frameSize.height - previewRect.height;
-		} else {
-			previewRect.y = 0;
-		}
-		Point2d previewCenter = Utilities::centerRect(previewRect);
-		previewCenter.y -= previewRect.height * previewCenterHeightPercentage;
+		Point2d previewCenter;
+		sdlDriver->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(10, 10, 10), FILLED);
 		if(density > 4) {

@@ -18,9 +18,34 @@ extern "C" {
 
 namespace YerFace {
 
+#define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
-#define YERFACE_INITIAL_AUDIO_BACKING_FRAMES 10
-#define YERFACE_RESAMPLE_BUFFER_HEADROOM 8192
+
+class FrameDerivatives;
+
+class MediaContext {
+public:
+	MediaContext(void);
+	
+	AVFormatContext *formatContext;
+
+	AVFrame *frame;
+
+	int videoStreamIndex;
+	AVCodecContext *videoDecoderContext;
+	AVStream *videoStream;
+
+	int audioStreamIndex;
+	AVCodecContext *audioDecoderContext;
+	AVStream *audioStream;
+
+	SDL_mutex *demuxerMutex;
+	SDL_cond *demuxerCond;
+	SDL_Thread *demuxerThread;
+	bool demuxerRunning;
+
+	bool demuxerDraining;
+};
 
 class VideoFrameBacking {
 public:
@@ -31,7 +56,7 @@ public:
 
 class VideoFrame {
 public:
-	double timestamp;
+	double timestamp, estimatedEndTimestamp;
 	VideoFrameBacking *frameBacking;
 	Mat frameCV;
 };
@@ -42,15 +67,22 @@ public:
 	enum AVSampleFormat sampleFormat;
 	int sampleRate;
 	void *userdata;
-	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, int bufferSize, double timestamp)> callback;
+	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> callback;
+};
+
+class AudioFrameBacking {
+public:
+	double timestamp;
+	uint8_t **bufferArray;
+	int bufferSamples;
+	int audioSamples, audioBytes;
 };
 
 class AudioFrameResampler {
 public:
 	int numChannels;
 	SwrContext *swrContext;
-	uint8_t **bufferArray;
-	int bufferSamples, bufferLineSize;
+	list<AudioFrameBacking> audioFrameBackings;
 };
 
 class AudioFrameHandler {
@@ -61,50 +93,65 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
-	void rollDemuxerThread(void);
+	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio);
+	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
 	VideoFrame getNextVideoFrame(void);
 	bool waitForNextVideoFrame(VideoFrame *videoFrame);
 	void releaseVideoFrame(VideoFrame videoFrame);
 	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
+	void stopAudioCallbacksNow(void);
 private:
 	void logAVErr(String msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
-	bool decodePacket(const AVPacket *packet, int streamIndex);
-	void initializeDemuxerThread(void);
-	void destroyDemuxerThread(void);
-	static int runDemuxerLoop(void *ptr);
+	bool decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex);
+	void initializeDemuxerThread(MediaContext *context, enum AVMediaType type);
+	void rollDemuxerThread(MediaContext *context, enum AVMediaType type);
+	void destroyDemuxerThreads(void);
+	void destroyDemuxerThread(MediaContext *context, enum AVMediaType type);
+	static int runVideoDemuxerLoop(void *ptr);
+	static int runAudioDemuxerLoop(void *ptr);
+	int innerDemuxerLoop(MediaContext *context, enum AVMediaType type, bool includeAudio);
+	void pumpDemuxer(MediaContext *context, AVPacket *packet, enum AVMediaType type);
+	double calculateEstimatedEndTimestamp(double startTimestamp);
+	bool flushAudioHandlers(bool draining);
+	bool getIsAudioDraining(void);
+	bool getIsVideoDraining(void);
+	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
+	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 
 	FrameDerivatives *frameDerivatives;
-	string inputFilename;
 	bool frameDrop, lowLatency;
 
 	Logger *logger;
 
-	SDL_mutex *demuxerMutex;
-	SDL_cond *demuxerCond;
-	SDL_Thread *demuxerThread;
-	bool demuxerRunning, demuxerDraining;
+	std::list<double> frameStartTimes;
 
-	int videoStreamIndex;
-	AVCodecContext *videoDecoderContext;
-	AVStream *videoStream;
-	double videoStreamTimeBase;
+	MediaContext videoContext, audioContext;
+
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
-	AVFormatContext *formatContext;
-	AVFrame *frame;
 	struct SwsContext *swsContext;
 
-	int audioStreamIndex;
-	AVCodecContext *audioDecoderContext;
-	AVStream *audioStream;
+	SDL_mutex *videoStreamMutex;
+	double videoStreamTimeBase;
+	double videoStreamRealStartTime;
+	double videoStreamInitialTimestamp;
+	bool videoStreamInitialTimestampSet;
+	double newestVideoFrameTimestamp;
+	double newestVideoFrameEstimatedEndTimestamp;
+
+	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
+	double audioStreamRealStartTime;
+	double audioStreamInitialTimestamp;
+	bool audioStreamInitialTimestampSet;
+	double newestAudioFrameTimestamp;
 
 	uint8_t *videoDestData[4];
 	int videoDestLineSize[4];
@@ -116,6 +163,7 @@ private:
 	bool readyVideoFrameBufferEmptyWarning;
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
+	bool audioCallbacksOkay;
 };
 
 }; //namespace YerFace

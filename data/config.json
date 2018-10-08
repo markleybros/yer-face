@@ -118,6 +118,13 @@
     },
     "EventLogger": {
       "eventTimestampAdjustment": 0.003
+    },
+    "SDLDriver": {
+      "PreviewHUD": {
+        "previewRatio": 1.25,
+        "previewWidthPercentage": 0.2,
+        "previewCenterHeightPercentage": 0.2
+      }
     }
   }
 }

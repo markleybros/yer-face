@@ -10,29 +10,36 @@ using namespace std;
 
 namespace YerFace {
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputFilename, bool myFrameDrop, bool myLowLatency) {
-	int ret;
+MediaContext::MediaContext(void) {
+	frame = NULL;
+	formatContext = NULL;
+	videoDecoderContext = NULL;
+	videoStreamIndex = -1;
+	videoStream = NULL;
+	audioDecoderContext = NULL;
+	videoStreamIndex = -1;
+	audioStream = NULL;
+	demuxerDraining = false;
+}
+
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	inputFilename = myInputFilename;
-	if(inputFilename.length() < 1) {
-		throw invalid_argument("inputFilename must be a valid input filename");
-	}
 	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
 
-	formatContext = NULL;
-	videoDecoderContext = NULL;
-	videoStream = NULL;
-	audioDecoderContext = NULL;
-	audioStream = NULL;
-	frame = NULL;
 	swsContext = NULL;
 	readyVideoFrameBufferEmptyWarning = false;
+	videoStreamInitialTimestampSet = false;
+	audioStreamInitialTimestampSet = false;
+	newestVideoFrameTimestamp = -1.0;
+	newestVideoFrameEstimatedEndTimestamp = 0.0;
+	newestAudioFrameTimestamp = 0.0;
+	audioCallbacksOkay = true;
 
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
@@ -43,89 +50,62 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, string myInputF
 	#endif
 	avformat_network_init();
 
-	logger->info("Opening media file %s...", inputFilename.c_str());
-
-	if((formatContext = avformat_alloc_context()) == NULL) {
-		throw runtime_error("Failed to avformat_alloc_context");
-	}
-
-	if(lowLatency) {
-		formatContext->probesize = 32;
-		formatContext->flags |= AVFMT_FLAG_NOBUFFER;
-	}
-
-	if((ret = avformat_open_input(&formatContext, inputFilename.c_str(), NULL, NULL)) < 0) {
-		logAVErr("inputFilename could not be opened", ret);
-		throw runtime_error("inputFilename could not be opened");
-	}
-
-	if((ret = avformat_find_stream_info(formatContext, NULL)) < 0) {
-		logAVErr("failed finding input stream information for inputFilename", ret);
-		throw runtime_error("failed finding input stream information for inputFilename");
-	}
-
-	try {
-		this->openCodecContext(&audioStreamIndex, &audioDecoderContext, formatContext, AVMEDIA_TYPE_AUDIO);
-		audioStream = formatContext->streams[audioStreamIndex];
-		audioStreamTimeBase = (double)audioStream->time_base.num / (double)audioStream->time_base.den;
-		// logger->verbose("Audio Stream open with Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, audioStream->time_base.num, audioStream->time_base.den);
-	} catch(exception &e) {
-		logger->warn("Failed to open audio stream! We can still proceed, but mouth shapes won't be informed by audible speech.");
-	}
-
-	this->openCodecContext(&videoStreamIndex, &videoDecoderContext, formatContext, AVMEDIA_TYPE_VIDEO);
-	videoStream = formatContext->streams[videoStreamIndex];
-	videoStreamTimeBase = (double)videoStream->time_base.num / (double)videoStream->time_base.den;
-	// logger->verbose("Video Stream open with Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, videoStream->time_base.num, videoStream->time_base.den);
-
-	width = videoDecoderContext->width;
-	height = videoDecoderContext->height;
-	pixelFormat = videoDecoderContext->pix_fmt;
-	if((videoDestBufSize = av_image_alloc(videoDestData, videoDestLineSize, width, height, pixelFormat, 1)) < 0) {
-		throw runtime_error("failed allocating memory for decoded frame");
-	}
-
-	av_dump_format(formatContext, 0, inputFilename.c_str(), 0);
-
-	pixelFormatBacking = AV_PIX_FMT_BGR24;
-	if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
-		throw runtime_error("failed creating software scaling context");
-	}
-
-	if(!(frame = av_frame_alloc())) {
-		throw runtime_error("failed allocating frame");
-	}
-
-	for(int i = 0; i < YERFACE_INITIAL_VIDEO_BACKING_FRAMES; i++) {
-		allocateNewVideoFrameBacking();
-	}
 	if((videoFrameBufferMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating video frame buffer mutex!");
 	}
+	if((videoStreamMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((audioStreamMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
-	initializeDemuxerThread();
+	initializeDemuxerThread(&videoContext, AVMEDIA_TYPE_VIDEO);
+	initializeDemuxerThread(&audioContext, AVMEDIA_TYPE_AUDIO);
 
-	logger->debug("FFmpegDriver object constructed and ready to go! Frame Drop is %s.", frameDrop ? "ENABLED" : "DISABLED");
+	if(myListAllAvailableOptions) {
+		AVFormatContext *fmt;
+		if((fmt = avformat_alloc_context()) == NULL) {
+			throw runtime_error("Failed to avformat_alloc_context");
+		}
+		recursivelyListAllAVOptions((void *)fmt);
+		avformat_free_context(fmt);
+	}
+
+	logger->debug("FFmpegDriver object constructed and ready to go! Low Latency mode is %s.", lowLatency ? "ENABLED" : "DISABLED");
 }
 
 FFmpegDriver::~FFmpegDriver() {
 	logger->debug("FFmpegDriver object destructing...");
-	destroyDemuxerThread();
+	destroyDemuxerThreads();
 	SDL_DestroyMutex(videoFrameBufferMutex);
-	avcodec_free_context(&videoDecoderContext);
-	avformat_close_input(&formatContext);
-	avformat_free_context(formatContext);
+	SDL_DestroyMutex(videoStreamMutex);
+	SDL_DestroyMutex(audioStreamMutex);
+	for(MediaContext context : {videoContext, audioContext}) {
+		if(context.videoDecoderContext != NULL) {
+			avcodec_free_context(&context.videoDecoderContext);
+		}
+		if(context.audioDecoderContext != NULL) {
+			avcodec_free_context(&context.audioDecoderContext);
+		}
+		if(context.formatContext != NULL) {
+			avformat_close_input(&context.formatContext);
+			avformat_free_context(context.formatContext);
+		}
+		av_frame_free(&context.frame);
+	}
 	av_free(videoDestData[0]);
-	av_frame_free(&frame);
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		av_frame_free(&backing->frameBGR);
 		av_free(backing->buffer);
 		delete backing;
 	}
 	for(AudioFrameHandler *handler : audioFrameHandlers) {
-		if(handler->resampler.bufferArray != NULL) {
-			av_freep(&handler->resampler.bufferArray[0]);
-			av_freep(&handler->resampler.bufferArray);
+		while(handler->resampler.audioFrameBackings.size()) {
+			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
+			av_freep(&nextFrame.bufferArray[0]);
+			av_freep(&nextFrame.bufferArray);
+			handler->resampler.audioFrameBackings.pop_back();
 		}
 		if(handler->resampler.swrContext != NULL) {
 			swr_free(&handler->resampler.swrContext);
@@ -133,6 +113,137 @@ FFmpegDriver::~FFmpegDriver() {
 		delete handler;
 	}
 	delete logger;
+}
+
+void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio) {
+	int ret;
+	if(inFile.length() < 1) {
+		throw invalid_argument("specified input video/audio file must be a valid input filename");
+	}
+	logger->info("Opening media %s...", inFile.c_str());
+
+	AVInputFormat *inputFormat = NULL;
+	if(inFormat.length() > 0) {
+		inputFormat = av_find_input_format(inFormat.c_str());
+		if(!inputFormat) {
+			throw invalid_argument("specified input video/audio format could not be resolved");
+		}
+	}
+
+	MediaContext *context = &videoContext;
+	if(type == AVMEDIA_TYPE_AUDIO) {
+		context = &audioContext;
+	}
+
+	if(!(context->frame = av_frame_alloc())) {
+		throw runtime_error("failed allocating frame");
+	}
+
+	if((context->formatContext = avformat_alloc_context()) == NULL) {
+		throw runtime_error("Failed to avformat_alloc_context");
+	}
+	AVDictionary *options = NULL;
+
+	if(inCodec.length() > 0) {
+		AVCodec *codec = avcodec_find_decoder_by_name(inCodec.c_str());
+		if(!codec) {
+			throw invalid_argument("specified input video/audio codec could not be resolved");
+		}
+		if(type == AVMEDIA_TYPE_VIDEO) {
+			context->formatContext->video_codec = codec;
+			context->formatContext->video_codec_id = codec->id;
+		} else if(type == AVMEDIA_TYPE_AUDIO) {
+			context->formatContext->audio_codec = codec;
+			context->formatContext->audio_codec_id = codec->id;
+		}
+	}
+
+	if(lowLatency) {
+		av_dict_set(&options, "probesize", "32", 0);
+		av_dict_set(&options, "analyzeduration", "100000", 0);
+		av_dict_set(&options, "avioflags", "direct", 0);
+		av_dict_set(&options, "fflags", "nobuffer", 0);
+		av_dict_set(&options, "flush_packets", "1", 0);
+	}
+
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		if(inSize.length() > 0) {
+			av_dict_set(&options, "video_size", inSize.c_str(), 0);
+		}
+		if(inRate.length() > 0) {
+			av_dict_set(&options, "framerate", inRate.c_str(), 0);
+		}
+	} else {
+		if(inRate.length() > 0) {
+			av_dict_set(&options, "sample_rate", inRate.c_str(), 0);
+		}
+		if(inChannels.length() > 0) {
+			av_dict_set(&options, "channels", inChannels.c_str(), 0);
+		}
+	}
+
+	if((ret = avformat_open_input(&context->formatContext, inFile.c_str(), inputFormat, &options)) < 0) {
+		logAVErr("input file could not be opened", ret);
+		throw runtime_error("input file could not be opened");
+	}
+	int count = av_dict_count(options);
+	if(count) {
+		logger->warn("avformat_open_input() rejected %d option(s)!", count);
+		char *dictstring;
+		if(av_dict_get_string(options, &dictstring, ',', ';') < 0) {
+			logger->error("Failed generating dictionary string!");
+		} else {
+			logger->warn("Dictionary: %s", dictstring);
+		}
+	}
+	av_dict_free(&options);
+
+	if((ret = avformat_find_stream_info(context->formatContext, NULL)) < 0) {
+		logAVErr("failed finding input stream information for input video/audio", ret);
+		throw runtime_error("failed finding input stream information for input video/audio");
+	}
+
+	if(type == AVMEDIA_TYPE_AUDIO || (type == AVMEDIA_TYPE_VIDEO && tryAudio)) {
+		if(videoContext.audioDecoderContext || audioContext.audioDecoderContext) {
+			throw runtime_error("Trying to open an audio context, but one is already open?!");
+		}
+		try {
+			this->openCodecContext(&context->audioStreamIndex, &context->audioDecoderContext, context->formatContext, AVMEDIA_TYPE_AUDIO);
+			context->audioStream = context->formatContext->streams[context->audioStreamIndex];
+			audioStreamTimeBase = (double)context->audioStream->time_base.num / (double)context->audioStream->time_base.den;
+			// logger->verbose("Audio Stream open with... Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, context->audioStream->time_base.num, context->audioStream->time_base.den);
+		} catch(exception &e) {
+			logger->warn("Failed to open audio stream in %s!", inFile.c_str());
+		}
+	}
+
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		if(videoContext.videoDecoderContext || audioContext.audioDecoderContext) {
+			throw runtime_error("Trying to open a video context, but one is already open?!");
+		}
+		this->openCodecContext(&context->videoStreamIndex, &context->videoDecoderContext, context->formatContext, AVMEDIA_TYPE_VIDEO);
+		context->videoStream = context->formatContext->streams[context->videoStreamIndex];
+		videoStreamTimeBase = (double)context->videoStream->time_base.num / (double)context->videoStream->time_base.den;
+		// logger->verbose("Video Stream open with... Time Base: %.08lf (%d/%d) seconds per unit", videoStreamTimeBase, context->videoStream->time_base.num, context->videoStream->time_base.den);
+
+		width = context->videoDecoderContext->width;
+		height = context->videoDecoderContext->height;
+		pixelFormat = context->videoDecoderContext->pix_fmt;
+		if((videoDestBufSize = av_image_alloc(videoDestData, videoDestLineSize, width, height, pixelFormat, 1)) < 0) {
+			throw runtime_error("failed allocating memory for decoded frame");
+		}
+
+		pixelFormatBacking = AV_PIX_FMT_BGR24;
+		if((swsContext = sws_getContext(width, height, pixelFormat, width, height, pixelFormatBacking, SWS_BICUBIC, NULL, NULL, NULL)) == NULL) {
+			throw runtime_error("failed creating software scaling context");
+		}
+
+		for(int i = 0; i < YERFACE_INITIAL_VIDEO_BACKING_FRAMES; i++) {
+			allocateNewVideoFrameBacking();
+		}
+	}
+
+	av_dump_format(context->formatContext, 0, inFile.c_str(), 0);
 }
 
 void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type) {
@@ -179,7 +290,7 @@ bool FFmpegDriver::getIsVideoFrameBufferEmpty(void) {
 }
 
 VideoFrame FFmpegDriver::getNextVideoFrame(void) {
-	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoContext.demuxerMutex);
 	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
 	if(readyVideoFrameBuffer.size() > 0) {
@@ -194,37 +305,37 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 		}
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
-		SDL_CondSignal(demuxerCond);
+		SDL_CondSignal(videoContext.demuxerCond);
 	} else {
 		YerFace_MutexUnlock(videoFrameBufferMutex);
-		YerFace_MutexUnlock(demuxerMutex);
+		YerFace_MutexUnlock(videoContext.demuxerMutex);
 		throw runtime_error("getNextVideoFrame() was called, but no video frames are pending");
 	}
 	YerFace_MutexUnlock(videoFrameBufferMutex);
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(videoContext.demuxerMutex);
 	return result;
 }
 
 bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
-	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoContext.demuxerMutex);
 	while(getIsVideoFrameBufferEmpty()) {
-		if(!demuxerRunning) {
-			YerFace_MutexUnlock(demuxerMutex);
+		if(!videoContext.demuxerRunning) {
+			YerFace_MutexUnlock(videoContext.demuxerMutex);
 			return false;
 		}
 
 		//Wait for the demuxer thread to generate more frames. Usually this only happens in realtime scenarios with --frameDrop
-		YerFace_MutexUnlock(demuxerMutex);
+		YerFace_MutexUnlock(videoContext.demuxerMutex);
 
 		if(!readyVideoFrameBufferEmptyWarning) {
 			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
 			readyVideoFrameBufferEmptyWarning = true;
 		}
 		SDL_Delay(1);
-		YerFace_MutexLock(demuxerMutex);
+		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(videoContext.demuxerMutex);
 	return true;
 }
 
@@ -235,16 +346,17 @@ void FFmpegDriver::releaseVideoFrame(VideoFrame videoFrame) {
 }
 
 void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallback) {
-	YerFace_MutexLock(demuxerMutex);
+	YerFace_MutexLock(videoContext.demuxerMutex);
+	YerFace_MutexLock(audioContext.demuxerMutex);
 
 	AudioFrameHandler *handler = new AudioFrameHandler();
 	handler->audioFrameCallback = audioFrameCallback;
 	handler->resampler.swrContext = NULL;
-	handler->resampler.bufferArray = NULL;
-	handler->resampler.bufferSamples = 0;
+	handler->resampler.audioFrameBackings.clear();
 	audioFrameHandlers.push_back(handler);
 
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(audioContext.demuxerMutex);
+	YerFace_MutexUnlock(videoContext.demuxerMutex);
 }
 
 void FFmpegDriver::logAVErr(String msg, int err) {
@@ -289,58 +401,72 @@ VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
 	return backing;
 }
 
-bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
+bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex) {
 	int ret;
-	if(streamIndex == videoStreamIndex) {
+	double timestamp;
+
+	if(context->videoStream != NULL && streamIndex == context->videoStreamIndex) {
 		// logger->verbose("Got video %s. Sending to codec...", packet ? "packet" : "flush call");
-		if(avcodec_send_packet(videoDecoderContext, packet) < 0) {
+		if(avcodec_send_packet(context->videoDecoderContext, packet) < 0) {
 			logger->warn("Error decoding video frame");
 			return false;
 		}
 
-		while(avcodec_receive_frame(videoDecoderContext, frame) == 0) {
-			// logger->verbose("Received decoded video frame with timestamp %.04lf (%ld units)!", frame->pts * videoStreamTimeBase, frame->pts);
-			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
-				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
+		while(avcodec_receive_frame(context->videoDecoderContext, context->frame) == 0) {
+			if(context->frame->width != width || context->frame->height != height || context->frame->format != pixelFormat) {
+				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), context->frame->width, context->frame->height, av_get_pix_fmt_name((AVPixelFormat)context->frame->format));
 				return false;
 			}
 
+			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
+
 			VideoFrame videoFrame;
-			videoFrame.timestamp = (double)frame->pts * videoStreamTimeBase;
+			videoFrame.timestamp = timestamp;
+			videoFrame.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp);
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
-			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
+
+			YerFace_MutexLock(videoStreamMutex);
+			newestVideoFrameTimestamp = videoFrame.timestamp;
+			newestVideoFrameEstimatedEndTimestamp = videoFrame.estimatedEndTimestamp;
+			YerFace_MutexUnlock(videoStreamMutex);
+			// logger->verbose("Inserted a VideoFrame with timestamps: %.04lf - (estimated) %.04lf", videoFrame.timestamp, videoFrame.estimatedEndTimestamp);
+
+			sws_scale(swsContext, context->frame->data, context->frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
 
 			YerFace_MutexLock(videoFrameBufferMutex);
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
 
-			av_frame_unref(frame);
+			av_frame_unref(context->frame);
 		}
-	} else if(audioStream != NULL && streamIndex == audioStreamIndex) {
+	}
+	if(context->audioStream != NULL && streamIndex == context->audioStreamIndex) {
 		// logger->verbose("Got audio %s. Sending to codec...", packet ? "packet" : "flush call");
-		if((ret = avcodec_send_packet(audioDecoderContext, packet)) < 0) {
+		if((ret = avcodec_send_packet(context->audioDecoderContext, packet)) < 0) {
 			logAVErr("Sending packet to audio codec.", ret);
 			return false;
 		}
 
-		while(avcodec_receive_frame(audioDecoderContext, frame) == 0) {
-			double frameTimestamp = frame->pts * audioStreamTimeBase;
-			int frameNumSamples = frame->nb_samples * frame->channels;
-			// logger->verbose("Received decoded audio frame with %d samples and timestamp %.04lf seconds!", frameNumSamples, frameTimestamp);
+		while(avcodec_receive_frame(context->audioDecoderContext, context->frame) == 0) {
+			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_AUDIO);
+
+			YerFace_MutexLock(audioStreamMutex);
+			newestAudioFrameTimestamp = timestamp;
+			YerFace_MutexUnlock(audioStreamMutex);
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
 				if(handler->resampler.swrContext == NULL) {
-					int inputChannelLayout = audioStream->codecpar->channel_layout;
+					int inputChannelLayout = context->audioStream->codecpar->channel_layout;
 					if(inputChannelLayout == 0) {
-						if(audioStream->codecpar->channels == 1) {
+						if(context->audioStream->codecpar->channels == 1) {
 							inputChannelLayout = AV_CH_LAYOUT_MONO;
-						} else if(audioStream->codecpar->channels == 2) {
+						} else if(context->audioStream->codecpar->channels == 2) {
 							inputChannelLayout = AV_CH_LAYOUT_STEREO;
 						} else {
 							throw runtime_error("Unsupported number of channels and/or channel layout!");
 						}
 					}
-					handler->resampler.swrContext = swr_alloc_set_opts(NULL, handler->audioFrameCallback.channelLayout, handler->audioFrameCallback.sampleFormat, handler->audioFrameCallback.sampleRate, inputChannelLayout, (enum AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->sample_rate, 0, NULL);
+					handler->resampler.swrContext = swr_alloc_set_opts(NULL, handler->audioFrameCallback.channelLayout, handler->audioFrameCallback.sampleFormat, handler->audioFrameCallback.sampleRate, inputChannelLayout, (enum AVSampleFormat)context->audioStream->codecpar->format, context->audioStream->codecpar->sample_rate, 0, NULL);
 					if(handler->resampler.swrContext == NULL) {
 						throw runtime_error("Failed generating a swr context!");
 					}
@@ -349,149 +475,334 @@ bool FFmpegDriver::decodePacket(const AVPacket *packet, int streamIndex) {
 					}
 					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->audioFrameCallback.channelLayout);
 				}
-				int expectedOutputSamples = swr_get_out_samples(handler->resampler.swrContext, frameNumSamples);
-				if(expectedOutputSamples < 0) {
-					throw runtime_error("Internal error in FFmpeg software resampler!");
-					return false;
-				}
-				if(handler->resampler.bufferArray == NULL || handler->resampler.bufferSamples < expectedOutputSamples) {
-					handler->resampler.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, audioStream->codecpar->sample_rate) + frameNumSamples, handler->audioFrameCallback.sampleRate, audioStream->codecpar->sample_rate, AV_ROUND_UP);
-					handler->resampler.bufferSamples += YERFACE_RESAMPLE_BUFFER_HEADROOM;
 
-					if(handler->resampler.bufferArray != NULL) {
-						av_freep(&handler->resampler.bufferArray[0]);
-						av_freep(&handler->resampler.bufferArray);
-					}
+				int bufferLineSize;
+				AudioFrameBacking audioFrameBacking;
+				audioFrameBacking.timestamp = timestamp;
+				audioFrameBacking.bufferArray = NULL;
+				//bufferSamples represents the expected number of samples produced by swr_convert() *PER CHANNEL*
+				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + context->frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
-					if(av_samples_alloc_array_and_samples(&handler->resampler.bufferArray, &handler->resampler.bufferLineSize, handler->resampler.numChannels, handler->resampler.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
-						throw runtime_error("Failed allocating audio buffer!");
-					}
-
-					logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
+				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
+					throw runtime_error("Failed allocating audio buffer!");
 				}
 
-				int audioSamples;
-				if((audioSamples = swr_convert(handler->resampler.swrContext, handler->resampler.bufferArray, handler->resampler.bufferSamples, (const uint8_t **)frame->data, frame->nb_samples)) < 0) {
+				// logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
+
+				if((audioFrameBacking.audioSamples = swr_convert(handler->resampler.swrContext, audioFrameBacking.bufferArray, audioFrameBacking.bufferSamples, (const uint8_t **)context->frame->data, context->frame->nb_samples)) < 0) {
 					throw runtime_error("Failed running swr_convert() for audio resampling");
 				}
 
-				int audioBytes;
-				if((audioBytes = av_samples_get_buffer_size(NULL, handler->resampler.numChannels, audioSamples, handler->audioFrameCallback.sampleFormat, 0)) < 0) {
-					throw runtime_error("Failed calculating output buffer size");
-				}
+				audioFrameBacking.audioBytes = audioFrameBacking.audioSamples * handler->resampler.numChannels * av_get_bytes_per_sample(handler->audioFrameCallback.sampleFormat);
 				
-				handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, handler->resampler.bufferArray[0], audioSamples, audioBytes, handler->resampler.bufferLineSize, frameTimestamp);
+				handler->resampler.audioFrameBackings.push_front(audioFrameBacking);
+				// logger->verbose("Pushed a resampled audio frame for handler. Frame queue depth is %d", handler->resampler.audioFrameBackings.size());
 			}
-			av_frame_unref(frame);
+			av_frame_unref(context->frame);
 		}
 	}
 
 	return true;
 }
 
-void FFmpegDriver::initializeDemuxerThread(void) {
-	demuxerRunning = true;
-	demuxerDraining = false;
-	demuxerThread = NULL;
+void FFmpegDriver::initializeDemuxerThread(MediaContext *context, enum AVMediaType type) {
+	context->demuxerRunning = false;
+	context->demuxerThread = NULL;
+	context->demuxerMutex = NULL;
+	context->demuxerCond = NULL;
 	
-	if((demuxerMutex = SDL_CreateMutex()) == NULL) {
+	if((context->demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
 	}
-	if((demuxerCond = SDL_CreateCond()) == NULL) {
-		throw runtime_error("Failed creating condition!");
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		if((context->demuxerCond = SDL_CreateCond()) == NULL) {
+			throw runtime_error("Failed creating condition!");
+		}
 	}
 }
 
-void FFmpegDriver::rollDemuxerThread(void) {
-	YerFace_MutexLock(demuxerMutex);
-	if(demuxerThread != NULL) {
-		YerFace_MutexUnlock(demuxerMutex);
+void FFmpegDriver::rollDemuxerThreads(void) {
+	rollDemuxerThread(&videoContext, AVMEDIA_TYPE_VIDEO);
+	if(audioContext.audioStream != NULL) {
+		rollDemuxerThread(&audioContext, AVMEDIA_TYPE_AUDIO);
+	}
+}
+
+void FFmpegDriver::rollDemuxerThread(MediaContext *context, enum AVMediaType type) {
+	YerFace_MutexLock(context->demuxerMutex);
+	if(context->demuxerThread != NULL) {
+		YerFace_MutexUnlock(context->demuxerMutex);
 		throw runtime_error("rollDemuxerThread was called, but demuxer was already set rolling!");
 	}
-	if((demuxerThread = SDL_CreateThread(FFmpegDriver::runDemuxerLoop, "DemuxerLoop", (void *)this)) == NULL) {
-		YerFace_MutexUnlock(demuxerMutex);
+	context->demuxerRunning = true;
+	if(type == AVMEDIA_TYPE_VIDEO) {
+		context->demuxerThread = SDL_CreateThread(FFmpegDriver::runVideoDemuxerLoop, "VideoDemuxer", (void *)this);
+	} else {
+		context->demuxerThread = SDL_CreateThread(FFmpegDriver::runAudioDemuxerLoop, "AudioDemuxer", (void *)this);
+	}
+	if(context->demuxerThread == NULL) {
+		YerFace_MutexUnlock(context->demuxerMutex);
 		throw runtime_error("Failed starting thread!");
 	}
-	YerFace_MutexUnlock(demuxerMutex);
+	YerFace_MutexUnlock(context->demuxerMutex);
 }
 
-void FFmpegDriver::destroyDemuxerThread(void) {
-	YerFace_MutexLock(demuxerMutex);
-	demuxerRunning = false;
-	demuxerDraining = true;
-	SDL_CondSignal(demuxerCond);
-	YerFace_MutexUnlock(demuxerMutex);
+void FFmpegDriver::destroyDemuxerThreads(void) {
+	YerFace_MutexLock(audioStreamMutex);
+	audioCallbacksOkay = false;
+	YerFace_MutexUnlock(audioStreamMutex);
 
-	SDL_WaitThread(demuxerThread, NULL);
-
-	SDL_DestroyCond(demuxerCond);
-	SDL_DestroyMutex(demuxerMutex);
+	destroyDemuxerThread(&videoContext, AVMEDIA_TYPE_VIDEO);
+	destroyDemuxerThread(&audioContext, AVMEDIA_TYPE_AUDIO);
 }
 
-int FFmpegDriver::runDemuxerLoop(void *ptr) {
+void FFmpegDriver::destroyDemuxerThread(MediaContext *context, enum AVMediaType type) {
+	YerFace_MutexLock(context->demuxerMutex);
+	context->demuxerRunning = false;
+	context->demuxerDraining = true;
+	if(context->demuxerCond != NULL) {
+		SDL_CondSignal(context->demuxerCond);
+	}
+	YerFace_MutexUnlock(context->demuxerMutex);
+
+	if(context->demuxerThread != NULL) {
+		SDL_WaitThread(context->demuxerThread, NULL);
+	}
+
+	if(context->demuxerCond != NULL) {
+		SDL_DestroyCond(context->demuxerCond);
+	}
+
+	SDL_DestroyMutex(context->demuxerMutex);
+}
+
+int FFmpegDriver::runVideoDemuxerLoop(void *ptr) {
 	FFmpegDriver *driver = (FFmpegDriver *)ptr;
-	driver->logger->verbose("Demuxer Thread alive!");
+	driver->logger->verbose("Video Demuxer Thread alive!");
 
+	if(!driver->getIsAudioInputPresent()) {
+		driver->logger->warn("==== NO AUDIO STREAM IS PRESENT! We can still proceed, but mouth shapes won't be informed by audible speech. ====");
+	}
+
+	bool includeAudio = false;
+	if(driver->videoContext.audioStream != NULL) {
+		includeAudio = true;
+	}
+	int ret = driver->innerDemuxerLoop(&driver->videoContext, AVMEDIA_TYPE_VIDEO, includeAudio);
+	driver->logger->verbose("Video Demuxer Thread quitting...");
+	return ret;
+}
+
+int FFmpegDriver::runAudioDemuxerLoop(void *ptr) {
+	FFmpegDriver *driver = (FFmpegDriver *)ptr;
+	driver->logger->verbose("Audio Demuxer Thread alive!");
+	int ret = driver->innerDemuxerLoop(&driver->audioContext, AVMEDIA_TYPE_AUDIO, true);
+	driver->logger->verbose("Audio Demuxer Thread quitting...");
+	return ret;
+}
+
+int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type, bool includeAudio) {
 	AVPacket packet;
 	av_init_packet(&packet);
 
-	YerFace_MutexLock(driver->demuxerMutex);
-	while(driver->demuxerRunning) {
-		while((driver->getIsVideoFrameBufferEmpty() || driver->frameDrop) && driver->demuxerRunning && !driver->demuxerDraining) {
-			if(av_read_frame(driver->formatContext, &packet) < 0) {
-				driver->logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
-				driver->demuxerDraining = true;
-				driver->decodePacket(NULL, driver->videoStreamIndex);
-				if(driver->audioStream != NULL) {
-					driver->decodePacket(NULL, driver->audioStreamIndex);
-				}
-			} else {
-				try {
-					if(!driver->decodePacket(&packet, packet.stream_index)) {
-						driver->logger->warn("Demuxer thread encountered a corrupted packet in the stream!");
-					}
-				} catch(exception &e) {
-					driver->logger->critical("Caught Exception: %s", e.what());
-					driver->logger->critical("Going down in flames...");
-					driver->demuxerRunning = false;
-				}
-				av_packet_unref(&packet);
+	YerFace_MutexLock(context->demuxerMutex);
+	while(context->demuxerRunning) {
+		if(type == AVMEDIA_TYPE_VIDEO) {
+			if(!getIsVideoDraining() && \
+			  (getIsVideoFrameBufferEmpty() || frameDrop)) {
+				// logger->verbose("Pumping VIDEO stream.");
+				pumpDemuxer(context, &packet, type);
 			}
 
-			if(driver->frameDrop) {
-				YerFace_MutexUnlock(driver->demuxerMutex);
+			if(getIsVideoDraining() && getIsVideoFrameBufferEmpty()) {
+				logger->verbose("Draining Video complete. Demuxer thread terminating...");
+				context->demuxerRunning = false;
+			}
+		} else {
+			if(!getIsAudioDraining()) {
+				// logger->verbose("Pumping AUDIO stream.");
+				pumpDemuxer(context, &packet, type);
+			}
+		}
+
+		if(type == AVMEDIA_TYPE_AUDIO || includeAudio) {
+			flushAudioHandlers(getIsAudioDraining());
+		}
+
+		if(context->demuxerRunning) {
+			if(frameDrop || type == AVMEDIA_TYPE_AUDIO) {
+				YerFace_MutexUnlock(context->demuxerMutex);
 				SDL_Delay(0);
-				YerFace_MutexLock(driver->demuxerMutex);
+				YerFace_MutexLock(context->demuxerMutex);
+			} else if(!getIsVideoFrameBufferEmpty()) {
+				// logger->verbose("Video Demuxer Thread going to sleep, waiting for work.");
+				if(SDL_CondWait(context->demuxerCond, context->demuxerMutex) < 0) {
+					throw runtime_error("Failed waiting on condition.");
+				}
+				// logger->verbose("Video Demuxer Thread is awake now!");
 			}
-		}
-
-		if(driver->demuxerDraining && driver->getIsVideoFrameBufferEmpty()) {
-			driver->logger->verbose("Draining complete. Demuxer thread terminating...");
-			driver->demuxerRunning = false;
-		}
-		
-		if(driver->frameDrop) {
-			YerFace_MutexUnlock(driver->demuxerMutex);
-			SDL_Delay(0);
-			YerFace_MutexLock(driver->demuxerMutex);
-		}
-		
-		if(driver->demuxerRunning && !driver->frameDrop) {
-			// driver->logger->verbose("Demuxer Thread going to sleep, waiting for work.");
-			if(SDL_CondWait(driver->demuxerCond, driver->demuxerMutex) < 0) {
-				throw runtime_error("Failed waiting on condition.");
-			}
-			// driver->logger->verbose("Demuxer Thread is awake now!");
 		}
 	}
 
-	YerFace_MutexUnlock(driver->demuxerMutex);
-	driver->logger->verbose("Demuxer Thread quitting...");
+	YerFace_MutexUnlock(context->demuxerMutex);
 	return 0;
 }
 
+void FFmpegDriver::pumpDemuxer(MediaContext *context, AVPacket *packet, enum AVMediaType type) {
+	try {
+		if(av_read_frame(context->formatContext, packet) < 0) {
+			logger->verbose("Demuxer thread encountered End of Stream! Going into draining mode...");
+			SDL_mutex *streamMutex = videoStreamMutex;
+			if(type == AVMEDIA_TYPE_AUDIO) {
+				streamMutex = audioStreamMutex;
+			}
+			YerFace_MutexLock(streamMutex);
+			context->demuxerDraining = true;
+			YerFace_MutexUnlock(streamMutex);
+
+			if(context->videoStream != NULL) {
+				decodePacket(context, NULL, context->videoStreamIndex);
+			}
+			if(context->audioStream != NULL) {
+				decodePacket(context, NULL, context->audioStreamIndex);
+			}
+		} else {
+			if(!decodePacket(context, packet, packet->stream_index)) {
+				logger->warn("Demuxer thread encountered a corrupted packet in the stream!");
+			}
+			av_packet_unref(packet);
+		}
+	} catch(exception &e) {
+		logger->critical("Caught Exception: %s", e.what());
+		logger->critical("Going down in flames...");
+		context->demuxerRunning = false;
+	}
+}
+
+bool FFmpegDriver::flushAudioHandlers(bool draining) {
+	bool completelyFlushed = true;
+	for(AudioFrameHandler *handler : audioFrameHandlers) {
+		while(handler->resampler.audioFrameBackings.size()) {
+			YerFace_MutexLock(videoStreamMutex);
+			double myNewestVideoFrameEstimatedEndTimestamp = newestVideoFrameEstimatedEndTimestamp;
+			YerFace_MutexUnlock(videoStreamMutex);
+			YerFace_MutexLock(audioStreamMutex);
+			bool callbacksOkay = audioCallbacksOkay;
+			YerFace_MutexUnlock(audioStreamMutex);
+
+			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
+			if(nextFrame.timestamp < myNewestVideoFrameEstimatedEndTimestamp || draining || lowLatency) {
+				if(callbacksOkay) {
+					handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
+				}
+				av_freep(&nextFrame.bufferArray[0]);
+				av_freep(&nextFrame.bufferArray);
+				handler->resampler.audioFrameBackings.pop_back();
+			} else {
+				completelyFlushed = false;
+				break;
+			}
+		}
+	}
+	return completelyFlushed;
+}
+
 bool FFmpegDriver::getIsAudioInputPresent(void) {
-	return (audioStream != NULL);
+	return (videoContext.audioStream != NULL) || (audioContext.audioStream != NULL);
+}
+
+bool FFmpegDriver::getIsAudioDraining(void) {
+	//// WARNING! Do *NOT* call this function with either videoStreamMutex or audioStreamMutex locked!
+	YerFace_MutexLock(videoStreamMutex);
+	YerFace_MutexLock(audioStreamMutex);
+	bool ret = (audioContext.formatContext != NULL && audioContext.demuxerDraining) || \
+		(videoContext.formatContext != NULL && videoContext.demuxerDraining);
+	YerFace_MutexUnlock(audioStreamMutex);
+	YerFace_MutexUnlock(videoStreamMutex);
+	return ret;
+}
+
+bool FFmpegDriver::getIsVideoDraining(void) {
+	YerFace_MutexLock(videoStreamMutex);
+	bool ret = videoContext.demuxerDraining;
+	YerFace_MutexUnlock(videoStreamMutex);
+	return ret;
+}
+
+double FFmpegDriver::calculateEstimatedEndTimestamp(double startTimestamp) {
+	frameStartTimes.push_back(startTimestamp);
+	while(frameStartTimes.size() > YERFACE_FRAME_DURATION_ESTIMATE_BUFFER) {
+		frameStartTimes.pop_front();
+	}
+	int count = 0, deltaCount = 0;
+	double lastTimestamp, delta, accum = 0.0;
+	for(double timestamp : frameStartTimes) {
+		if(count > 0) {
+			delta = (timestamp - lastTimestamp);
+			accum += delta;
+			deltaCount++;
+		}
+		lastTimestamp = timestamp;
+		count++;
+	}
+	if(deltaCount == 0) {
+		return startTimestamp + (1.0 / 120.0);
+	}
+	return startTimestamp + (accum / (double)deltaCount);
+}
+
+double FFmpegDriver::resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type) {
+	//// WARNING! Do *NOT* call this function with either videoStreamMutex or audioStreamMutex locked!
+	YerFace_MutexLock(videoStreamMutex);
+	YerFace_MutexLock(audioStreamMutex);
+	double *timeBase = &videoStreamTimeBase;
+	double *initialFrameTimestamp = &videoStreamInitialTimestamp;
+	bool *initialFrameTimestampSet = &videoStreamInitialTimestampSet;
+	if(type == AVMEDIA_TYPE_AUDIO) {
+		timeBase = &audioStreamTimeBase;
+		initialFrameTimestamp = &audioStreamInitialTimestamp;
+		initialFrameTimestampSet = &audioStreamInitialTimestampSet;
+	}
+
+	double timestamp = (double)frame->pts * *timeBase;
+
+	// logger->verbose("Calculating timestamp for %s frame with timestamp %.04lf (%ld units)!", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp, frame->pts);
+
+	if(!*initialFrameTimestampSet) {
+		// logger->verbose("Setting initial %s timestamp to %.04lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+		*initialFrameTimestamp = timestamp;
+		*initialFrameTimestampSet = true;
+	}
+	timestamp = timestamp - *initialFrameTimestamp;
+	// logger->verbose("After compensating for initial offset, %s frame timestamp is calculated to be %.04lf", type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+
+	YerFace_MutexUnlock(audioStreamMutex);
+	YerFace_MutexUnlock(videoStreamMutex);
+
+	return timestamp;
+}
+
+void FFmpegDriver::stopAudioCallbacksNow(void) {
+	YerFace_MutexLock(audioStreamMutex);
+	audioCallbacksOkay = false;
+	YerFace_MutexUnlock(audioStreamMutex);
+}
+
+void FFmpegDriver::recursivelyListAllAVOptions(void *obj, string depth) {
+	const AVClass *c;
+	if(!obj) {
+		return;
+	}
+	c = *(const AVClass**)obj;
+	const AVOption *opt = NULL;
+	while((opt = av_opt_next(obj, opt)) != NULL) {
+		logger->verbose("%s %s AVOption: %s (%s)", depth.c_str(), c->class_name, opt->name, opt->help);
+	}
+	const AVClass *childobjclass = NULL;
+	while((childobjclass = av_opt_child_class_next(c, childobjclass)) != NULL) {
+		void *childobj = &childobjclass;
+		recursivelyListAllAVOptions(childobj, "  " + depth);
+	}
 }
 
 }; //namespace YerFace
