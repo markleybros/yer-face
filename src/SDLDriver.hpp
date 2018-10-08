@@ -9,6 +9,7 @@
 namespace YerFace {
 
 #define YERFACE_PREVIEW_DEBUG_DENSITY_MAX 5
+#define YERFACE_AUDIO_LATE_GRACE 1
 
 enum PreviewPositionInFrame {
 	BottomLeft,

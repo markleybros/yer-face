@@ -422,11 +422,16 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
 		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
-		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < frameTimestamps.startTimestamp) {
+
+		double audioLateGracePeriod = (frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) * YERFACE_AUDIO_LATE_GRACE;
+		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - audioLateGracePeriod;
+		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
+			self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, audioLateGracePeriod);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 		}
-		if(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
+
+		if(self->audioFrameQueue.size() > 0) { // && self->audioFrameQueue.back()->timestamp >= frameTimestamps.startTimestamp) { // && self->audioFrameQueue.back()->timestamp < frameTimestamps.estimatedEndTimestamp) {
 			// self->logger->verbose("Filling audio buffer from frame in audio frame queue...");
 			int consumeBytes = remaining;
 			int frameRemainingBytes = self->audioFrameQueue.back()->audioBytes - self->audioFrameQueue.back()->pos;
@@ -443,7 +448,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 			}
 			streamPos += consumeBytes;
 		} else {
-			// self->logger->verbose("Filling the rest of the buffer with silence.");
+			self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
 			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
 			streamPos += remaining;
 		}

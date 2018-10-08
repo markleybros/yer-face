@@ -37,6 +37,11 @@ public:
 	AVCodecContext *audioDecoderContext;
 	AVStream *audioStream;
 
+	SDL_mutex *demuxerMutex;
+	SDL_cond *demuxerCond;
+	SDL_Thread *demuxerThread;
+	bool demuxerRunning;
+
 	bool demuxerDraining;
 };
 
@@ -89,7 +94,7 @@ public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inRate, String inCodec, bool tryAudio);
-	void rollDemuxerThread(void);
+	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
 	VideoFrame getNextVideoFrame(void);
@@ -103,24 +108,25 @@ private:
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
 	bool decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex);
-	void initializeDemuxerThread(void);
-	void destroyDemuxerThread(void);
-	static int runDemuxerLoop(void *ptr);
-	void pumpDemuxer(MediaContext *context, AVPacket *packet);
+	void initializeDemuxerThread(MediaContext *context, enum AVMediaType type);
+	void rollDemuxerThread(MediaContext *context, enum AVMediaType type);
+	void destroyDemuxerThreads(void);
+	void destroyDemuxerThread(MediaContext *context, enum AVMediaType type);
+	static int runVideoDemuxerLoop(void *ptr);
+	static int runAudioDemuxerLoop(void *ptr);
+	int innerDemuxerLoop(MediaContext *context, enum AVMediaType type, bool includeAudio);
+	void pumpDemuxer(MediaContext *context, AVPacket *packet, enum AVMediaType type);
 	double calculateEstimatedEndTimestamp(double startTimestamp);
 	bool flushAudioHandlers(bool draining);
 	bool getIsAudioDraining(void);
+	bool getIsVideoDraining(void);
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
+	void resolveStreamStartTime(MediaContext *context, enum AVMediaType type);
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;
 
 	Logger *logger;
-
-	SDL_mutex *demuxerMutex;
-	SDL_cond *demuxerCond;
-	SDL_Thread *demuxerThread;
-	bool demuxerRunning;
 
 	std::list<double> frameStartTimes;
 
@@ -130,6 +136,8 @@ private:
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	AVFrame *frame;
 	struct SwsContext *swsContext;
+
+	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
 	double videoStreamRealStartTime;
 	double videoStreamSyncDelta;
@@ -138,6 +146,7 @@ private:
 	double newestVideoFrameTimestamp;
 	double newestVideoFrameEstimatedEndTimestamp;
 
+	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
 	double audioStreamRealStartTime;
 	double audioStreamSyncDelta;

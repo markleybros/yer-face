@@ -233,7 +233,7 @@ int main(int argc, const char** argv) {
 int runCaptureLoop(void *ptr) {
 	VideoFrame videoFrame;
 
-	ffmpegDriver->rollDemuxerThread();
+	ffmpegDriver->rollDemuxerThreads();
 
 	bool didSetFrameSizeValid = false;
 	while(sdlDriver->getIsRunning()) {
