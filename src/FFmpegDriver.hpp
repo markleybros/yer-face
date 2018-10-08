@@ -29,6 +29,8 @@ public:
 	
 	AVFormatContext *formatContext;
 
+	AVFrame *frame;
+
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
 	AVStream *videoStream;
@@ -135,7 +137,6 @@ private:
 
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
-	AVFrame *frame;
 	struct SwsContext *swsContext;
 
 	SDL_mutex *videoStreamMutex;

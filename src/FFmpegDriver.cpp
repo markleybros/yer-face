@@ -11,6 +11,7 @@ using namespace std;
 namespace YerFace {
 
 MediaContext::MediaContext(void) {
+	frame = NULL;
 	formatContext = NULL;
 	videoDecoderContext = NULL;
 	videoStreamIndex = -1;
@@ -31,7 +32,6 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
 
-	frame = NULL;
 	swsContext = NULL;
 	readyVideoFrameBufferEmptyWarning = false;
 	videoStreamRealStartTimeSet = false;
@@ -53,10 +53,6 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 		av_register_all();
 	#endif
 	avformat_network_init();
-
-	if(!(frame = av_frame_alloc())) {
-		throw runtime_error("failed allocating frame");
-	}
 
 	if((videoFrameBufferMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating video frame buffer mutex!");
@@ -100,9 +96,9 @@ FFmpegDriver::~FFmpegDriver() {
 			avformat_close_input(&context.formatContext);
 			avformat_free_context(context.formatContext);
 		}
+		av_frame_free(&context.frame);
 	}
 	av_free(videoDestData[0]);
-	av_frame_free(&frame);
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		av_frame_free(&backing->frameBGR);
 		av_free(backing->buffer);
@@ -141,6 +137,10 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 	MediaContext *context = &videoContext;
 	if(type == AVMEDIA_TYPE_AUDIO) {
 		context = &audioContext;
+	}
+
+	if(!(context->frame = av_frame_alloc())) {
+		throw runtime_error("failed allocating frame");
 	}
 
 	if((context->formatContext = avformat_alloc_context()) == NULL) {
@@ -418,13 +418,13 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			return false;
 		}
 
-		while(avcodec_receive_frame(context->videoDecoderContext, frame) == 0) {
-			if(frame->width != width || frame->height != height || frame->format != pixelFormat) {
-				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), frame->width, frame->height, av_get_pix_fmt_name((AVPixelFormat)frame->format));
+		while(avcodec_receive_frame(context->videoDecoderContext, context->frame) == 0) {
+			if(context->frame->width != width || context->frame->height != height || context->frame->format != pixelFormat) {
+				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), context->frame->width, context->frame->height, av_get_pix_fmt_name((AVPixelFormat)context->frame->format));
 				return false;
 			}
 
-			timestamp = resolveFrameTimestamp(context, frame, AVMEDIA_TYPE_VIDEO);
+			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
 
 			VideoFrame videoFrame;
 			videoFrame.timestamp = timestamp;
@@ -437,14 +437,14 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			YerFace_MutexUnlock(videoStreamMutex);
 			// logger->verbose("Inserted a VideoFrame with timestamps: %.04lf - (estimated) %.04lf", videoFrame.timestamp, videoFrame.estimatedEndTimestamp);
 
-			sws_scale(swsContext, frame->data, frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
+			sws_scale(swsContext, context->frame->data, context->frame->linesize, 0, height, videoFrame.frameBacking->frameBGR->data, videoFrame.frameBacking->frameBGR->linesize);
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
 
 			YerFace_MutexLock(videoFrameBufferMutex);
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
 
-			av_frame_unref(frame);
+			av_frame_unref(context->frame);
 		}
 	}
 	if(context->audioStream != NULL && streamIndex == context->audioStreamIndex) {
@@ -454,8 +454,8 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			return false;
 		}
 
-		while(avcodec_receive_frame(context->audioDecoderContext, frame) == 0) {
-			timestamp = resolveFrameTimestamp(context, frame, AVMEDIA_TYPE_AUDIO);
+		while(avcodec_receive_frame(context->audioDecoderContext, context->frame) == 0) {
+			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_AUDIO);
 
 			YerFace_MutexLock(audioStreamMutex);
 			newestAudioFrameTimestamp = timestamp;
@@ -487,7 +487,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				audioFrameBacking.timestamp = timestamp;
 				audioFrameBacking.bufferArray = NULL;
 				//bufferSamples represents the expected number of samples produced by swr_convert() *PER CHANNEL*
-				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
+				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + context->frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
 				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
 					throw runtime_error("Failed allocating audio buffer!");
@@ -495,7 +495,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 				// logger->info("Allocated a new audio buffer, %d samples (%d bytes) in size.", handler->resampler.bufferSamples, handler->resampler.bufferLineSize);
 
-				if((audioFrameBacking.audioSamples = swr_convert(handler->resampler.swrContext, audioFrameBacking.bufferArray, audioFrameBacking.bufferSamples, (const uint8_t **)frame->data, frame->nb_samples)) < 0) {
+				if((audioFrameBacking.audioSamples = swr_convert(handler->resampler.swrContext, audioFrameBacking.bufferArray, audioFrameBacking.bufferSamples, (const uint8_t **)context->frame->data, context->frame->nb_samples)) < 0) {
 					throw runtime_error("Failed running swr_convert() for audio resampling");
 				}
 
@@ -504,7 +504,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				handler->resampler.audioFrameBackings.push_front(audioFrameBacking);
 				// logger->verbose("Pushed a resampled audio frame for handler. Frame queue depth is %d", handler->resampler.audioFrameBackings.size());
 			}
-			av_frame_unref(frame);
+			av_frame_unref(context->frame);
 		}
 	}
 
