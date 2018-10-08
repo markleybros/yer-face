@@ -27,15 +27,19 @@ using namespace cv;
 using namespace YerFace;
 
 String configFile;
+
 String inVideo;
 String inVideoFormat;
 String inVideoSize;
 String inVideoRate;
 String inVideoCodec;
+
 String inAudio;
 String inAudioFormat;
+String inAudioChannels;
 String inAudioRate;
 String inAudioCodec;
+
 String inEvents;
 String outData;
 String previewImgSeq;
@@ -91,6 +95,7 @@ int main(int argc, const char** argv) {
 		"{inVideoCodec||Tell libav to attempt a specific codec when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inAudio||Audio file, URL, or device to open. (Or '-' for STDIN.) (If you leave this blank, we will try to read the audio from inVideo.)}"
 		"{inAudioFormat||Tell libav to use a specific format to interpret the inAudio. Leave blank for auto-detection.}"
+		"{inAudioChannels||Tell libav to attempt a specific number of channels when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
@@ -134,6 +139,7 @@ int main(int argc, const char** argv) {
 		tryAudioInVideo = true;
 	}
 	inAudioFormat = parser.get<string>("inAudioFormat");
+	inAudioChannels = parser.get<string>("inAudioChannels");
 	inAudioRate = parser.get<string>("inAudioRate");
 	inAudioCodec = parser.get<string>("inAudioCodec");
 	inEvents = parser.get<string>("inEvents");
@@ -144,10 +150,10 @@ int main(int argc, const char** argv) {
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency);
-	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, inVideoRate, inVideoCodec, tryAudioInVideo);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, false);
+	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, tryAudioInVideo);
 	if(openInputAudio) {
-		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioRate, inAudioCodec, true);
+		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, true);
 	}
 	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);

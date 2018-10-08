@@ -21,7 +21,7 @@ MediaContext::MediaContext(void) {
 	demuxerDraining = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
@@ -71,6 +71,15 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	initializeDemuxerThread(&videoContext, AVMEDIA_TYPE_VIDEO);
 	initializeDemuxerThread(&audioContext, AVMEDIA_TYPE_AUDIO);
 
+	if(myListAllAvailableOptions) {
+		AVFormatContext *fmt;
+		if((fmt = avformat_alloc_context()) == NULL) {
+			throw runtime_error("Failed to avformat_alloc_context");
+		}
+		recursivelyListAllAVOptions((void *)fmt);
+		avformat_free_context(fmt);
+	}
+
 	logger->debug("FFmpegDriver object constructed and ready to go! Low Latency mode is %s.", lowLatency ? "ENABLED" : "DISABLED");
 }
 
@@ -114,7 +123,7 @@ FFmpegDriver::~FFmpegDriver() {
 	delete logger;
 }
 
-void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inRate, String inCodec, bool tryAudio) {
+void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio) {
 	int ret;
 	if(inFile.length() < 1) {
 		throw invalid_argument("specified input video/audio file must be a valid input filename");
@@ -167,13 +176,26 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 		}
 	} else {
 		if(inRate.length() > 0) {
-			av_dict_set(&options, "ar", inRate.c_str(), 0);
+			av_dict_set(&options, "sample_rate", inRate.c_str(), 0);
+		}
+		if(inChannels.length() > 0) {
+			av_dict_set(&options, "channels", inChannels.c_str(), 0);
 		}
 	}
 
 	if((ret = avformat_open_input(&context->formatContext, inFile.c_str(), inputFormat, &options)) < 0) {
 		logAVErr("input file could not be opened", ret);
 		throw runtime_error("input file could not be opened");
+	}
+	int count = av_dict_count(options);
+	if(count) {
+		logger->warn("avformat_open_input() rejected %d option(s)!", count);
+		char *dictstring;
+		if(av_dict_get_string(options, &dictstring, ',', ';') < 0) {
+			logger->error("Failed generating dictionary string!");
+		} else {
+			logger->warn("Dictionary: %s", dictstring);
+		}
 	}
 	av_dict_free(&options);
 
@@ -592,7 +614,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 		YerFace_MutexLock(videoStreamMutex);
 		YerFace_MutexLock(audioStreamMutex);
 		double myNewestAudioFrameTimestamp = newestAudioFrameTimestamp;
-		double myNewestVideoFrameTimestamp = newestVideoFrameTimestamp;
+		// double myNewestVideoFrameTimestamp = newestVideoFrameTimestamp;
 		double myNewestVideoFrameEstimatedEndTimestamp = newestVideoFrameEstimatedEndTimestamp;
 		YerFace_MutexUnlock(audioStreamMutex);
 		YerFace_MutexUnlock(videoStreamMutex);
@@ -601,7 +623,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 
 		if(type == AVMEDIA_TYPE_VIDEO) {
 			if(!getIsVideoDraining() && \
-			  (myNewestAudioFrameTimestamp > myNewestVideoFrameEstimatedEndTimestamp || getIsAudioDraining() || includeAudio) && \
+			  (myNewestAudioFrameTimestamp > myNewestVideoFrameEstimatedEndTimestamp || getIsAudioDraining() || includeAudio || !getIsAudioInputPresent()) && \
 			  (getIsVideoFrameBufferEmpty() || frameDrop)) {
 				// logger->verbose("Pumping VIDEO stream.");
 				pumpDemuxer(context, &packet, type);
@@ -628,11 +650,11 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 				SDL_Delay(0);
 				YerFace_MutexLock(context->demuxerMutex);
 			} else if(!getIsVideoFrameBufferEmpty()) {
-				logger->verbose("Video Demuxer Thread going to sleep, waiting for work.");
+				// logger->verbose("Video Demuxer Thread going to sleep, waiting for work.");
 				if(SDL_CondWait(context->demuxerCond, context->demuxerMutex) < 0) {
 					throw runtime_error("Failed waiting on condition.");
 				}
-				logger->verbose("Video Demuxer Thread is awake now!");
+				// logger->verbose("Video Demuxer Thread is awake now!");
 			}
 		}
 	}
@@ -773,7 +795,7 @@ double FFmpegDriver::resolveFrameTimestamp(MediaContext *context, AVFrame *frame
 
 	if(*streamSyncDelta != 0.0) {
 		timestamp = timestamp + *streamSyncDelta;
-		logger->verbose("After compensating for stream sync delta (%.04lf), %s frame timestamp is calculated to be %.04lf", *streamSyncDelta, type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
+		// logger->verbose("After compensating for stream sync delta (%.04lf), %s frame timestamp is calculated to be %.04lf", *streamSyncDelta, type == AVMEDIA_TYPE_VIDEO ? "VIDEO" : "AUDIO", timestamp);
 	}
 
 	YerFace_MutexUnlock(audioStreamMutex);
@@ -813,6 +835,23 @@ void FFmpegDriver::resolveStreamStartTime(MediaContext *context, enum AVMediaTyp
 		} else if(delta < 0.0) {
 			audioStreamSyncDelta = delta * (-1.0);
 		}
+	}
+}
+
+void FFmpegDriver::recursivelyListAllAVOptions(void *obj, string depth) {
+	const AVClass *c;
+	if(!obj) {
+		return;
+	}
+	c = *(const AVClass**)obj;
+	const AVOption *opt = NULL;
+	while((opt = av_opt_next(obj, opt)) != NULL) {
+		logger->verbose("%s %s AVOption: %s (%s)", depth.c_str(), c->class_name, opt->name, opt->help);
+	}
+	const AVClass *childobjclass = NULL;
+	while((childobjclass = av_opt_child_class_next(c, childobjclass)) != NULL) {
+		void *childobj = &childobjclass;
+		recursivelyListAllAVOptions(childobj, "  " + depth);
 	}
 }
 

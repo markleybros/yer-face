@@ -91,9 +91,9 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
-	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inRate, String inCodec, bool tryAudio);
+	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio);
 	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
@@ -122,6 +122,7 @@ private:
 	bool getIsVideoDraining(void);
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
 	void resolveStreamStartTime(MediaContext *context, enum AVMediaType type);
+	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;

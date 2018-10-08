@@ -448,7 +448,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 			}
 			streamPos += consumeBytes;
 		} else {
-			self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
+			// self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
 			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
 			streamPos += remaining;
 		}
