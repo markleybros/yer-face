@@ -22,7 +22,7 @@ Invoking YerFace On a Test Video
 Here's a quick way to check that YerFace is working on one of the test videos:
 
 ```
-build/bin/yer-face --captureFile=data/test-videos/QuickBrownFox.mkv
+build/bin/yer-face --inVideo=data/test-videos/QuickBrownFox.mkv
 ```
 
 This should run without error.
@@ -91,10 +91,10 @@ ffmpeg -framerate "${FPS}" -f video4linux2 -pixel_format "${PIXEL_FORMAT}" \
     -video_size "${RESOLUTION}" -i "${INPUT_VIDEO}" -f pulse -i default \
     -acodec copy -vcodec copy -f nut pipe:1 | \
         tee "${OUTPUT_VIDEO}" | \
-        build/bin/yer-face --captureFile=- --lowLatency
+        build/bin/yer-face --inVideo=- --lowLatency
 ```
 
-**NOTE:** As you can see, this command is the same capture command, but instead of saving to a file, we are outputting to the STDOUT pipe. The `tee` command saves a copy of the video to a file. The `--captureFile=-` flag tells YerFace to receive video from STDIN.
+**NOTE:** As you can see, this command is the same capture command, but instead of saving to a file, we are outputting to the STDOUT pipe. The `tee` command saves a copy of the video to a file. The `--inVideo=-` flag tells YerFace to receive video from STDIN. (For more input control options, see the output of `--help`.) _FIXME: More thoroughly document input options and improve example scripts to take better advantage of them._
 
 Dealing with Less Computing Power
 ---------------------------------
