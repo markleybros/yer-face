@@ -40,6 +40,8 @@ String inAudioChannels;
 String inAudioRate;
 String inAudioCodec;
 
+String outAudioChannelMap;
+
 String inEvents;
 String outData;
 String previewImgSeq;
@@ -98,6 +100,7 @@ int main(int argc, const char** argv) {
 		"{inAudioChannels||Tell libav to attempt a specific number of channels when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
+		"{outAudioChannelMap||Alter the audio channel mapping. Set to \"left\" to take only the left channel, \"right\" to take only the right channel, and leave blank for the default.}"
 		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
 		"{outData||Output file for generated performance capture data.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
@@ -142,6 +145,7 @@ int main(int argc, const char** argv) {
 	inAudioChannels = parser.get<string>("inAudioChannels");
 	inAudioRate = parser.get<string>("inAudioRate");
 	inAudioCodec = parser.get<string>("inAudioCodec");
+	outAudioChannelMap = parser.get<string>("outAudioChannelMap");
 	inEvents = parser.get<string>("inEvents");
 	outData = parser.get<string>("outData");
 	previewImgSeq = parser.get<string>("previewImgSeq");
@@ -151,9 +155,9 @@ int main(int argc, const char** argv) {
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, false);
-	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, tryAudioInVideo);
+	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
-		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, true);
+		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
 	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
@@ -161,7 +165,7 @@ int main(int argc, const char** argv) {
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
 	outputDriver = new OutputDriver(config, outData, frameDerivatives, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
-		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, outputDriver, lowLatency);
+		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
 	}
 	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives);
 
@@ -323,6 +327,9 @@ void doRenderPreviewFrame(void) {
 
 	faceTracker->renderPreviewHUD();
 	faceMapper->renderPreviewHUD();
+	if(sphinxDriver != NULL) {
+		sphinxDriver->renderPreviewHUD();
+	}
 
 	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 

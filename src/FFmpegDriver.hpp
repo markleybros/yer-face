@@ -23,9 +23,17 @@ namespace YerFace {
 
 class FrameDerivatives;
 
+enum FFmpegDriverOutAudioChannelMap {
+	CHANNELMAP_NONE = 0,
+	CHANNELMAP_LEFT_ONLY = 1,
+	CHANNELMAP_RIGHT_ONLY = 2
+};
+
 class MediaContext {
 public:
 	MediaContext(void);
+
+	FFmpegDriverOutAudioChannelMap outAudioChannelMap;
 	
 	AVFormatContext *formatContext;
 
@@ -81,6 +89,7 @@ public:
 class AudioFrameResampler {
 public:
 	int numChannels;
+	int channelMapping[2];
 	SwrContext *swrContext;
 	list<AudioFrameBacking> audioFrameBackings;
 };
@@ -95,7 +104,7 @@ class FFmpegDriver {
 public:
 	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
-	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio);
+	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
