@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include "FrameDerivatives.hpp"
 #include "FFmpegDriver.hpp"
+#include "SDLDriver.hpp"
 #include "OutputDriver.hpp"
 #include "Utilities.hpp"
 
@@ -51,18 +52,28 @@ public:
 	int utteranceIndex;
 };
 
+class SphinxWorkingVariables {
+public:
+	SphinxWorkingVariables(void);
+	PrestonBlairPhonemes lipFlapping;
+	double maxAmplitude;
+	bool peak, inSpeech;
+};
+
 class SphinxDriver {
 public:
-	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency);
+	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency);
 	~SphinxDriver() noexcept(false);
 	void advanceWorkingToCompleted(void);
+	void renderPreviewHUD(void);
 	void drainPipelineDataNow(void);
 private:
 	void initializeRecognitionThread(void);
 	void processPhonemesIntoVideoFrames(bool draining);
 	void handleProcessedVideoFrames(void);
 	void processUtteranceHypothesis(void);
-	void processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples);
+	void processAudioAmplitude(PocketSphinx::int16 const *buf, int samples);
+	void processLipFlappingAudio(void);
 	static int runRecognitionLoop(void *ptr);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
@@ -73,15 +84,18 @@ private:
 	json sphinxToPrestonBlairPhonemeMapping;
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
+	SDLDriver *sdlDriver;
 	OutputDriver *outputDriver;
 	bool lowLatency;
+
+	double vuMeterWidth, vuMeterWarningThreshold, vuMeterPeakHoldSeconds;
 
 	Logger *logger;
 
 	PocketSphinx::ps_decoder_t *pocketSphinx;
 	PocketSphinx::cmd_ln_t *pocketSphinxConfig;
 	
-	SDL_mutex *myWrkMutex;
+	SDL_mutex *myWrkMutex, *myCmpMutex;
 	SDL_cond *myWrkCond;
 	SDL_Thread *recognizerThread;
 
@@ -90,7 +104,6 @@ private:
 	int utteranceIndex;
 	double timestampOffset;
 	bool timestampOffsetSet;
-	PrestonBlairPhonemes workingLipFlapping, completedLipFlapping;
 
 	list<SphinxPhoneme> phonemeBuffer;
 
@@ -98,6 +111,10 @@ private:
 	list<SphinxAudioFrame *> audioFramesAllocated;
 
 	list<SphinxVideoFrame *> videoFrames;
+
+	SphinxWorkingVariables working, completed;
+
+	double vuMeterLastSetPeak;
 };
 
 }; //namespace YerFace
