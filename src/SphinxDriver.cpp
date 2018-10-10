@@ -34,7 +34,13 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 	};
 }
 
-SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
+SphinxWorkingVariables::SphinxWorkingVariables(void) {
+	maxAmplitude = 0.0;
+	peak = false;
+	inSpeech = false;
+}
+
+SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
@@ -42,6 +48,9 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	lipFlappingNonLinearResponse = config["YerFace"]["SphinxDriver"]["lipFlapping"]["nonLinearResponse"];
 	lipFlappingNotInSpeechScale = config["YerFace"]["SphinxDriver"]["lipFlapping"]["notInSpeechScale"];
 	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
+	vuMeterWidth = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWidth"];
+	vuMeterWarningThreshold = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWarningThreshold"];
+	vuMeterPeakHoldSeconds = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterPeakHoldSeconds"];
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
@@ -49,6 +58,10 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
 		throw invalid_argument("ffmpegDriver cannot be NULL");
+	}
+	sdlDriver = mySDLDriver;
+	if(sdlDriver == NULL) {
+		throw invalid_argument("sdlDriver cannot be NULL");
 	}
 	outputDriver = myOutputDriver;
 	if(outputDriver == NULL) {
@@ -60,12 +73,16 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	}
 	logger = new Logger("SphinxDriver");
 	
+	vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 	pocketSphinx = NULL;
 	pocketSphinxConfig = NULL;
 	timestampOffsetSet = false;
 	utteranceRestarted = false;
 	inSpeech = false;
 	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	
@@ -123,11 +140,8 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
 
 	if(lowLatency) {
-		PrestonBlairPhonemes empty;
-		completedLipFlapping = workingLipFlapping;
-		workingLipFlapping = empty;
-
-		outputDriver->insertCompletedFrameData("phonemes", completedLipFlapping.percent);
+		processLipFlappingAudio();
+		outputDriver->insertCompletedFrameData("phonemes", working.lipFlapping.percent);
 	} else {
 		// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
 		SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
@@ -143,9 +157,48 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 		handleProcessedVideoFrames();
 	}
 
+	YerFace_MutexLock(myCmpMutex);
+	SphinxWorkingVariables empty;
+	completed = working;
+	working = empty;
+	YerFace_MutexUnlock(myCmpMutex);
+
 	YerFace_MutexUnlock(myWrkMutex);
 }
 
+void SphinxDriver::renderPreviewHUD(void) {
+	YerFace_MutexLock(myCmpMutex);
+	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	int density = sdlDriver->getPreviewDebugDensity();
+	if(density > 0) {
+		Rect2d previewRect;
+		Point2d previewCenter;
+		sdlDriver->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
+
+		double vuHeight = previewRect.height * completed.maxAmplitude;
+		Rect2d vuMeter;
+		vuMeter.x = previewRect.x;
+		vuMeter.y = previewRect.y + (previewRect.height - vuHeight);
+		vuMeter.width = vuMeterWidth;
+		vuMeter.height = vuHeight;
+
+		Scalar color = Scalar(0, 255, 0);
+		if(completed.maxAmplitude >= vuMeterWarningThreshold) {
+			color = Scalar(0, 165, 255);
+		}
+		rectangle(frame, vuMeter, color, FILLED);
+
+		if(completed.peak) {
+			vuMeterLastSetPeak = (double)SDL_GetTicks() / (double)1000.0;
+		}
+		double now = (double)SDL_GetTicks() / (double)1000.0;
+		if(now <= vuMeterLastSetPeak + vuMeterPeakHoldSeconds) {
+			Rect2d peakIndicator = Rect2d(previewRect.x, previewRect.y, vuMeterWidth, vuMeterWidth);
+			rectangle(frame, peakIndicator, Scalar(0, 0, 255), FILLED);
+		}
+	}
+	YerFace_MutexUnlock(myCmpMutex);
+}
 void SphinxDriver::drainPipelineDataNow(void) {
 	if(recognizerThread == NULL) {
 		return;
@@ -158,8 +211,10 @@ void SphinxDriver::drainPipelineDataNow(void) {
 	recognizerThread = NULL;
 
 	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
 	SDL_DestroyCond(myWrkCond);
 	myWrkMutex = NULL;
+	myCmpMutex = NULL;
 	myWrkCond = NULL;
 }
 
@@ -264,31 +319,36 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 	}
 }
 
-void SphinxDriver::processLipFlappingAudio(PocketSphinx::int16 const *buf, int samples) {
-	double maxAmplitude = 0.0;
+void SphinxDriver::processAudioAmplitude(PocketSphinx::int16 const *buf, int samples) {
 	for(int i = 0; i < samples; i++) {
 		double amplitude = fabs((double)buf[i]) / (double)0x7FFF;
-		if(amplitude > maxAmplitude) {
-			maxAmplitude = amplitude;
+		if(amplitude > working.maxAmplitude) {
+			working.maxAmplitude = amplitude;
 		}
 	}
-	if(maxAmplitude > 1.0) {
-		maxAmplitude = 1.0;
+	if(working.maxAmplitude >= 1.0) {
+		working.maxAmplitude = 1.0;
+		working.peak = true;
 	}
+	if(inSpeech) {
+		working.inSpeech = true;
+	}
+}
+
+void SphinxDriver::processLipFlappingAudio(void) {
 	double lipFlappingAmount = 0.0;
 	double normalized = 0.0;
-	if(maxAmplitude >= lipFlappingResponseThreshold) {
-		normalized = Utilities::normalize(maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
+	if(working.maxAmplitude >= lipFlappingResponseThreshold) {
+		normalized = Utilities::normalize(working.maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
 		double temp = pow(normalized, lipFlappingNonLinearResponse);
-		if(!inSpeech) {
+		if(!working.inSpeech) {
 			temp = temp * lipFlappingNotInSpeechScale;
 		}
 		lipFlappingAmount = temp;
 	}
-	if(lipFlappingAmount > (double)workingLipFlapping.percent[lipFlappingTargetPhoneme]) {
-		workingLipFlapping.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
+	if(lipFlappingAmount > (double)working.lipFlapping.percent[lipFlappingTargetPhoneme]) {
+		working.lipFlapping.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
 	}
-	// logger->verbose("Lip Flapping... Samples: %d; maxAmplitude: %lf, normalized: %lf, lipFlappingAmount: %lf, output: %lf", samples, maxAmplitude, normalized, lipFlappingAmount, (double)workingLipFlapping.percent[lipFlappingTargetPhoneme]);
 }
 
 int SphinxDriver::runRecognitionLoop(void *ptr) {
@@ -300,14 +360,12 @@ int SphinxDriver::runRecognitionLoop(void *ptr) {
 		if(SDL_CondWait(self->myWrkCond, self->myWrkMutex) < 0) {
 			throw runtime_error("Failed waiting on condition.");
 		}
-		if(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
+		while(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
 			if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
 				throw runtime_error("Failed processing audio samples in PocketSphinx");
 			}
 			self->inSpeech = ps_get_in_speech(self->pocketSphinx);
-			if(self->lowLatency) {
-				self->processLipFlappingAudio((int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples);
-			}
+			self->processAudioAmplitude((int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 

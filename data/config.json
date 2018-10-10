@@ -114,6 +114,11 @@
         "Y": "etc",
         "Z": "etc",
         "ZH": "etc"
+      },
+      "PreviewHUD": {
+        "vuMeterWidth": 4,
+        "vuMeterWarningThreshold": 0.85,
+        "vuMeterPeakHoldSeconds": 1.0
       }
     },
     "EventLogger": {

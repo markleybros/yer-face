@@ -11,6 +11,7 @@ using namespace std;
 namespace YerFace {
 
 MediaContext::MediaContext(void) {
+	outAudioChannelMap = CHANNELMAP_NONE;
 	frame = NULL;
 	formatContext = NULL;
 	videoDecoderContext = NULL;
@@ -115,7 +116,7 @@ FFmpegDriver::~FFmpegDriver() {
 	delete logger;
 }
 
-void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, bool tryAudio) {
+void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio) {
 	int ret;
 	if(inFile.length() < 1) {
 		throw invalid_argument("specified input video/audio file must be a valid input filename");
@@ -179,6 +180,15 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 		}
 		if(inChannels.length() > 0) {
 			av_dict_set(&options, "channels", inChannels.c_str(), 0);
+		}
+		if(outAudioChannelMap.length() > 0) {
+			if(outAudioChannelMap == "left") {
+				context->outAudioChannelMap = CHANNELMAP_LEFT_ONLY;
+			} else if(outAudioChannelMap == "right") {
+				context->outAudioChannelMap = CHANNELMAP_RIGHT_ONLY;
+			} else {
+				throw invalid_argument("invalid outAudioChannelMap specified!");
+			}
 		}
 	}
 
@@ -470,10 +480,26 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 					if(handler->resampler.swrContext == NULL) {
 						throw runtime_error("Failed generating a swr context!");
 					}
+					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->audioFrameCallback.channelLayout);
+					if(handler->resampler.numChannels > 2) {
+						throw runtime_error("Somebody asked us to generate an unsupported number of audio channels.");
+					}
+					if(context->outAudioChannelMap != CHANNELMAP_NONE) {
+						if(context->outAudioChannelMap == CHANNELMAP_LEFT_ONLY) {
+							handler->resampler.channelMapping[0] = 0;
+							handler->resampler.channelMapping[1] = 0;
+						} else {
+							handler->resampler.channelMapping[0] = 1;
+							handler->resampler.channelMapping[1] = 1;
+						}
+						if((ret = swr_set_channel_mapping(handler->resampler.swrContext, handler->resampler.channelMapping)) < 0) {
+							logAVErr("Failed setting channel mapping.", ret);
+							throw runtime_error("Failed setting channel mapping!");
+						}
+					}
 					if(swr_init(handler->resampler.swrContext) < 0) {
 						throw runtime_error("Failed initializing swr context!");
 					}
-					handler->resampler.numChannels = av_get_channel_layout_nb_channels(handler->audioFrameCallback.channelLayout);
 				}
 
 				int bufferLineSize;
