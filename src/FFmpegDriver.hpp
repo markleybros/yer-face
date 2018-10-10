@@ -53,6 +53,7 @@ public:
 	bool demuxerRunning;
 
 	bool demuxerDraining;
+	bool scanning;
 };
 
 class VideoFrameBacking {
@@ -102,7 +103,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
@@ -133,9 +134,11 @@ private:
 	bool getIsVideoDraining(void);
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
+	bool handleScanning(MediaContext *context, double *timestamp);
 
 	FrameDerivatives *frameDerivatives;
 	bool frameDrop, lowLatency;
+	double from, until;
 
 	Logger *logger;
 

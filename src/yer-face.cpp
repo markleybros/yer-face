@@ -49,6 +49,9 @@ bool lowLatency = false;
 bool audioPreview = false;
 bool tryAudioInVideo = false;
 bool openInputAudio = false;
+
+double from, until;
+
 String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 json config = NULL;
@@ -101,6 +104,8 @@ int main(int argc, const char** argv) {
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
 		"{outAudioChannelMap||Alter the audio channel mapping. Set to \"left\" to take only the left channel, \"right\" to take only the right channel, and leave blank for the default.}"
+		"{from|-1.0|Start processing at \"from\" seconds into the input video. Unit is seconds. Minus one means the beginning of the input.}"
+		"{until|-1.0|Stop processing at \"until\" seconds into the input video. Unit is seconds. Minus one means the end of the input.}"
 		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
 		"{outData||Output file for generated performance capture data.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
@@ -146,15 +151,32 @@ int main(int argc, const char** argv) {
 	inAudioRate = parser.get<string>("inAudioRate");
 	inAudioCodec = parser.get<string>("inAudioCodec");
 	outAudioChannelMap = parser.get<string>("outAudioChannelMap");
+	from = parser.get<double>("from");
+	until = parser.get<double>("until");
 	inEvents = parser.get<string>("inEvents");
 	outData = parser.get<string>("outData");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	lowLatency = parser.get<bool>("lowLatency");
 	audioPreview = parser.get<bool>("audioPreview");
 
+	if(from != -1.0 || until != -1.0) {
+		if(lowLatency) {
+			throw invalid_argument("--lowLatency is incompatible with --from and --until (can't seek in a real time stream)");
+		}
+		if(from != -1.0 && from < 0.0) {
+			throw invalid_argument("If --from is enabled, it can't be negative.");
+		}
+		if(until != -1.0 && until < 0.0) {
+			throw invalid_argument("If --until is enabled, it can't be negative.");
+		}
+		if(from != -1.0 && until != -1.0 && until <= from) {
+			throw invalid_argument("When both are enabled, --from must be less than --until.");
+		}
+	}
+
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, false);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, from, until, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
