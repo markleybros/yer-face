@@ -411,6 +411,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	SDLDriver *self = (SDLDriver *)userdata;
 	YerFace_MutexLock(self->audioFramesMutex);
 	int streamPos = 0;
+	int frameDiscards = 0, frameFills = 0;
 	// self->logger->verbose("Audio Callback Fired");
 	FrameTimestamps frameTimestamps;
 	try {
@@ -425,9 +426,10 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 
 		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - YERFACE_AUDIO_LATE_GRACE;
 		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
-			// self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, audioLateGracePeriod);
+			self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, YERFACE_AUDIO_LATE_GRACE);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
+			frameDiscards++;
 		}
 
 		if(self->audioFrameQueue.size() > 0) {
@@ -446,10 +448,14 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 				self->audioFrameQueue.pop_back();
 			}
 			streamPos += consumeBytes;
+			frameFills++;
 		} else {
 			// self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
 			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
 			streamPos += remaining;
+			if(!frameFills && frameDiscards > 0) {
+				self->logger->warn("====== Discarded %d unsuitable input audio frames and used zero input audio frames! Audio preview buffer is full of silence! ======", frameDiscards);
+			}
 		}
 	}
 	YerFace_MutexUnlock(self->audioFramesMutex);
