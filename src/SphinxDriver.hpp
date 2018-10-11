@@ -56,6 +56,7 @@ class SphinxWorkingVariables {
 public:
 	SphinxWorkingVariables(void);
 	PrestonBlairPhonemes lipFlapping;
+	int framesIncluded;
 	double maxAmplitude;
 	bool peak, inSpeech;
 };
