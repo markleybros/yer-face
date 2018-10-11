@@ -189,7 +189,7 @@ int main(int argc, const char** argv) {
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
 	}
-	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives);
+	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives, from);
 
 	outputDriver->setEventLogger(eventLogger);
 
