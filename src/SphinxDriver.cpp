@@ -36,6 +36,7 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 
 SphinxWorkingVariables::SphinxWorkingVariables(void) {
 	maxAmplitude = 0.0;
+	framesIncluded = 0;
 	peak = false;
 	inSpeech = false;
 }
@@ -140,6 +141,11 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 	YerFace_MutexLock(myWrkMutex);
 
 	if(lowLatency) {
+		//Sometimes an entire video frame goes by without us seeing any new audio frames.
+		if(!working.framesIncluded) {
+			//Cheat by using last frame's results for lip flapping.
+			working = completed;
+		}
 		processLipFlappingAudio();
 		outputDriver->insertCompletedFrameData("phonemes", working.lipFlapping.percent);
 	} else {
@@ -320,6 +326,7 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 }
 
 void SphinxDriver::processAudioAmplitude(PocketSphinx::int16 const *buf, int samples) {
+	working.framesIncluded++;
 	for(int i = 0; i < samples; i++) {
 		double amplitude = fabs((double)buf[i]) / (double)0x7FFF;
 		if(amplitude > working.maxAmplitude) {
