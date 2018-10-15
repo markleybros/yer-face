@@ -1,6 +1,5 @@
-YerFace!
+<img align="right" style="max-height:15rem;" src="doc/images/yer-face-logo.jpg" />YerFace!
 ========
-<img align="right" style="max-width:20rem;" src="doc/images/yer-face-logo.jpg" />
 A stupid facial performance capture engine for cartoon animation.
 
 Documentation
