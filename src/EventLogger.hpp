@@ -17,15 +17,15 @@ class OutputDriver;
 class EventType {
 public:
 	string name;
-	function<void(string eventName, json eventPayload)> replayCallback;
+	function<bool(string eventName, json eventPayload, json sourcePacket)> replayCallback;
 };
 
 class EventLogger {
 public:
-	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives);
+	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives, double myFrom);
 	~EventLogger();
 	void registerEventType(EventType eventType);
-	void logEvent(string eventName, json payload, bool propagate = false);
+	void logEvent(string eventName, json payload, bool propagate = false, json sourcePacket = json::object());
 	void startNewFrame(void);
 	void handleCompletedFrame(void);
 private:
@@ -33,6 +33,8 @@ private:
 	string eventFilename;
 	OutputDriver *outputDriver;
 	FrameDerivatives *frameDerivatives;
+	double from;
+
 	Logger *logger;
 
 	FrameTimestamps workingFrameTimestamps;

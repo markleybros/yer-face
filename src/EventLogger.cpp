@@ -5,7 +5,7 @@ using namespace std;
 
 namespace YerFace {
 
-EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives) {
+EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives, double myFrom) {
 	eventTimestampAdjustment = config["YerFace"]["EventLogger"]["eventTimestampAdjustment"];
 	eventFilename = myEventFile;
 	outputDriver = myOutputDriver;
@@ -16,6 +16,7 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
+	from = myFrom;
 	logger = new Logger("EventLogger");
 
 	events = json::object();
@@ -24,7 +25,7 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	if(eventFilename.length() > 0) {
 		eventFilestream.open(eventFilename, ifstream::in | ifstream::binary);
 		if(eventFilestream.fail()) {
-			throw invalid_argument("could not open eventFile for reading");
+			throw invalid_argument("could not open inEvents for reading");
 		}
 		nextPacket = json::object();
 		eventReplay = true;
@@ -50,7 +51,7 @@ void EventLogger::registerEventType(EventType eventType) {
 	registeredEventTypes.push_back(eventType);
 }
 
-void EventLogger::logEvent(string eventName, json payload, bool propagate) {
+void EventLogger::logEvent(string eventName, json payload, bool propagate, json sourcePacket) {
 	bool eventFound = false;
 	EventType event;
 	for(EventType registered : registeredEventTypes) {
@@ -64,10 +65,13 @@ void EventLogger::logEvent(string eventName, json payload, bool propagate) {
 		logger->warn("Encountered unsupported event type [%s]! Are you using an old version of YerFace?", eventName.c_str());
 		return;
 	}
+	bool insertEventInCompletedFrameData = true;
 	if(propagate) {
-		event.replayCallback(eventName, payload);
+		insertEventInCompletedFrameData = event.replayCallback(eventName, payload, sourcePacket);
 	}
-	events[eventName] = payload;
+	if(insertEventInCompletedFrameData) {
+		events[eventName] = payload;
+	}
 }
 
 void EventLogger::startNewFrame(void) {
@@ -97,8 +101,12 @@ void EventLogger::processNextPacket(void) {
 		double frameStart = workingFrameTimestamps.startTimestamp - eventTimestampAdjustment;
 		double frameEnd = workingFrameTimestamps.estimatedEndTimestamp - eventTimestampAdjustment;
 		double packetTime = nextPacket["meta"]["startTime"];
+		if(from != -1.0 && from > 0.0) {
+			packetTime = packetTime - from;
+			nextPacket["meta"]["startTime"] = packetTime;
+		}
 		if(packetTime < frameEnd) {
-			if(packetTime < frameStart) {
+			if(packetTime >= 0.0 && packetTime < frameStart) {
 				logger->warn("==== EVENT REPLAY PACKET LATE! Processing anyway... ====");
 			}
 			json event;
@@ -108,8 +116,8 @@ void EventLogger::processNextPacket(void) {
 				return;
 			}
 
-			for (json::iterator iter = event.begin(); iter != event.end(); ++iter) {
-				logEvent(iter.key(), iter.value(), true);
+			for(json::iterator iter = event.begin(); iter != event.end(); ++iter) {
+				logEvent(iter.key(), iter.value(), true, nextPacket);
 			}
 		} else {
 			eventReplayHold = true;

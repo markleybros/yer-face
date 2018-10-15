@@ -21,9 +21,10 @@ MediaContext::MediaContext(void) {
 	videoStreamIndex = -1;
 	audioStream = NULL;
 	demuxerDraining = false;
+	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
@@ -32,6 +33,8 @@ FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDro
 	}
 	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
+	from = myFrom;
+	until = myUntil;
 
 	swsContext = NULL;
 	readyVideoFrameBufferEmptyWarning = false;
@@ -425,10 +428,15 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 		while(avcodec_receive_frame(context->videoDecoderContext, context->frame) == 0) {
 			if(context->frame->width != width || context->frame->height != height || context->frame->format != pixelFormat) {
 				logger->warn("We cannot handle runtime changes to video width, height, or pixel format. Unfortunately, the width, height or pixel format of the input video has changed: old [ width = %d, height = %d, format = %s ], new [ width = %d, height = %d, format = %s ]", width, height, av_get_pix_fmt_name(pixelFormat), context->frame->width, context->frame->height, av_get_pix_fmt_name((AVPixelFormat)context->frame->format));
+				av_frame_unref(context->frame);
 				return false;
 			}
 
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
+			if(!handleScanning(context, &timestamp)) {
+				av_frame_unref(context->frame);
+				continue;
+			}
 
 			VideoFrame videoFrame;
 			videoFrame.timestamp = timestamp;
@@ -460,6 +468,10 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 		while(avcodec_receive_frame(context->audioDecoderContext, context->frame) == 0) {
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_AUDIO);
+			if(!handleScanning(context, &timestamp)) {
+				av_frame_unref(context->frame);
+				continue;
+			}
 
 			YerFace_MutexLock(audioStreamMutex);
 			newestAudioFrameTimestamp = timestamp;
@@ -544,6 +556,10 @@ void FFmpegDriver::initializeDemuxerThread(MediaContext *context, enum AVMediaTy
 		if((context->demuxerCond = SDL_CreateCond()) == NULL) {
 			throw runtime_error("Failed creating condition!");
 		}
+	}
+
+	if(from != -1.0 && from > 0.0) {
+		context->scanning = true;
 	}
 }
 
@@ -656,7 +672,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 		}
 
 		if(context->demuxerRunning) {
-			if(frameDrop || type == AVMEDIA_TYPE_AUDIO) {
+			if(frameDrop || context->scanning || type == AVMEDIA_TYPE_AUDIO) {
 				YerFace_MutexUnlock(context->demuxerMutex);
 				SDL_Delay(0);
 				YerFace_MutexLock(context->demuxerMutex);
@@ -829,6 +845,21 @@ void FFmpegDriver::recursivelyListAllAVOptions(void *obj, string depth) {
 		void *childobj = &childobjclass;
 		recursivelyListAllAVOptions(childobj, "  " + depth);
 	}
+}
+
+bool FFmpegDriver::handleScanning(MediaContext *context, double *timestamp) {
+	if((from != -1.0 && *timestamp < from) || (until != -1.0 && *timestamp > until)) {
+		if(until != -1.0 && *timestamp > until) {
+			context->demuxerDraining = true;
+		}
+		logger->verbose("Throwing away a frame at (unadjusted) timestamp %.04lf to handle scanning. (From and Until)", *timestamp);
+		return false;
+	}
+	context->scanning = false;
+	if(from != -1.0) {
+		*timestamp = *timestamp - from;
+	}
+	return true;
 }
 
 }; //namespace YerFace

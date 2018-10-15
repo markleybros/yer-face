@@ -74,6 +74,7 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	}
 	logger = new Logger("SphinxDriver");
 	
+	drained = false;
 	vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 	pocketSphinx = NULL;
 	pocketSphinxConfig = NULL;
@@ -124,6 +125,12 @@ SphinxDriver::~SphinxDriver() noexcept(false) {
 	for(SphinxVideoFrame *frame : videoFrames) {
 		delete frame;
 	}
+	SDL_DestroyMutex(myWrkMutex);
+	SDL_DestroyMutex(myCmpMutex);
+	SDL_DestroyCond(myWrkCond);
+	myWrkMutex = NULL;
+	myCmpMutex = NULL;
+	myWrkCond = NULL;
 	delete logger;
 }
 
@@ -174,6 +181,10 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 
 void SphinxDriver::renderPreviewHUD(void) {
 	YerFace_MutexLock(myCmpMutex);
+	if(drained) {
+		YerFace_MutexUnlock(myCmpMutex);
+		return;
+	}
 	Mat frame = frameDerivatives->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
@@ -206,22 +217,18 @@ void SphinxDriver::renderPreviewHUD(void) {
 	YerFace_MutexUnlock(myCmpMutex);
 }
 void SphinxDriver::drainPipelineDataNow(void) {
-	if(recognizerThread == NULL) {
+	if(drained) {
 		return;
 	}
 	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(myCmpMutex);
+	drained = true;
+	YerFace_MutexUnlock(myCmpMutex);
 	recognizerRunning = false;
 	SDL_CondSignal(myWrkCond);
 	YerFace_MutexUnlock(myWrkMutex);
 	SDL_WaitThread(recognizerThread, NULL);
 	recognizerThread = NULL;
-
-	SDL_DestroyMutex(myWrkMutex);
-	SDL_DestroyMutex(myCmpMutex);
-	SDL_DestroyCond(myWrkCond);
-	myWrkMutex = NULL;
-	myCmpMutex = NULL;
-	myWrkCond = NULL;
 }
 
 void SphinxDriver::processPhonemesIntoVideoFrames(bool draining) {

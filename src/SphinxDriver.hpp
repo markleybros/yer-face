@@ -100,6 +100,7 @@ private:
 	SDL_cond *myWrkCond;
 	SDL_Thread *recognizerThread;
 
+	bool drained;
 	bool recognizerRunning;
 	bool utteranceRestarted, inSpeech;
 	int utteranceIndex;

@@ -63,7 +63,7 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivative
 		if(this->eventLogger != NULL) {
 			this->eventLogger->logEvent("basis", (json)true);
 		}
-		this->handleBasisEvent();
+		this->handleNewBasisEvent();
 	});
 	logger = new Logger("OutputDriver");
 
@@ -81,9 +81,7 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivative
 	}
 
 	if(outputFilename.length() > 0) {
-		outputBufWriterThreadPosition = 1;
-		outputBufFrameHandlerPosition = 1;
-		outputBuf.fill(NULL);
+		outputBuf.clear();
 		outputFilestream.open(outputFilename, ofstream::out | ofstream::binary | ofstream::trunc);
 		if(outputFilestream.fail()) {
 			throw invalid_argument("could not open outputFile for writing");
@@ -136,22 +134,36 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 
 	EventType basisEvent;
 	basisEvent.name = "basis";
-	basisEvent.replayCallback = [this] (string eventName, json eventPayload) -> void {
+	basisEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
 		if(eventName != "basis" || (bool)eventPayload != true) {
 			this->logger->warn("Got an unsupported replay event!");
-			return;
+			return false;
 		}
-		this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
-		this->handleBasisEvent();
+		return this->handleReplayBasisEvent(sourcePacket);
 	};
 	eventLogger->registerEventType(basisEvent);
 }
 
-void OutputDriver::handleBasisEvent(void) {
+void OutputDriver::handleNewBasisEvent(void) {
 	this->logger->verbose("Got a Basis Flag event. Handling...");
 	YerFace_MutexLock(streamFlagsMutex);
 	basisFlagged = true;
 	YerFace_MutexUnlock(streamFlagsMutex);
+}
+
+bool OutputDriver::handleReplayBasisEvent(json sourcePacket) {
+	this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
+	if((double)sourcePacket["meta"]["startTime"] < 0.0) {
+		sourcePacket["meta"]["frameNumber"] = -1;
+		sourcePacket["meta"]["startTime"] = 0.0;
+		YerFace_MutexLock(streamFlagsMutex);
+		autoBasisTransmitted = true;
+		outputNewFrame(sourcePacket, true);
+		YerFace_MutexUnlock(streamFlagsMutex);
+		return false;
+	}
+	handleNewBasisEvent();
+	return true;
 }
 
 int OutputDriver::launchWebSocketServer(void *data) {
@@ -183,22 +195,15 @@ int OutputDriver::writeOutputBufferToFile(void *data) {
 		}
 
 		YerFace_MutexLock(self->outputBufMutex);
-		while(self->outputBufWriterThreadPosition < self->outputBufFrameHandlerPosition) {
-			unsigned long idx = self->outputBufWriterThreadPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
-			if(!self->outputBuf[idx]->isReady()) {
-				break;
-			}
-			self->outputFilestream << self->outputBuf[idx]->frame.dump(-1, ' ', true) << "\n";
-			delete self->outputBuf[idx];
-			self->outputBuf[idx] = NULL;
-			self->outputBufWriterThreadPosition++;
+		while(self->outputBuf.size() && self->outputBuf.back().isReady()) {
+			self->outputFilestream << self->outputBuf.back().frame.dump(-1, ' ', true) << "\n";
+			self->outputBuf.pop_back();
 		}
 		YerFace_MutexUnlock(self->outputBufMutex);
 	}
 
-
 	YerFace_MutexLock(self->outputBufMutex);
-	if(self->outputBufFrameHandlerPosition > self->outputBufWriterThreadPosition) {
+	if(self->outputBuf.size()) {
 		self->logger->error("About to terminate file writer thread, but there are still non-flushed frames in the output buffer!!!");
 	}
 	YerFace_MutexUnlock(self->outputBufMutex);
@@ -289,46 +294,8 @@ void OutputDriver::handleCompletedFrame(void) {
 		frame["meta"]["basis"] = true;
 		logger->info("Transmitting basis flag based on received basis event.");
 	}
-	if(frame["meta"]["basis"]) {
-		lastBasisFrame = frame;
-	}
+	outputNewFrame(frame);
 	YerFace_MutexUnlock(this->streamFlagsMutex);
-
-	std::stringstream jsonString;
-	jsonString << frame.dump(-1, ' ', true);
-
-	YerFace_MutexLock(this->connectionListMutex);
-	try {
-		for(auto handle : connectionList) {
-			server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
-		}
-	} catch (websocketpp::exception const &e) {
-		logger->warn("Got a websocket exception: %s", e.what());
-	}
-	YerFace_MutexUnlock(this->connectionListMutex);
-
-	if(writerThread) {
-		OutputFrameContainer *container = new OutputFrameContainer();
-		for(string waitOn : lateFrameWaitOn) {
-			container->waitingOn[waitOn] = true;
-		}
-		container->frame = frame;
-		YerFace_MutexLock(writerMutex);
-		YerFace_MutexLock(outputBufMutex);
-		if(outputBufFrameHandlerPosition != (unsigned long)frameTimestamps.frameNumber) {
-			throw runtime_error("Frame numbers coming in out of order?!");
-		}
-		unsigned long bufferRequiredLength = outputBufFrameHandlerPosition - outputBufWriterThreadPosition;
-		if(bufferRequiredLength > OUTPUTDRIVER_RINGBUFFER_SIZE) {
-			throw runtime_error("OutputDriver Writer Thread falling too far behind! Ring buffer is not large enough!");
-		}
-		unsigned long idx = outputBufFrameHandlerPosition % OUTPUTDRIVER_RINGBUFFER_SIZE;
-		outputBuf[idx] = container;
-		outputBufFrameHandlerPosition++;
-		YerFace_MutexUnlock(outputBufMutex);
-		YerFace_MutexUnlock(writerMutex);
-		SDL_CondSignal(writerCond);
-	}
 
 	extraFrameData = json::object();
 }
@@ -342,12 +309,17 @@ void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json
 		return;
 	}
 	YerFace_MutexLock(outputBufMutex);
-	unsigned long idx = frameNumber % OUTPUTDRIVER_RINGBUFFER_SIZE;
-	if(outputBuf[idx] == NULL || outputBuf[idx]->frame["meta"]["frameNumber"] != frameNumber) {
+	bool success = false;
+	for(auto iter = outputBuf.begin(); iter != outputBuf.end(); ++iter) {
+		if((signed long)iter->frame["meta"]["frameNumber"] == frameNumber) {
+			iter->frame[key] = value;
+			iter->waitingOn[key] = false;
+			success = true;
+		}
+	}
+	if(!success) {
 		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
 	}
-	outputBuf[idx]->frame[key] = value;
-	outputBuf[idx]->waitingOn[key] = false;
 	YerFace_MutexUnlock(outputBufMutex);
 }
 
@@ -370,6 +342,43 @@ void OutputDriver::drainPipelineDataNow(void) {
 
 void OutputDriver::serverSetQuitPollTimer(void) {
 	server.set_timer(100, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
+}
+
+void OutputDriver::outputNewFrame(json frame, bool replay) {
+	YerFace_MutexLock(this->streamFlagsMutex);
+	if(frame["meta"]["basis"]) {
+		lastBasisFrame = frame;
+	}
+	YerFace_MutexUnlock(this->streamFlagsMutex);
+
+	std::stringstream jsonString;
+	jsonString << frame.dump(-1, ' ', true);
+
+	YerFace_MutexLock(this->connectionListMutex);
+	try {
+		for(auto handle : connectionList) {
+			server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+		}
+	} catch (websocketpp::exception const &e) {
+		logger->warn("Got a websocket exception: %s", e.what());
+	}
+	YerFace_MutexUnlock(this->connectionListMutex);
+
+	if(writerThread) {
+		OutputFrameContainer container;
+		if(!replay) {
+			for(string waitOn : lateFrameWaitOn) {
+				container.waitingOn[waitOn] = true;
+			}
+		}
+		container.frame = frame;
+		YerFace_MutexLock(writerMutex);
+		YerFace_MutexLock(outputBufMutex);
+		outputBuf.push_front(container);
+		YerFace_MutexUnlock(outputBufMutex);
+		YerFace_MutexUnlock(writerMutex);
+		SDL_CondSignal(writerCond);
+	}
 }
 
 }; //namespace YerFace

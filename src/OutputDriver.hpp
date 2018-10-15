@@ -19,8 +19,6 @@ using namespace std;
 
 namespace YerFace {
 
-#define OUTPUTDRIVER_RINGBUFFER_SIZE 3600
-
 class EventLogger;
 
 class OutputFrameContainer {
@@ -41,13 +39,15 @@ public:
 	void updateLateFrameData(signed long frameNumber, string key, json value);
 	void insertCompletedFrameData(string key, json value);
 private:
-	void handleBasisEvent(void);
+	void handleNewBasisEvent(void);
+	bool handleReplayBasisEvent(json sourcePacket);
 	static int launchWebSocketServer(void* data);
 	static int writeOutputBufferToFile(void *data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void serverSetQuitPollTimer(void);
+	void outputNewFrame(json frame, bool replay = false);
 
 	String outputFilename;
 	FrameDerivatives *frameDerivatives;
@@ -75,8 +75,7 @@ private:
 	bool autoBasisTransmitted, basisFlagged;
 	json lastBasisFrame;
 
-	array<OutputFrameContainer *, OUTPUTDRIVER_RINGBUFFER_SIZE> outputBuf;
-	unsigned long outputBufWriterThreadPosition, outputBufFrameHandlerPosition;
+	list<OutputFrameContainer> outputBuf;
 	SDL_mutex *outputBufMutex;
 
 	list<string> lateFrameWaitOn;

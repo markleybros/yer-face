@@ -1,4 +1,4 @@
-YerFace!
+<img align="right" height="200" src="doc/images/yer-face-logo.jpg" />YerFace!
 ========
 A stupid facial performance capture engine for cartoon animation.
 
@@ -18,4 +18,3 @@ You will find...
 Since this project is still in its infancy, unfortunately resources are still rather sparse. Please feel free to think of that as an opportunity to get involved!
 
 Pull requests, issue reports, and conversation are all welcome.
-

@@ -54,7 +54,7 @@
       "pointSmoothingOverSeconds": 0.1,
       "pointSmoothingExponent": 1.25,
       "pointMotionLowRejectionThreshold": 1.25,
-      "pointMotionHighRejectionThreshold": 20.0,
+      "pointMotionHighRejectionThreshold": 35.0,
       "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
