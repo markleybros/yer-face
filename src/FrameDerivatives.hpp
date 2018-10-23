@@ -38,7 +38,7 @@ class Metrics;
 
 class FrameDerivatives {
 public:
-	FrameDerivatives(json config);
+	FrameDerivatives(json config, bool myLowLatency);
 	~FrameDerivatives();
 	void setWorkingFrame(VideoFrame *videoFrame);
 	Mat getWorkingFrame(void);
@@ -54,6 +54,7 @@ public:
 	bool getCompletedFrameSet(void);
 
 private:
+	bool lowLatency;
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;

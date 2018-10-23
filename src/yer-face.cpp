@@ -175,7 +175,7 @@ int main(int argc, const char** argv) {
 	}
 
 	//Instantiate our classes.
-	frameDerivatives = new FrameDerivatives(config);
+	frameDerivatives = new FrameDerivatives(config, lowLatency);
 	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, from, until, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {

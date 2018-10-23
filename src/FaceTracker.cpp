@@ -39,14 +39,6 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
 	lowLatency = myLowLatency;
-	trackingBoxPercentage = config["YerFace"]["FaceTracker"]["trackingBoxPercentage"];
-	if(trackingBoxPercentage <= 0.0) {
-		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
-	}
-	maxTrackerDriftPercentage = config["YerFace"]["FaceTracker"]["maxTrackerDriftPercentage"];
-	if(maxTrackerDriftPercentage <= 0.0) {
-		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
-	}
 	poseSmoothingOverSeconds = config["YerFace"]["FaceTracker"]["poseSmoothingOverSeconds"];
 	if(poseSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("poseSmoothingOverSeconds cannot be less than or equal to zero.");

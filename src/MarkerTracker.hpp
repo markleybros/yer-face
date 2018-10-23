@@ -57,9 +57,6 @@ private:
 
 	MarkerType markerType;
 	FaceMapper *faceMapper;
-	bool performOpticalTracking;
-	double trackingBoxPercentage;
-	double maxTrackerDriftPercentage;
 	double pointSmoothingOverSeconds;
 	double pointSmoothingExponent;
 	double pointMotionLowRejectionThreshold;

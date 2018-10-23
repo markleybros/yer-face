@@ -8,16 +8,21 @@ using namespace std;
 
 namespace YerFace {
 
-FrameDerivatives::FrameDerivatives(json config) {
+FrameDerivatives::FrameDerivatives(json config, bool myLowLatency) {
 	logger = new Logger("FrameDerivatives");
+	lowLatency = myLowLatency;
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	classificationBoundingBox = config["YerFace"]["FrameDerivatives"]["classificationBoundingBox"];
+	string lowLatencyKey = "LowLatency";
+	if(!lowLatency) {
+		lowLatencyKey = "Offline";
+	}
+	classificationBoundingBox = config["YerFace"]["FrameDerivatives"][lowLatencyKey]["classificationBoundingBox"];
 	if(classificationBoundingBox < 0) {
 		throw invalid_argument("Classification Bounding Box is invalid.");
 	}
-	classificationScaleFactor = config["YerFace"]["FrameDerivatives"]["classificationScaleFactor"];
+	classificationScaleFactor = config["YerFace"]["FrameDerivatives"][lowLatencyKey]["classificationScaleFactor"];
 	if(classificationScaleFactor < 0.0 || classificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
