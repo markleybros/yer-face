@@ -43,14 +43,20 @@
       }
     },
     "FrameDerivatives": {
-      "classificationBoundingBox": 320,
-      "classificationScaleFactor": 0.0
+      "LowLatency": {
+        "classificationBoundingBox": 320,
+        "classificationScaleFactor": 0.0
+      },
+      "Offline": {
+        "classificationBoundingBox": 640,
+        "classificationScaleFactor": 0.0
+      }
     },
     "MarkerTracker": {
-      "pointSmoothingOverSeconds": 0.1,
+      "pointSmoothingOverSeconds": 0.25,
       "pointSmoothingExponent": 1.25,
       "pointMotionLowRejectionThreshold": 1.25,
-      "pointMotionHighRejectionThreshold": 35.0,
+      "pointMotionHighRejectionThreshold": 20.0,
       "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
