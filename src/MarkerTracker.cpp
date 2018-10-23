@@ -31,14 +31,6 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 	if(faceMapper == NULL) {
 		throw invalid_argument("faceMapper cannot be NULL");
 	}
-	trackingBoxPercentage = config["YerFace"]["MarkerTracker"]["trackingBoxPercentage"];
-	if(trackingBoxPercentage <= 0.0) {
-		throw invalid_argument("trackingBoxPercentage cannot be less than or equal to zero");
-	}
-	maxTrackerDriftPercentage = config["YerFace"]["MarkerTracker"]["maxTrackerDriftPercentage"];
-	if(maxTrackerDriftPercentage <= 0.0) {
-		throw invalid_argument("maxTrackerDriftPercentage cannot be less than or equal to zero");
-	}
 	pointSmoothingOverSeconds = config["YerFace"]["MarkerTracker"]["pointSmoothingOverSeconds"];
 	if(pointSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("pointSmoothingOverSeconds cannot be less than or equal to zero");

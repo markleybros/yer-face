@@ -180,8 +180,6 @@ private:
 	SDLDriver *sdlDriver;
 	FrameDerivatives *frameDerivatives;
 	bool lowLatency;
-	float trackingBoxPercentage;
-	float maxTrackerDriftPercentage;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
 	double poseRotationLowRejectionThreshold;
