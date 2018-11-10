@@ -3,7 +3,7 @@
     "FaceTracker": {
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
       "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat",
-      "poseSmoothingOverSeconds": 0.1,
+      "poseSmoothingOverSeconds": 0.5,
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.0,
       "poseTranslationLowRejectionThreshold": 7.0,
