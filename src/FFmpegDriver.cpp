@@ -184,14 +184,14 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 		if(inChannels.length() > 0) {
 			av_dict_set(&options, "channels", inChannels.c_str(), 0);
 		}
-		if(outAudioChannelMap.length() > 0) {
-			if(outAudioChannelMap == "left") {
-				context->outAudioChannelMap = CHANNELMAP_LEFT_ONLY;
-			} else if(outAudioChannelMap == "right") {
-				context->outAudioChannelMap = CHANNELMAP_RIGHT_ONLY;
-			} else {
-				throw invalid_argument("invalid outAudioChannelMap specified!");
-			}
+	}
+	if(outAudioChannelMap.length() > 0) {
+		if(outAudioChannelMap == "left") {
+			context->outAudioChannelMap = CHANNELMAP_LEFT_ONLY;
+		} else if(outAudioChannelMap == "right") {
+			context->outAudioChannelMap = CHANNELMAP_RIGHT_ONLY;
+		} else {
+			throw invalid_argument("invalid outAudioChannelMap specified!");
 		}
 	}
 
