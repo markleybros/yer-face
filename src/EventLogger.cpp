@@ -118,6 +118,7 @@ void EventLogger::processNextPacket(void) {
 
 			for(json::iterator iter = event.begin(); iter != event.end(); ++iter) {
 				logEvent(iter.key(), iter.value(), true, nextPacket);
+				nextPacket = json::object();
 			}
 		} else {
 			eventReplayHold = true;
