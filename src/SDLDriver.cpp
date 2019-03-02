@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview) {
+SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -56,11 +56,15 @@ SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDr
 	if(ffmpegDriver == NULL) {
 		throw invalid_argument("ffmpegDriver cannot be NULL");
 	}
+	headless = myHeadless;
 	audioPreview = myAudioPreview;
 
-	Uint32 sdlInitFlags = SDL_INIT_VIDEO;
-	if(audioPreview) {
-		sdlInitFlags |= SDL_INIT_AUDIO;
+	Uint32 sdlInitFlags = 0;
+	if(!headless) {
+		sdlInitFlags |= SDL_INIT_VIDEO;
+		if(audioPreview) {
+			sdlInitFlags |= SDL_INIT_AUDIO;
+		}
 	}
 	if(SDL_Init(sdlInitFlags) != 0) {
 		logger->error("Unable to initialize SDL: %s", SDL_GetError());
@@ -68,7 +72,7 @@ SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDr
 	atexit(SDL_Quit);
 
 	audioDevice.opened = false;
-	if(audioPreview) {
+	if(!headless && audioPreview) {
 		SDL_zero(audioDevice.desired);
 		audioDevice.desired.freq = 44100;
 		audioDevice.desired.format = AUDIO_S16SYS;
@@ -145,6 +149,10 @@ SDLDriver::~SDLDriver() {
 }
 
 SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height) {
+	if(headless) {
+		logger->verbose("SDLDriver::createPreviewWindow() called, but we're running in headless mode. This is an NOP.");
+		return previewWindow;
+	}
 	if(previewWindow.window != NULL || previewWindow.renderer != NULL) {
 		throw logic_error("SDL Driver asked to create a preview window, but one already exists!");
 	}
@@ -165,36 +173,42 @@ SDLWindowRenderer SDLDriver::getPreviewWindow(void) {
 	return previewWindow;
 }
 
-SDL_Texture *SDLDriver::getPreviewTexture(void) {
+SDL_Texture *SDLDriver::getPreviewTexture(Size textureSize) {
+	if(headless) {
+		logger->verbose("SDLDriver::getPreviewTexture() called, but we're running in headless mode. This is an NOP.");
+		return previewTexture;
+	}
 	if(previewTexture != NULL) {
+		int actualWidth, actualHeight;
+		SDL_QueryTexture(previewTexture, NULL, NULL, &actualWidth, &actualHeight);
+		if(actualWidth != textureSize.width || actualHeight != textureSize.height) {
+			logger->error("Requested texture size (%dx%d) does not match previous texture size (%dx%d)! Somebody has yanked the rug out from under us.", textureSize.width, textureSize.height, actualWidth, actualHeight);
+			throw runtime_error("Requested vs. Actual texture size mismatch! Somebody has yanked the rug out from under us.");
+		}
 		return previewTexture;
 	}
 	if(previewWindow.renderer == NULL) {
 		throw logic_error("SDLDriver::getPreviewTexture() was called, but there is no preview window renderer!");
 	}
-	Size frameSize = frameDerivatives->getWorkingFrameSize();
-	logger->verbose("Creating Preview SDL Texture <%dx%d>", frameSize.width, frameSize.height);
-	previewTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, frameSize.width, frameSize.height);
+	logger->verbose("Creating Preview SDL Texture <%dx%d>", textureSize.width, textureSize.height);
+	previewTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, textureSize.width, textureSize.height);
 	if(previewTexture == NULL) {
 		throw runtime_error("SDL Driver was not able to create a preview texture!");
 	}
 	return previewTexture;
 }
 
-void SDLDriver::doRenderPreviewFrame(void) {
+void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
+	if(headless) {
+		logger->verbose("SDLDriver::doRenderPreviewFrame() called, but we're running in headless mode. This is an NOP.");
+		return;
+	}
 	if(previewWindow.window == NULL || previewWindow.renderer == NULL) {
 		throw logic_error("SDL Driver asked to render preview frame, but no preview window/renderer exists!");
 	}
 
-	SDL_Texture *texture = getPreviewTexture();
-	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
 	Size previewFrameSize = previewFrame.size();
-
-	int textureWidth, textureHeight;
-	SDL_QueryTexture(texture, NULL, NULL, &textureWidth, &textureHeight);
-	if(textureWidth != previewFrameSize.width || textureHeight != previewFrameSize.height) {
-		throw runtime_error("Texture and frame dimension mismatch! Somebody has yanked the rug out from under us.");
-	}
+	SDL_Texture *texture = getPreviewTexture(previewFrameSize);
 
 	unsigned char * textureData = NULL;
 	int texturePitch = 0;

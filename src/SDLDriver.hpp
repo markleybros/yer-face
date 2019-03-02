@@ -50,12 +50,12 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myAudioPreview = true);
+	SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
-	SDL_Texture *getPreviewTexture(void);
-	void doRenderPreviewFrame(void);
+	SDL_Texture *getPreviewTexture(Size textureSize);
+	void doRenderPreviewFrame(Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
 	void setIsRunning(bool newisRunning);
@@ -78,6 +78,7 @@ private:
 
 	FrameDerivatives *frameDerivatives;
 	FFmpegDriver *ffmpegDriver;
+	bool headless;
 	bool audioPreview;
 
 	Logger *logger;
