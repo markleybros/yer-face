@@ -98,7 +98,7 @@ int main(int argc, const char** argv) {
 		"{inVideoSize||Tell libav to attempt a specific resolution when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoRate||Tell libav to attempt a specific framerate when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoCodec||Tell libav to attempt a specific codec when interpreting inVideo. Leave blank for auto-detection.}"
-		"{inAudio||Audio file, URL, or device to open. (Or '-' for STDIN.) (If you leave this blank, we will try to read the audio from inVideo.)}"
+		"{inAudio||Audio file, URL, or device to open. Alternatively: '' (blank string, the default) we will try to read the audio from inVideo. '-' we will try to read the audio from STDIN. 'ignore' we will ignore all audio from all sources.}"
 		"{inAudioFormat||Tell libav to use a specific format to interpret the inAudio. Leave blank for auto-detection.}"
 		"{inAudioChannels||Tell libav to attempt a specific number of channels when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
@@ -142,8 +142,15 @@ int main(int argc, const char** argv) {
 		inAudio = "pipe:0";
 	}
 	if(inAudio.length() > 0) {
-		openInputAudio = true;
+		if(inAudio == "ignore") {
+			openInputAudio = false;
+			tryAudioInVideo = false;
+		} else {
+			openInputAudio = true;
+			tryAudioInVideo = false;
+		}
 	} else {
+		openInputAudio = false;
 		tryAudioInVideo = true;
 	}
 	inAudioFormat = parser.get<string>("inAudioFormat");
