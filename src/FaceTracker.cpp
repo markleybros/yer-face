@@ -102,7 +102,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker", frameDerivatives);
+	metrics = new Metrics(config, "FaceTracker.Process.All", frameDerivatives);
+	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameDerivatives);
+	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameDerivatives, true);
 
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -120,12 +122,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 		frontalFaceDetector = get_frontal_face_detector();
 	}
 
-	classifierRunning = false;
-	if(lowLatency) {
-		classifierRunning = true;
-		if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
-			throw runtime_error("Failed starting thread!");
-		}
+	classifierRunning = true;
+	if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
+		throw runtime_error("Failed starting thread!");
 	}
 
 	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s, Low Latency Mode: %s", usingDNNFaceDetection ? "DNN" : "HOG", lowLatency ? "Enabled" : "Disabled");
@@ -133,15 +132,15 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 
 FaceTracker::~FaceTracker() noexcept(false) {
 	logger->debug("FaceTracker object destructing...");
-	if(lowLatency) {
-		YerFace_MutexLock(myClassificationMutex);
-		classifierRunning = false;
-		YerFace_MutexUnlock(myClassificationMutex);
-		SDL_WaitThread(classifierThread, NULL);
-	}
+	YerFace_MutexLock(myClassificationMutex);
+	classifierRunning = false;
+	YerFace_MutexUnlock(myClassificationMutex);
+	SDL_WaitThread(classifierThread, NULL);
 	SDL_DestroyMutex(myCmpMutex);
 	SDL_DestroyMutex(myClassificationMutex);
 	delete metrics;
+	delete metricsLandmarks;
+	delete metricsClassifier;
 	delete logger;
 }
 
@@ -149,24 +148,20 @@ FaceTracker::~FaceTracker() noexcept(false) {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 void FaceTracker::processCurrentFrame(void) {
-	metrics->startClock();
+	MetricsTick tick = metrics->startClock();
 
 	ClassificationFrame classificationFrame = frameDerivatives->getClassificationFrame();
 
-	if(!lowLatency) {
-		doClassifyFace(classificationFrame);
-	} else {
-		static bool didClassifierRun = false;
-		while(!didClassifierRun) {
-			YerFace_MutexLock(myClassificationMutex);
-			if(newestClassificationBox.run) {
-				YerFace_MutexUnlock(myClassificationMutex);
-				didClassifierRun = true;
-				break;
-			}
+	static bool didClassifierRun = false;
+	while(!didClassifierRun) {
+		YerFace_MutexLock(myClassificationMutex);
+		if(newestClassificationBox.run) {
 			YerFace_MutexUnlock(myClassificationMutex);
-			SDL_Delay(10);
+			didClassifierRun = true;
+			break;
 		}
+		YerFace_MutexUnlock(myClassificationMutex);
+		SDL_Delay(10);
 	}
 
 	assignFaceRect();
@@ -177,7 +172,7 @@ void FaceTracker::processCurrentFrame(void) {
 
 	doPrecalculateFacialPlaneNormal();
 
-	metrics->endClock();
+	metrics->endClock(tick);
 }
 
 void FaceTracker::advanceWorkingToCompleted(void) {
@@ -226,6 +221,7 @@ void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
 		}
 	}
 	YerFace_MutexLock(myClassificationMutex);
+	newestClassificationBox.timestamps = classificationFrame.timestamps;
 	newestClassificationBox.run = true;
 	newestClassificationBox.set = false;
 	if(bestFace >= 0) {
@@ -260,7 +256,9 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
 		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
 
+	MetricsTick tick = metricsLandmarks->startClock();
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
+	metricsLandmarks->endClock(tick);
 
 	working.facialFeatures.featuresExposed.features.clear();
 	working.facialFeatures.featuresExposed.features.resize(result.num_parts());
@@ -665,8 +663,10 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 
 		if(classificationFrame.set && classificationFrame.timestamps.set &&
 		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {
+			MetricsTick tick = self->metricsClassifier->startClock();
 			self->doClassifyFace(classificationFrame);
 			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
+			self->metricsClassifier->endClock(tick);
 		}
 
 		YerFace_MutexLock(self->myClassificationMutex);
@@ -675,7 +675,7 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 			break;
 		}
 		YerFace_MutexUnlock(self->myClassificationMutex);
-		SDL_Delay(1);
+		SDL_Delay(0);
 	}
 
 	self->logger->verbose("Face Tracker Classification Thread quitting...");

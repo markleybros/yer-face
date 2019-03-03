@@ -35,7 +35,7 @@ download_project(PROJ	jsoncpp
 
 download_project(PROJ	asio
 	GIT_REPOSITORY	https://github.com/chriskohlhoff/asio.git
-	GIT_TAG	master
+	GIT_TAG	asio-1-12-2
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 

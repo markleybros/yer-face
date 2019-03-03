@@ -46,6 +46,7 @@ String inEvents;
 String outData;
 String previewImgSeq;
 bool lowLatency = false;
+bool headless = false;
 bool audioPreview = false;
 bool tryAudioInVideo = false;
 bool openInputAudio = false;
@@ -81,7 +82,7 @@ SDL_mutex *frameSizeMutex;
 //END VARIABLES PROTECTED BY frameSizeMutex
 
 static int runCaptureLoop(void *ptr);
-void doRenderPreviewFrame(void);
+Mat doRenderPreviewFrame(void);
 void parseConfigFile(void);
 
 int main(int argc, const char** argv) {
@@ -98,7 +99,7 @@ int main(int argc, const char** argv) {
 		"{inVideoSize||Tell libav to attempt a specific resolution when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoRate||Tell libav to attempt a specific framerate when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoCodec||Tell libav to attempt a specific codec when interpreting inVideo. Leave blank for auto-detection.}"
-		"{inAudio||Audio file, URL, or device to open. (Or '-' for STDIN.) (If you leave this blank, we will try to read the audio from inVideo.)}"
+		"{inAudio||Audio file, URL, or device to open. Alternatively: '' (blank string, the default) we will try to read the audio from inVideo. '-' we will try to read the audio from STDIN. 'ignore' we will ignore all audio from all sources.}"
 		"{inAudioFormat||Tell libav to use a specific format to interpret the inAudio. Leave blank for auto-detection.}"
 		"{inAudioChannels||Tell libav to attempt a specific number of channels when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
@@ -110,6 +111,7 @@ int main(int argc, const char** argv) {
 		"{outData||Output file for generated performance capture data.}"
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
+		"{headless||If set, all video and audio output is disabled. Intended to be suitable for jobs running in the terminal.}"
 		);
 
 	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
@@ -142,8 +144,15 @@ int main(int argc, const char** argv) {
 		inAudio = "pipe:0";
 	}
 	if(inAudio.length() > 0) {
-		openInputAudio = true;
+		if(inAudio == "ignore") {
+			openInputAudio = false;
+			tryAudioInVideo = false;
+		} else {
+			openInputAudio = true;
+			tryAudioInVideo = false;
+		}
 	} else {
+		openInputAudio = false;
 		tryAudioInVideo = true;
 	}
 	inAudioFormat = parser.get<string>("inAudioFormat");
@@ -157,6 +166,7 @@ int main(int argc, const char** argv) {
 	outData = parser.get<string>("outData");
 	previewImgSeq = parser.get<string>("previewImgSeq");
 	lowLatency = parser.get<bool>("lowLatency");
+	headless = parser.get<bool>("headless");
 	audioPreview = parser.get<bool>("audioPreview");
 
 	if(from != -1.0 || until != -1.0) {
@@ -181,7 +191,7 @@ int main(int argc, const char** argv) {
 	if(openInputAudio) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
-	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, audioPreview && ffmpegDriver->getIsAudioInputPresent());
+	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
 	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
 	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
@@ -212,9 +222,9 @@ int main(int argc, const char** argv) {
 
 	//Launch event / rendering loop.
 	while(sdlDriver->getIsRunning()) {
-		SDL_Delay(10);
+		SDL_Delay(10); //FIXME - This doesn't have much of an impact on performance, but a better timing mechanism would be preferable.
 
-		if(sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
+		if(!headless && sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
 			if(!frameSizeValid) {
 				YerFace_MutexUnlock(frameSizeMutex);
@@ -230,10 +240,17 @@ int main(int argc, const char** argv) {
 			YerFace_MutexUnlock(frameSizeMutex);
 		}
 
-		if(frameDerivatives->getCompletedFrameSet()) {
-			doRenderPreviewFrame();
-			if(sdlWindowRenderer.window != NULL) {
-				sdlDriver->doRenderPreviewFrame();
+		if(!headless) {
+			bool previewFrameValid = false;
+			Mat previewFrame;
+			YerFace_MutexLock(flipWorkingCompletedMutex);
+			if(frameDerivatives->getCompletedFrameSet()) {
+				previewFrame = doRenderPreviewFrame();
+				previewFrameValid = true;
+			}
+			YerFace_MutexUnlock(flipWorkingCompletedMutex);
+			if(previewFrameValid && sdlWindowRenderer.window != NULL) {
+				sdlDriver->doRenderPreviewFrame(previewFrame);
 			}
 		}
 
@@ -288,7 +305,7 @@ int runCaptureLoop(void *ptr) {
 			}
 
 			// Start timer
-			metrics->startClock();
+			MetricsTick tick = metrics->startClock();
 
 			frameDerivatives->setWorkingFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
@@ -298,7 +315,7 @@ int runCaptureLoop(void *ptr) {
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
-			metrics->endClock();
+			metrics->endClock(tick);
 
 			while(sdlDriver->getIsPaused() && sdlDriver->getIsRunning()) {
 				SDL_Delay(100);
@@ -316,15 +333,15 @@ int runCaptureLoop(void *ptr) {
 			eventLogger->handleCompletedFrame();
 			outputDriver->handleCompletedFrame();
 
-			//If requested, write image sequence.
+			//If requested, write image sequence. Note this is VERY EXPENSIVE because it's blocking on the capture loop.
 			if(previewImgSeq.length() > 0) {
-				doRenderPreviewFrame();
+				Mat previewFrame = doRenderPreviewFrame();
 
 				int filenameLength = previewImgSeq.length() + 32;
 				char filename[filenameLength];
 				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), workingFrameNumber);
 				logger->debug("YerFace writing preview frame to %s ...", filename);
-				imwrite(filename, frameDerivatives->getCompletedPreviewFrame());
+				imwrite(filename, previewFrame);
 			}
 
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
@@ -342,7 +359,7 @@ int runCaptureLoop(void *ptr) {
 	return 0;
 }
 
-void doRenderPreviewFrame(void) {
+Mat doRenderPreviewFrame(void) {
 	YerFace_MutexLock(flipWorkingCompletedMutex);
 
 	frameDerivatives->resetCompletedPreviewFrame();
@@ -353,12 +370,14 @@ void doRenderPreviewFrame(void) {
 		sphinxDriver->renderPreviewHUD();
 	}
 
-	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame();
+	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame().clone();
 
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
 	YerFace_MutexUnlock(flipWorkingCompletedMutex);
+
+	return previewFrame;
 }
 
 void parseConfigFile(void) {

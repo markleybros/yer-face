@@ -23,9 +23,9 @@ CUDA
 
 That said:
 - Fetch the `deb (network)` file from here: https://developer.nvidia.com/cuda-downloads
-- It'll be a URL like: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-repo-ubuntu1804_10.0.130-1_amd64.deb
+- It'll be a URL like: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-repo-ubuntu1804_10.1.105-1_amd64.deb
 - There will be installation instructions on the page like:
-  - `sudo dpkg -i cuda-repo-ubuntu1804_10.0.130-1_amd64.deb`
+  - `sudo dpkg -i cuda-repo-ubuntu1804_10.1.105-1_amd64.deb`
   - `sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub`
   - `sudo apt-get update`
   - `sudo apt-get install cuda`
@@ -80,17 +80,17 @@ You'll want to install cuDNN:
 - https://developer.nvidia.com/cudnn
 - http://docs.nvidia.com/deeplearning/sdk/cudnn-install/index.html
 - Download the appropriate debian packages, then install them with something like:
-  - `sudo dpkg -i libcudnn7_7.3.0.29-1+cuda10.0_amd64.deb libcudnn7-dev_7.3.0.29-1+cuda10.0_amd64.deb libcudnn7-doc_7.3.0.29-1+cuda10.0_amd64.deb`
+  - `sudo dpkg -i libcudnn7_7.5.0.56-1+cuda10.1_amd64.deb libcudnn7-dev_7.5.0.56-1+cuda10.1_amd64.deb`
 
 Then download the latest version of Dlib from:
 - http://dlib.net/
 
 ```
 # Configure the source tree.
-cmake --config Release ..
+cmake .. -DUSE_AVX_INSTRUCTIONS=ON
 
-# Compile with a sufficient number of threads.
-make -j 8
+# Compile in release mode.
+cmake --build . --config Release -- -j 8
 
 # Install on the system.
 sudo make install

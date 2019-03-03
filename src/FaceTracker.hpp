@@ -131,7 +131,7 @@ class FacialClassificationBox {
 public:
 	Rect2d box;
 	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	signed long frameNumber; //The frame number when the classification was run.
+	FrameTimestamps timestamps; //The timestamp (including frame number) to which this classification belongs.
 	bool run; //Did the classifier run?
 	bool set; //Is the box valid?
 };
@@ -209,7 +209,7 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics;
+	Metrics *metrics, *metricsLandmarks, *metricsClassifier;
 
 	bool usingDNNFaceDetection;
 
