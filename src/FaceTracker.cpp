@@ -102,8 +102,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker.Main", frameDerivatives);
-	metricsClassifier = new Metrics(config, "FaceTracker.Classifier", frameDerivatives, true);
+	metrics = new Metrics(config, "FaceTracker.Process.All", frameDerivatives);
+	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameDerivatives);
+	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameDerivatives, true);
 
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -138,6 +139,7 @@ FaceTracker::~FaceTracker() noexcept(false) {
 	SDL_DestroyMutex(myCmpMutex);
 	SDL_DestroyMutex(myClassificationMutex);
 	delete metrics;
+	delete metricsLandmarks;
 	delete metricsClassifier;
 	delete logger;
 }
@@ -254,7 +256,9 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
 		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
 
+	metricsLandmarks->startClock();
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
+	metricsLandmarks->endClock();
 
 	working.facialFeatures.featuresExposed.features.clear();
 	working.facialFeatures.featuresExposed.features.resize(result.num_parts());

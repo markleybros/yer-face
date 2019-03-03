@@ -209,7 +209,7 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics, *metricsClassifier;
+	Metrics *metrics, *metricsLandmarks, *metricsClassifier;
 
 	bool usingDNNFaceDetection;
 
