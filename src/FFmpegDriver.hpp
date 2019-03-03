@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+#include "Utilities.hpp"
 #include "FrameDerivatives.hpp"
 
 #include <string>
@@ -38,6 +39,7 @@ public:
 	AVFormatContext *formatContext;
 
 	AVFrame *frame;
+	signed long frameNumber;
 
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
@@ -48,7 +50,6 @@ public:
 	AVStream *audioStream;
 
 	SDL_mutex *demuxerMutex;
-	SDL_cond *demuxerCond;
 	SDL_Thread *demuxerThread;
 	bool demuxerRunning;
 
@@ -65,7 +66,7 @@ public:
 
 class VideoFrame {
 public:
-	double timestamp, estimatedEndTimestamp;
+	FrameTimestamps timestamp;
 	VideoFrameBacking *frameBacking;
 	Mat frameCV;
 };
@@ -103,7 +104,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
+	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
@@ -137,7 +138,7 @@ private:
 	bool handleScanning(MediaContext *context, double *timestamp);
 
 	FrameDerivatives *frameDerivatives;
-	bool frameDrop, lowLatency;
+	bool lowLatency;
 	double from, until;
 
 	Logger *logger;
@@ -152,7 +153,6 @@ private:
 
 	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
-	double videoStreamRealStartTime;
 	double videoStreamInitialTimestamp;
 	bool videoStreamInitialTimestampSet;
 	double newestVideoFrameTimestamp;
@@ -160,7 +160,6 @@ private:
 
 	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
-	double audioStreamRealStartTime;
 	double audioStreamInitialTimestamp;
 	bool audioStreamInitialTimestampSet;
 	double newestAudioFrameTimestamp;

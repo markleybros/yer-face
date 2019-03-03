@@ -6,6 +6,7 @@
 
 #include <exception>
 #include <vector>
+#include <fstream>
 
 using namespace std;
 using namespace cv;
@@ -63,6 +64,13 @@ public:
 	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
 	static json JSONArrayFromScalarColor(cv::Scalar color);
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
+};
+
+class FrameTimestamps {
+public:
+	double startTimestamp;
+	double estimatedEndTimestamp;
+	signed long frameNumber;
 };
 
 }; //namespace YerFace

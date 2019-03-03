@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
 #include "Utilities.hpp"
 
 #include "SDL.h"
@@ -19,14 +18,13 @@ class MetricsTick {
 public:
 	double startTime;
 	double runTime;
-	double frameTimestamp;
 };
 
 class FrameDerivatives;
 
 class Metrics {
 public:
-	Metrics(json config, const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false);
+	Metrics(json config, const char *myName, bool myMetricIsFrames = false);
 	~Metrics();
 	MetricsTick startClock(void);
 	void endClock(MetricsTick tick);
@@ -39,7 +37,6 @@ private:
 	void logReportNow(string prefix);
 
 	string name;
-	FrameDerivatives *frameDerivatives;
 	bool metricIsFrames;
 	double averageOverSeconds, reportEverySeconds;
 	double lastReport;

@@ -428,12 +428,13 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	int frameDiscards = 0, frameFills = 0;
 	// self->logger->verbose("Audio Callback Fired");
 	FrameTimestamps frameTimestamps;
-	try {
-		frameTimestamps = self->frameDerivatives->getCompletedFrameTimestamps();
-	} catch(exception &e) {
+	// FIXME
+	// try {
+	// 	frameTimestamps = self->frameDerivatives->getCompletedFrameTimestamps();
+	// } catch(exception &e) {
 		frameTimestamps.startTimestamp = 0.0;
 		frameTimestamps.estimatedEndTimestamp = 0.0;
-	}
+	// }
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
 		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);

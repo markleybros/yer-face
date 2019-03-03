@@ -24,14 +24,13 @@ MediaContext::MediaContext(void) {
 	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
 	frameDerivatives = myFrameDerivatives;
 	if(frameDerivatives == NULL) {
 		throw invalid_argument("frameDerivatives cannot be NULL");
 	}
-	frameDrop = myFrameDrop;
 	lowLatency = myLowLatency;
 	from = myFrom;
 	until = myUntil;
@@ -307,18 +306,8 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
 	if(readyVideoFrameBuffer.size() > 0) {
-		if(frameDrop) {
-			int dropCount = 0;
-			while(readyVideoFrameBuffer.size() > 1) {
-				releaseVideoFrame(readyVideoFrameBuffer.back());
-				readyVideoFrameBuffer.pop_back();
-				dropCount++;
-			}
-			// logger->warn("Dropped %d frame(s)!", dropCount);
-		}
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
-		SDL_CondSignal(videoContext.demuxerCond);
 	} else {
 		YerFace_MutexUnlock(videoFrameBufferMutex);
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
@@ -337,14 +326,13 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			return false;
 		}
 
-		//Wait for the demuxer thread to generate more frames. Usually this only happens in realtime scenarios with --frameDrop
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
 
 		if(!readyVideoFrameBufferEmptyWarning) {
 			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
 			readyVideoFrameBufferEmptyWarning = true;
 		}
-		SDL_Delay(1);
+		SDL_Delay(0);
 		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();
@@ -432,6 +420,8 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				return false;
 			}
 
+			context->frameNumber++;
+
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
 			if(!handleScanning(context, &timestamp)) {
 				av_frame_unref(context->frame);
@@ -439,13 +429,14 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			}
 
 			VideoFrame videoFrame;
-			videoFrame.timestamp = timestamp;
-			videoFrame.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp);
+			videoFrame.timestamp.startTimestamp = timestamp;
+			videoFrame.timestamp.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp.startTimestamp);
+			videoFrame.timestamp.frameNumber = context->frameNumber;
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
 
 			YerFace_MutexLock(videoStreamMutex);
-			newestVideoFrameTimestamp = videoFrame.timestamp;
-			newestVideoFrameEstimatedEndTimestamp = videoFrame.estimatedEndTimestamp;
+			newestVideoFrameTimestamp = videoFrame.timestamp.startTimestamp;
+			newestVideoFrameEstimatedEndTimestamp = videoFrame.timestamp.estimatedEndTimestamp;
 			YerFace_MutexUnlock(videoStreamMutex);
 			// logger->verbose("Inserted a VideoFrame with timestamps: %.04lf - (estimated) %.04lf", videoFrame.timestamp, videoFrame.estimatedEndTimestamp);
 
@@ -547,15 +538,10 @@ void FFmpegDriver::initializeDemuxerThread(MediaContext *context, enum AVMediaTy
 	context->demuxerRunning = false;
 	context->demuxerThread = NULL;
 	context->demuxerMutex = NULL;
-	context->demuxerCond = NULL;
-	
+	context->frameNumber = 0;
+
 	if((context->demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
-	}
-	if(type == AVMEDIA_TYPE_VIDEO) {
-		if((context->demuxerCond = SDL_CreateCond()) == NULL) {
-			throw runtime_error("Failed creating condition!");
-		}
 	}
 
 	if(from != -1.0 && from > 0.0) {
@@ -602,17 +588,10 @@ void FFmpegDriver::destroyDemuxerThread(MediaContext *context, enum AVMediaType 
 	YerFace_MutexLock(context->demuxerMutex);
 	context->demuxerRunning = false;
 	context->demuxerDraining = true;
-	if(context->demuxerCond != NULL) {
-		SDL_CondSignal(context->demuxerCond);
-	}
 	YerFace_MutexUnlock(context->demuxerMutex);
 
 	if(context->demuxerThread != NULL) {
 		SDL_WaitThread(context->demuxerThread, NULL);
-	}
-
-	if(context->demuxerCond != NULL) {
-		SDL_DestroyCond(context->demuxerCond);
 	}
 
 	SDL_DestroyMutex(context->demuxerMutex);
@@ -650,8 +629,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 	YerFace_MutexLock(context->demuxerMutex);
 	while(context->demuxerRunning) {
 		if(type == AVMEDIA_TYPE_VIDEO) {
-			if(!getIsVideoDraining() && \
-			  (getIsVideoFrameBufferEmpty() || frameDrop)) {
+			if(!getIsVideoDraining()) {
 				// logger->verbose("Pumping VIDEO stream.");
 				pumpDemuxer(context, &packet, type);
 			}
@@ -672,17 +650,9 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 		}
 
 		if(context->demuxerRunning) {
-			if(frameDrop || context->scanning || type == AVMEDIA_TYPE_AUDIO) {
-				YerFace_MutexUnlock(context->demuxerMutex);
-				SDL_Delay(0);
-				YerFace_MutexLock(context->demuxerMutex);
-			} else if(!getIsVideoFrameBufferEmpty()) {
-				// logger->verbose("Video Demuxer Thread going to sleep, waiting for work.");
-				if(SDL_CondWait(context->demuxerCond, context->demuxerMutex) < 0) {
-					throw runtime_error("Failed waiting on condition.");
-				}
-				// logger->verbose("Video Demuxer Thread is awake now!");
-			}
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(0);
+			YerFace_MutexLock(context->demuxerMutex);
 		}
 	}
 

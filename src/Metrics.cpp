@@ -7,13 +7,9 @@ using namespace cv;
 
 namespace YerFace {
 
-Metrics::Metrics(json config, const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames) {
+Metrics::Metrics(json config, const char *myName, bool myMetricIsFrames) {
 	name = (string)myName;
 	metricIsFrames = myMetricIsFrames;
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
-	}
 	averageOverSeconds = config["YerFace"]["Metrics"]["averageOverSeconds"];
 	if(averageOverSeconds <= 0.0) {
 		throw invalid_argument("averageOverSeconds cannot be less than or equal to zero");
@@ -52,15 +48,11 @@ MetricsTick Metrics::startClock(void) {
 void Metrics::endClock(MetricsTick tick) {
 	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount() / (double)getTickFrequency();
-	tick.runTime = now - entries.front().startTime;
+	tick.runTime = now - tick.startTime;
 
-	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
-	double frameTimestamp = frameTimestamps.startTimestamp;
-
-	tick.frameTimestamp = frameTimestamp;
 	entries.push_front(tick);
 
-	while(entries.back().frameTimestamp <= (frameTimestamp - averageOverSeconds)) {
+	while(entries.back().startTime <= (tick.startTime - averageOverSeconds)) {
 		entries.pop_back();
 	}
 
@@ -75,10 +67,18 @@ void Metrics::endClock(MetricsTick tick) {
 	}
 	averageTimeSeconds = averageTimeSeconds / (double)numEntries;
 	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
+	string fpsPrefix;
 	if(metricIsFrames) {
-		fps = 1.0 / ((now - entries.back().startTime) / numEntries);
-		snprintf(fpsString, METRICS_STRING_LENGTH, "FPS: <%.02f>", fps);
+		fpsPrefix = "Frames/Sec:";
+	} else {
+		fpsPrefix = "Completions/Sec:";
 	}
+	if(numEntries > 1) {
+		fps = 1.0 / ((now - entries.back().startTime) / numEntries);
+	} else {
+		fps = 0.0;
+	}
+	snprintf(fpsString, METRICS_STRING_LENGTH, "%s <%.02f>", fpsPrefix.c_str(), fps);
 
 	if(lastReport + reportEverySeconds <= now) {
 		logReportNow("");
@@ -88,11 +88,7 @@ void Metrics::endClock(MetricsTick tick) {
 }
 
 void Metrics::logReportNow(string prefix) {
-	if(metricIsFrames) {
-		logger->verbose("%s%s %s", prefix.c_str(), fpsString, timesString);
-	} else {
-		logger->verbose("%s%s", prefix.c_str(), timesString);
-	}
+	logger->verbose("%s%s, %s", prefix.c_str(), fpsString, timesString);
 }
 
 double Metrics::getAverageTimeSeconds(void) {

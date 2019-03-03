@@ -8,14 +8,14 @@
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
-#include "FaceTracker.hpp"
+// #include "FaceTracker.hpp"
 #include "FrameDerivatives.hpp"
-#include "FaceMapper.hpp"
+// #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
-#include "OutputDriver.hpp"
-#include "SphinxDriver.hpp"
-#include "EventLogger.hpp"
+// #include "OutputDriver.hpp"
+// #include "SphinxDriver.hpp"
+// #include "EventLogger.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -65,14 +65,14 @@ Logger *logger = NULL;
 SDLDriver *sdlDriver = NULL;
 FFmpegDriver *ffmpegDriver = NULL;
 FrameDerivatives *frameDerivatives = NULL;
-FaceTracker *faceTracker = NULL;
-FaceMapper *faceMapper = NULL;
+// FaceTracker *faceTracker = NULL;
+// FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
-OutputDriver *outputDriver = NULL;
-SphinxDriver *sphinxDriver = NULL;
-EventLogger *eventLogger = NULL;
+// OutputDriver *outputDriver = NULL;
+// SphinxDriver *sphinxDriver = NULL;
+// EventLogger *eventLogger = NULL;
 
-unsigned long workingFrameNumber = 0;
+// unsigned long workingFrameNumber = 0;
 SDL_mutex *flipWorkingCompletedMutex;
 
 //VARIABLES PROTECTED BY frameSizeMutex
@@ -82,7 +82,7 @@ SDL_mutex *frameSizeMutex;
 //END VARIABLES PROTECTED BY frameSizeMutex
 
 static int runCaptureLoop(void *ptr);
-Mat doRenderPreviewFrame(void);
+// Mat doRenderPreviewFrame(void);
 void parseConfigFile(void);
 
 int main(int argc, const char** argv) {
@@ -186,22 +186,22 @@ int main(int argc, const char** argv) {
 
 	//Instantiate our classes.
 	frameDerivatives = new FrameDerivatives(config, lowLatency);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, lowLatency, from, until, false);
+	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, from, until, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
 	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
-	faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
-	metrics = new Metrics(config, "YerFace", frameDerivatives, true);
-	outputDriver = new OutputDriver(config, outData, frameDerivatives, faceTracker, sdlDriver);
-	if(ffmpegDriver->getIsAudioInputPresent()) {
-		sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
-	}
-	eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives, from);
+	// faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
+	// faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
+	metrics = new Metrics(config, "YerFace", true);
+	// outputDriver = new OutputDriver(config, outData, frameDerivatives, faceTracker, sdlDriver);
+	// if(ffmpegDriver->getIsAudioInputPresent()) {
+	// 	sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
+	// }
+	// eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives, from);
 
-	outputDriver->setEventLogger(eventLogger);
+	// outputDriver->setEventLogger(eventLogger);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
@@ -240,19 +240,19 @@ int main(int argc, const char** argv) {
 			YerFace_MutexUnlock(frameSizeMutex);
 		}
 
-		if(!headless) {
-			bool previewFrameValid = false;
-			Mat previewFrame;
-			YerFace_MutexLock(flipWorkingCompletedMutex);
-			if(frameDerivatives->getCompletedFrameSet()) {
-				previewFrame = doRenderPreviewFrame();
-				previewFrameValid = true;
-			}
-			YerFace_MutexUnlock(flipWorkingCompletedMutex);
-			if(previewFrameValid && sdlWindowRenderer.window != NULL) {
-				sdlDriver->doRenderPreviewFrame(previewFrame);
-			}
-		}
+		// if(!headless) {
+		// 	bool previewFrameValid = false;
+		// 	Mat previewFrame;
+		// 	YerFace_MutexLock(flipWorkingCompletedMutex);
+		// 	if(frameDerivatives->getCompletedFrameSet()) {
+		// 		previewFrame = doRenderPreviewFrame();
+		// 		previewFrameValid = true;
+		// 	}
+		// 	YerFace_MutexUnlock(flipWorkingCompletedMutex);
+		// 	if(previewFrameValid && sdlWindowRenderer.window != NULL) {
+		// 		sdlDriver->doRenderPreviewFrame(previewFrame);
+		// 	}
+		// }
 
 		sdlDriver->doHandleEvents();
 	}
@@ -264,14 +264,14 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(flipWorkingCompletedMutex);
 
-	delete eventLogger;
-	if(sphinxDriver != NULL) {
-		delete sphinxDriver;
-	}
-	delete outputDriver;
+	// delete eventLogger;
+	// if(sphinxDriver != NULL) {
+	// 	delete sphinxDriver;
+	// }
+	// delete outputDriver;
 	delete metrics;
-	delete faceMapper;
-	delete faceTracker;
+	// delete faceMapper;
+	// delete faceTracker;
 	delete frameDerivatives;
 	delete ffmpegDriver;
 	delete sdlDriver;
@@ -292,7 +292,6 @@ int runCaptureLoop(void *ptr) {
 				sdlDriver->setIsRunning(false);
 				continue;
 			}
-			workingFrameNumber++;
 
 			if(!didSetFrameSizeValid) {
 				YerFace_MutexLock(frameSizeMutex);
@@ -310,10 +309,10 @@ int runCaptureLoop(void *ptr) {
 			frameDerivatives->setWorkingFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
-			eventLogger->startNewFrame();
+			// eventLogger->startNewFrame();
 
-			faceTracker->processCurrentFrame();
-			faceMapper->processCurrentFrame();
+			// faceTracker->processCurrentFrame();
+			// faceMapper->processCurrentFrame();
 
 			metrics->endClock(tick);
 
@@ -323,62 +322,63 @@ int runCaptureLoop(void *ptr) {
 
 			YerFace_MutexLock(flipWorkingCompletedMutex);
 
-			frameDerivatives->advanceWorkingFrameToCompleted();
-			faceTracker->advanceWorkingToCompleted();
-			faceMapper->advanceWorkingToCompleted();
-			if(sphinxDriver != NULL) {
-				sphinxDriver->advanceWorkingToCompleted();
-			}
+			// frameDerivatives->advanceWorkingFrameToCompleted();
+			// faceTracker->advanceWorkingToCompleted();
+			// faceMapper->advanceWorkingToCompleted();
+			// if(sphinxDriver != NULL) {
+			// 	sphinxDriver->advanceWorkingToCompleted();
+			// }
 
-			eventLogger->handleCompletedFrame();
-			outputDriver->handleCompletedFrame();
+			// eventLogger->handleCompletedFrame();
+			// outputDriver->handleCompletedFrame();
 
 			//If requested, write image sequence. Note this is VERY EXPENSIVE because it's blocking on the capture loop.
-			if(previewImgSeq.length() > 0) {
-				Mat previewFrame = doRenderPreviewFrame();
+			// if(previewImgSeq.length() > 0) {
+			// 	Mat previewFrame = doRenderPreviewFrame();
 
-				int filenameLength = previewImgSeq.length() + 32;
-				char filename[filenameLength];
-				snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), workingFrameNumber);
-				logger->debug("YerFace writing preview frame to %s ...", filename);
-				imwrite(filename, previewFrame);
-			}
+			// 	int filenameLength = previewImgSeq.length() + 32;
+			// 	char filename[filenameLength];
+			// 	snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), workingFrameNumber);
+			// 	logger->debug("YerFace writing preview frame to %s ...", filename);
+			// 	imwrite(filename, previewFrame);
+			// }
 
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
+		SDL_Delay(0); //Be a good neighbor.
 	}
 
 	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
 
-	if(sphinxDriver != NULL) {
-		sphinxDriver->drainPipelineDataNow();
-	}
-	outputDriver->drainPipelineDataNow();
+	// if(sphinxDriver != NULL) {
+	// 	sphinxDriver->drainPipelineDataNow();
+	// }
+	// outputDriver->drainPipelineDataNow();
 
 	return 0;
 }
 
-Mat doRenderPreviewFrame(void) {
-	YerFace_MutexLock(flipWorkingCompletedMutex);
+// Mat doRenderPreviewFrame(void) {
+// 	YerFace_MutexLock(flipWorkingCompletedMutex);
 
-	frameDerivatives->resetCompletedPreviewFrame();
+// 	// frameDerivatives->resetCompletedPreviewFrame();
 
-	faceTracker->renderPreviewHUD();
-	faceMapper->renderPreviewHUD();
-	if(sphinxDriver != NULL) {
-		sphinxDriver->renderPreviewHUD();
-	}
+// 	// faceTracker->renderPreviewHUD();
+// 	// faceMapper->renderPreviewHUD();
+// 	// if(sphinxDriver != NULL) {
+// 	// 	sphinxDriver->renderPreviewHUD();
+// 	// }
 
-	Mat previewFrame = frameDerivatives->getCompletedPreviewFrame().clone();
+// 	// Mat previewFrame = frameDerivatives->getCompletedPreviewFrame().clone();
 
-	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+// 	// putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+// 	// putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 
-	YerFace_MutexUnlock(flipWorkingCompletedMutex);
+// 	YerFace_MutexUnlock(flipWorkingCompletedMutex);
 
-	return previewFrame;
-}
+// 	return previewFrame;
+// }
 
 void parseConfigFile(void) {
 	logger->verbose("Opening and parsing config file: \"%s\"", configFile.c_str());

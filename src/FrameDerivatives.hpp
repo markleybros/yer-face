@@ -18,12 +18,14 @@ namespace YerFace {
 
 class VideoFrame;
 
-class FrameTimestamps {
+class WorkingFrame {
 public:
-	double startTimestamp;
-	double estimatedEndTimestamp;
-	signed long frameNumber;
-	bool set;
+	Mat frame; //BGR format, at the native resolution of the input.
+	bool frameSet;
+	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
+	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
+	bool previewFrameSet;
+	FrameTimestamps frameTimestamps;
 };
 
 class ClassificationFrame {
@@ -41,17 +43,17 @@ public:
 	FrameDerivatives(json config, bool myLowLatency);
 	~FrameDerivatives();
 	void setWorkingFrame(VideoFrame *videoFrame);
-	Mat getWorkingFrame(void);
-	Mat getCompletedFrame(void);
-	void advanceWorkingFrameToCompleted(void);
-	ClassificationFrame getClassificationFrame(void);
-	Mat getWorkingPreviewFrame(void);
-	Mat getCompletedPreviewFrame(void);
-	void resetCompletedPreviewFrame(void);
-	Size getWorkingFrameSize(void);
-	FrameTimestamps getWorkingFrameTimestamps(void);
-	FrameTimestamps getCompletedFrameTimestamps(void);
-	bool getCompletedFrameSet(void);
+	// Mat getWorkingFrame(void);
+	// Mat getCompletedFrame(void);
+	// void advanceWorkingFrameToCompleted(void);
+	// ClassificationFrame getClassificationFrame(void);
+	// Mat getWorkingPreviewFrame(void);
+	// Mat getCompletedPreviewFrame(void);
+	// void resetCompletedPreviewFrame(void);
+	// Size getWorkingFrameSize(void);
+	// FrameTimestamps getWorkingFrameTimestamps(void);
+	// FrameTimestamps getCompletedFrameTimestamps(void);
+	// bool getCompletedFrameSet(void);
 
 private:
 	bool lowLatency;
@@ -60,15 +62,10 @@ private:
 	Logger *logger;
 	SDL_mutex *myMutex;
 	Metrics *metrics;
-	Mat workingFrame, completedFrame; //BGR format, at the native resolution of the input.
-	bool workingFrameSet, completedFrameSet;
-	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
-	Mat workingPreviewFrame, completedPreviewFrameSource, completedPreviewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
-	bool workingPreviewFrameSet, completedPreviewFrameSet;
-	Size workingFrameSize;
-	bool workingFrameSizeSet;
-	FrameTimestamps workingFrameTimestamps;
-	FrameTimestamps completedFrameTimestamps;
+	Size frameSize;
+	bool frameSizeSet;
+
+	unordered_map<int, WorkingFrame> frameStore;
 };
 
 }; //namespace YerFace
