@@ -11,9 +11,6 @@ namespace YerFace {
 FrameServer::FrameServer(json config, bool myLowLatency) {
 	logger = new Logger("FrameServer");
 	lowLatency = myLowLatency;
-	if((myMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	string lowLatencyKey = "LowLatency";
 	if(!lowLatency) {
 		lowLatencyKey = "Offline";
@@ -31,40 +28,80 @@ FrameServer::FrameServer(json config, bool myLowLatency) {
 		onFrameStatusChangeCallbacks[i].clear();
 	}
 
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
+	draining = false;
+	herderRunning = true;
+	if((herderThread = SDL_CreateThread(FrameServer::frameHerderLoop, "FrameHerder", (void *)this)) == NULL) {
+		throw runtime_error("Failed starting thread!");
+	}
+
 	metrics = new Metrics(config, "FrameServer");
 	logger->debug("FrameServer constructed and ready to go!");
 }
 
-FrameServer::~FrameServer() {
+FrameServer::~FrameServer() noexcept(false) {
 	logger->debug("FrameServer object destructing...");
-	// FIXME - Actually tear everything down...
+
+	YerFace_MutexLock(myMutex);
+	if(!draining) {
+		logger->warn("Was never set to draining! You should always drain the FrameServer before destructing it.");
+		draining = true;
+	}
+	herderRunning = false;
+	YerFace_MutexUnlock(myMutex);
+
+	SDL_WaitThread(herderThread, NULL);
+	
+	YerFace_MutexLock(myMutex);
+	if(frameStore.size() > 0) {
+		logger->warn("Frames are still sitting in the frame store! Draining did not complete!");
+	}
+	YerFace_MutexUnlock(myMutex);
+
 	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
 
-void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber)> callback) {
-	if(newStatus < 0 || newStatus > FRAME_STATUS_MAX) {
-		throw invalid_argument("onFrameStatusChangeEvent() passed invalid WorkingFrameStatus!");
-	}
+void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber, WorkingFrameStatus newStatus)> callback) {
+	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	onFrameStatusChangeCallbacks[newStatus].push_back(callback);
 	YerFace_MutexUnlock(myMutex);
 }
 
-void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
+void FrameServer::registerFrameStatusCheckpoint(WorkingFrameStatus status, string checkpointKey) {
+	checkStatusValue(status);
+	if(status == FRAME_STATUS_GONE) {
+		throw invalid_argument("Somebody tried to register a checkpoint for FRAME_STATUS_GONE, but this doesn't make sense because FRAME_STATUS_GONE means the frame is about to be cleaned up.");
+	}
 	YerFace_MutexLock(myMutex);
+	statusCheckpoints[status].push_back(checkpointKey);
+	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	MetricsTick tick = metrics->startClock();
 
-	WorkingFrame workingFrame;
+	YerFace_MutexLock(myMutex);
 
-	workingFrame.frame = videoFrame->frameCV.clone();
-	workingFrame.frameSet = true;
+	if(draining) {
+		YerFace_MutexUnlock(myMutex);
+		throw logic_error("Can't insert new frame while draining!");
+	}
 
-	frameSize = workingFrame.frame.size();
+	WorkingFrame *workingFrame = new WorkingFrame();
+
+	workingFrame->frame = videoFrame->frameCV.clone();
+	workingFrame->frameSet = true;
+
+	frameSize = workingFrame->frame.size();
 	frameSizeSet = true;
 
-	workingFrame.frameTimestamps = videoFrame->timestamp;
+	workingFrame->frameTimestamps = videoFrame->timestamp;
 
 	if(classificationBoundingBox > 0) {
 		if(frameSize.width >= frameSize.height) {
@@ -74,23 +111,49 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 		}
 	}
 
-	resize(workingFrame.frame, workingFrame.classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
+	resize(workingFrame->frame, workingFrame->classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
 
 	static bool reportedScale = false;
 	if(!reportedScale) {
-		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, workingFrame.classificationFrame.size().width, workingFrame.classificationFrame.size().height);
+		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, workingFrame->classificationFrame.size().width, workingFrame->classificationFrame.size().height);
 		reportedScale = true;
 	}
 
-	workingFrame.previewFrameSet = false;
+	workingFrame->previewFrameSet = false;
 
-	frameStore[workingFrame.frameTimestamps.frameNumber] = workingFrame;
-	logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame.frameTimestamps.frameNumber, frameStore.size());
+	// Set all of the registered checkpoints to FALSE to accurately record the frame's status.
+	for(unsigned int i = 0; i <= FRAME_STATUS_MAX; i++) {
+		for(string checkpointKey : statusCheckpoints[i]) {
+			workingFrame->checkpoints[i][checkpointKey] = false;
+		}
+	}
 
-	setFrameStatus(workingFrame.frameTimestamps.frameNumber, FRAME_STATUS_NEW);
+	frameStore[workingFrame->frameTimestamps.frameNumber] = workingFrame;
+	logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
+
+	setFrameStatus(workingFrame->frameTimestamps.frameNumber, FRAME_STATUS_NEW);
 
 	metrics->endClock(tick);
 	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::setDraining(void) {
+	YerFace_MutexLock(myMutex);
+	if(draining) {
+		YerFace_MutexUnlock(myMutex);
+		throw logic_error("Can't set draining while already draining!");
+	}
+	draining = true;
+	logger->verbose("Set to draining!");
+	YerFace_MutexUnlock(myMutex);
+}
+
+bool FrameServer::isDrained(void) {
+	bool drained;
+	YerFace_MutexLock(myMutex);
+	drained = draining && frameStore.size() == 0;
+	YerFace_MutexUnlock(myMutex);
+	return drained;
 }
 
 // Mat FrameServer::getWorkingFrame(void) {
@@ -228,16 +291,74 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 // 	return status;
 // }
 
+void FrameServer::destroyFrame(signed long frameNumber) {
+	delete frameStore[frameNumber];
+	frameStore.erase(frameNumber);
+}
+
 void FrameServer::setFrameStatus(signed long frameNumber, WorkingFrameStatus newStatus) {
-	if(newStatus < 0 || newStatus > FRAME_STATUS_MAX) {
-		throw invalid_argument("setFrameStatus() passed invalid WorkingFrameStatus!");
-	}
+	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
-	frameStore[frameNumber].status = newStatus;
+	frameStore[frameNumber]->status = newStatus;
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
-		callback(frameNumber);
+		callback(frameNumber, newStatus);
 	}
 	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::checkStatusValue(WorkingFrameStatus status) {
+	if(status < 0 || status > FRAME_STATUS_MAX) {
+		throw invalid_argument("passed invalid WorkingFrameStatus!");
+	}
+}
+
+int FrameServer::frameHerderLoop(void *ptr) {
+	FrameServer *self = (FrameServer *)ptr;
+	self->logger->verbose("Frame Herder Thread alive!");
+
+	YerFace_MutexLock(self->myMutex);
+	while(self->herderRunning || !self->isDrained()) {
+		std::vector<signed long> garbageFrames;
+		for(auto framePair : self->frameStore) {
+			signed long frameNumber = framePair.first;
+			WorkingFrame *workingFrame = framePair.second;
+			WorkingFrameStatus status = workingFrame->status;
+
+			//Does this frame need to be garbage collected?
+			if(status == FRAME_STATUS_GONE) {
+				garbageFrames.push_back(frameNumber);
+				continue;
+			}
+
+			//Is this frame eligible for a new status?
+			bool checkpointsPassed = true;
+			for(auto checkpointPair : workingFrame->checkpoints[status]) {
+				if(!checkpointPair.second) {
+					checkpointsPassed = false;
+				}
+			}
+
+			//Advance this frame to the next status.
+			if(checkpointsPassed) {
+				self->setFrameStatus(frameNumber, (WorkingFrameStatus)(status + 1));
+			}
+		}
+
+		//Destroy GONE frames.
+		while(garbageFrames.size() > 0) {
+			self->destroyFrame(garbageFrames.back());
+			garbageFrames.pop_back();
+		}
+
+		//Relinquish control.
+		YerFace_MutexUnlock(self->myMutex);
+		SDL_Delay(0);
+		YerFace_MutexLock(self->myMutex);
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	self->logger->verbose("Frame Herder Thread quitting...");
+	return 0;
 }
 
 }; //namespace YerFace

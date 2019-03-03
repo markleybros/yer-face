@@ -85,8 +85,8 @@ static int runCaptureLoop(void *ptr);
 // Mat doRenderPreviewFrame(void);
 void parseConfigFile(void);
 
-void tempeventhandler(unsigned long frameNumber) {
-	logger->verbose("Got a status change event for frame %ld!", frameNumber);
+void tempeventhandler(unsigned long frameNumber, WorkingFrameStatus newStatus) {
+	logger->verbose("Got a status change event for frame %ld! New status is %d", frameNumber, newStatus);
 }
 
 int main(int argc, const char** argv) {
@@ -208,6 +208,11 @@ int main(int argc, const char** argv) {
 	// outputDriver->setEventLogger(eventLogger);
 
 	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_NEW, tempeventhandler);
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PROCESSING, tempeventhandler);
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PREVIEWING, tempeventhandler);
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_LATE_PROCESSING, tempeventhandler);
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_DRAINING, tempeventhandler);
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_GONE, tempeventhandler);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
@@ -296,6 +301,7 @@ int runCaptureLoop(void *ptr) {
 			if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
 				logger->info("FFmpeg Demuxer thread finished.");
 				sdlDriver->setIsRunning(false);
+				frameServer->setDraining();
 				continue;
 			}
 
@@ -352,6 +358,10 @@ int runCaptureLoop(void *ptr) {
 			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
 		SDL_Delay(0); //Be a good neighbor.
+	}
+
+	while(!frameServer->isDrained()) {
+		SDL_Delay(10);
 	}
 
 	sdlDriver->stopAudioDriverNow();

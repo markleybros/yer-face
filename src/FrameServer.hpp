@@ -25,7 +25,7 @@ enum WorkingFrameStatus: unsigned int {
 	FRAME_STATUS_PREVIEWING = 2, //Frame is being previewed.
 	FRAME_STATUS_LATE_PROCESSING = 3, //Frame is eligible for any late-stage processing (like Sphinx data).
 	FRAME_STATUS_DRAINING = 4, //Last call before this frame is gone. (Frame data output)
-	FRAME_STATUS_GONE = 5 //This frame is about to be freed and purged from the frame store.
+	FRAME_STATUS_GONE = 5 //This frame is about to be freed and purged from the frame store. (No checkpoints can be registered for this status!)
 };
 
 class WorkingFrame {
@@ -38,6 +38,7 @@ public:
 	FrameTimestamps frameTimestamps;
 
 	WorkingFrameStatus status;
+	unordered_map<string, bool> checkpoints[FRAME_STATUS_MAX + 1];
 };
 
 class ClassificationFrame {
@@ -53,8 +54,11 @@ class Metrics;
 class FrameServer {
 public:
 	FrameServer(json config, bool myLowLatency);
-	~FrameServer();
-	void onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber)> callback);
+	~FrameServer() noexcept(false);
+	void setDraining(void);
+	bool isDrained(void);
+	void onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber, WorkingFrameStatus newStatus)> callback);
+	void registerFrameStatusCheckpoint(WorkingFrameStatus status, string checkpointKey);
 	void insertNewFrame(VideoFrame *videoFrame);
 	// Mat getWorkingFrame(void);
 	// Mat getCompletedFrame(void);
@@ -69,9 +73,13 @@ public:
 	// bool getCompletedFrameSet(void);
 
 private:
+	void destroyFrame(signed long frameNumber);
 	void setFrameStatus(signed long frameNumber, WorkingFrameStatus newStatus);
+	void checkStatusValue(WorkingFrameStatus status);
+	static int frameHerderLoop(void *ptr);
 
 	bool lowLatency;
+	bool draining;
 	int classificationBoundingBox;
 	double classificationScaleFactor;
 	Logger *logger;
@@ -80,9 +88,13 @@ private:
 	Size frameSize;
 	bool frameSizeSet;
 
-	unordered_map<signed long, WorkingFrame> frameStore;
+	bool herderRunning;
+	SDL_Thread *herderThread;
 
-	std::vector<function<void(signed long frameNumber)>> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
+	unordered_map<signed long, WorkingFrame *> frameStore;
+
+	std::vector<function<void(signed long frameNumber, WorkingFrameStatus newStatus)>> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
+	std::vector<string> statusCheckpoints[FRAME_STATUS_MAX + 1];
 };
 
 }; //namespace YerFace
