@@ -41,7 +41,7 @@ SphinxWorkingVariables::SphinxWorkingVariables(void) {
 	inSpeech = false;
 }
 
-SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
+SphinxDriver::SphinxDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
@@ -52,9 +52,9 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	vuMeterWidth = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWidth"];
 	vuMeterWarningThreshold = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWarningThreshold"];
 	vuMeterPeakHoldSeconds = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterPeakHoldSeconds"];
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
@@ -159,7 +159,7 @@ void SphinxDriver::advanceWorkingToCompleted(void) {
 		// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
 		SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
 		sphinxVideoFrame->processed = false;
-		sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
+		sphinxVideoFrame->timestamps = frameServer->getCompletedFrameTimestamps();
 		sphinxVideoFrame->realEndTimestamp = sphinxVideoFrame->timestamps.estimatedEndTimestamp;
 		if(videoFrames.size() > 0) {
 			videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
@@ -185,7 +185,7 @@ void SphinxDriver::renderPreviewHUD(void) {
 		YerFace_MutexUnlock(myCmpMutex);
 		return;
 	}
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	Mat frame = frameServer->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
 		Rect2d previewRect;

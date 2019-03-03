@@ -24,12 +24,12 @@ MediaContext::MediaContext(void) {
 	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	lowLatency = myLowLatency;
 	from = myFrom;

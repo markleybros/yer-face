@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FFmpegDriver.hpp"
 #include "SDLDriver.hpp"
 #include "OutputDriver.hpp"
@@ -63,7 +63,7 @@ public:
 
 class SphinxDriver {
 public:
-	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency);
+	SphinxDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency);
 	~SphinxDriver() noexcept(false);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
@@ -83,7 +83,7 @@ private:
 	string lipFlappingTargetPhoneme;
 	double lipFlappingResponseThreshold, lipFlappingNonLinearResponse, lipFlappingNotInSpeechScale;
 	json sphinxToPrestonBlairPhonemeMapping;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FFmpegDriver *ffmpegDriver;
 	SDLDriver *sdlDriver;
 	OutputDriver *outputDriver;

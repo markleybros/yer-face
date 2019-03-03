@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "SDLDriver.hpp"
@@ -30,7 +30,7 @@ public:
 
 class OutputDriver {
 public:
-	OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, String myOutputFilename, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver();
 	void setEventLogger(EventLogger *myEventLogger);
 	void handleCompletedFrame(void);
@@ -50,7 +50,7 @@ private:
 	void outputNewFrame(json frame, bool replay = false);
 
 	String outputFilename;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
 	EventLogger *eventLogger;

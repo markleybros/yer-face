@@ -11,14 +11,14 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker) {
+FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceTracker *myFaceTracker) {
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
@@ -26,7 +26,7 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *my
 	}
 
 	logger = new Logger("FaceMapper");
-	metrics = new Metrics(config, "FaceMapper", frameDerivatives);
+	metrics = new Metrics(config, "FaceMapper", frameServer);
 
 	markerEyelidLeftTop = new MarkerTracker(config, EyelidLeftTop, this);
 	markerEyelidRightTop = new MarkerTracker(config, EyelidRightTop, this);
@@ -109,7 +109,7 @@ void FaceMapper::advanceWorkingToCompleted(void) {
 
 void FaceMapper::renderPreviewHUD() {
 	YerFace_MutexLock(myCmpMutex);
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	Mat frame = frameServer->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	for(MarkerTracker *markerTracker : trackers) {
 		markerTracker->renderPreviewHUD();
@@ -146,8 +146,8 @@ SDLDriver *FaceMapper::getSDLDriver(void) {
 	return sdlDriver;
 }
 
-FrameDerivatives *FaceMapper::getFrameDerivatives(void) {
-	return frameDerivatives;
+FrameServer *FaceMapper::getFrameServer(void) {
+	return frameServer;
 }
 
 FaceTracker *FaceMapper::getFaceTracker(void) {

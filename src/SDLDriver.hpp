@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FFmpegDriver.hpp"
 
 #include <list>
@@ -50,7 +50,7 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
+	SDLDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -76,7 +76,7 @@ public:
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FFmpegDriver *ffmpegDriver;
 	bool headless;
 	bool audioPreview;

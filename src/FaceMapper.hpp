@@ -2,7 +2,7 @@
 
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "Metrics.hpp"
@@ -16,17 +16,17 @@ class MarkerTracker;
 
 class FaceMapper {
 public:
-	FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
+	FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceTracker *myFaceTracker);
 	~FaceMapper();
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(void);
 	SDLDriver *getSDLDriver(void);
-	FrameDerivatives *getFrameDerivatives(void);
+	FrameServer *getFrameServer(void);
 	FaceTracker *getFaceTracker(void);
 private:
 	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FaceTracker *faceTracker;
 
 	Logger *logger;

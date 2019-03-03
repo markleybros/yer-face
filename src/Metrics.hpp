@@ -20,7 +20,7 @@ public:
 	double runTime;
 };
 
-class FrameDerivatives;
+class FrameServer;
 
 class Metrics {
 public:

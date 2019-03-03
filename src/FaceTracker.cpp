@@ -15,7 +15,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency) {
+FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, bool myLowLatency) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
 	faceDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceDetector"];
 	working.faceRect.set = false;
@@ -34,9 +34,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	lowLatency = myLowLatency;
 	poseSmoothingOverSeconds = config["YerFace"]["FaceTracker"]["poseSmoothingOverSeconds"];
@@ -102,9 +102,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker.Process.All", frameDerivatives);
-	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameDerivatives);
-	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameDerivatives, true);
+	metrics = new Metrics(config, "FaceTracker.Process.All", frameServer);
+	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameServer);
+	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameServer, true);
 
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -150,7 +150,7 @@ FaceTracker::~FaceTracker() noexcept(false) {
 void FaceTracker::processCurrentFrame(void) {
 	MetricsTick tick = metrics->startClock();
 
-	ClassificationFrame classificationFrame = frameDerivatives->getClassificationFrame();
+	ClassificationFrame classificationFrame = frameServer->getClassificationFrame();
 
 	static bool didClassifierRun = false;
 	while(!didClassifierRun) {
@@ -331,7 +331,7 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 
 void FaceTracker::doInitializeCameraModel(void) {
 	//Totally fake, idealized camera.
-	Size frameSize = frameDerivatives->getWorkingFrameSize();
+	Size frameSize = frameServer->getWorkingFrameSize();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
 	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
@@ -348,7 +348,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		doInitializeCameraModel();
 	}
 
-	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	FrameTimestamps frameTimestamps = frameServer->getWorkingFrameTimestamps();
 	double frameTimestamp = frameTimestamps.startTimestamp;
 	FacialPose tempPose;
 	tempPose.timestamp = frameTimestamp;
@@ -561,7 +561,7 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 
 void FaceTracker::renderPreviewHUD(void) {
 	YerFace_MutexLock(myCmpMutex);
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	Mat frame = frameServer->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
 		if(complete.facialPose.set) {
@@ -659,7 +659,7 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 	signed long lastClassificationFrameNumber = -1;
 
 	while(true) {
-		ClassificationFrame classificationFrame = self->frameDerivatives->getClassificationFrame();
+		ClassificationFrame classificationFrame = self->frameServer->getClassificationFrame();
 
 		if(classificationFrame.set && classificationFrame.timestamps.set &&
 		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {

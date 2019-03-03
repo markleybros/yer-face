@@ -2,7 +2,7 @@
 
 #include "Logger.hpp"
 #include "OutputDriver.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Utilities.hpp"
 
 #include <list>
@@ -21,7 +21,7 @@ public:
 
 class EventLogger {
 public:
-	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives, double myFrom);
+	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer, double myFrom);
 	~EventLogger();
 	void registerEventType(EventType eventType);
 	void logEvent(string eventName, json payload, bool propagate = false, json sourcePacket = json::object());
@@ -31,7 +31,7 @@ private:
 	void processNextPacket(void);
 	string eventFilename;
 	OutputDriver *outputDriver;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	double from;
 
 	Logger *logger;

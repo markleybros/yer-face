@@ -5,16 +5,16 @@ using namespace std;
 
 namespace YerFace {
 
-EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives, double myFrom) {
+EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer, double myFrom) {
 	eventTimestampAdjustment = config["YerFace"]["EventLogger"]["eventTimestampAdjustment"];
 	eventFilename = myEventFile;
 	outputDriver = myOutputDriver;
 	if(outputDriver == NULL) {
 		throw invalid_argument("outputDriver cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	from = myFrom;
 	logger = new Logger("EventLogger");
@@ -77,7 +77,7 @@ void EventLogger::logEvent(string eventName, json payload, bool propagate, json 
 void EventLogger::startNewFrame(void) {
 	if(eventReplay) {
 		eventReplayHold = false;
-		workingFrameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+		workingFrameTimestamps = frameServer->getWorkingFrameTimestamps();
 
 		processNextPacket();
 

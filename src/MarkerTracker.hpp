@@ -12,7 +12,7 @@
 #include "MarkerType.hpp"
 #include "FaceMapper.hpp"
 #include "FaceTracker.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Utilities.hpp"
 
 using namespace std;
@@ -66,7 +66,7 @@ private:
 	Logger *logger;
 	SDL_mutex *myCmpMutex;
 	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FaceTracker *faceTracker;
 
 	list<MarkerPoint> markerPointSmoothingBuffer;

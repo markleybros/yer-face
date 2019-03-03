@@ -2,7 +2,7 @@
 
 #include "Logger.hpp"
 #include "Utilities.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 
 #include <string>
 #include <list>
@@ -22,7 +22,7 @@ namespace YerFace {
 #define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
 
-class FrameDerivatives;
+class FrameServer;
 
 enum FFmpegDriverOutAudioChannelMap {
 	CHANNELMAP_NONE = 0,
@@ -104,7 +104,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
+	FFmpegDriver(FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
@@ -137,7 +137,7 @@ private:
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 	bool handleScanning(MediaContext *context, double *timestamp);
 
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	bool lowLatency;
 	double from, until;
 

@@ -53,7 +53,7 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 	}
 
 	sdlDriver = faceMapper->getSDLDriver();
-	frameDerivatives = faceMapper->getFrameDerivatives();
+	frameServer = faceMapper->getFrameServer();
 	faceTracker = faceMapper->getFaceTracker();
 
 	working.markerPoint.set = false;
@@ -269,7 +269,7 @@ void MarkerTracker::performMarkerPointValidationAndSmoothing(void) {
 		return;
 	}
 
-	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	FrameTimestamps frameTimestamps = frameServer->getWorkingFrameTimestamps();
 	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	double frameTimestamp = frameTimestamps.startTimestamp;
 	working.markerPoint.timestamp = frameTimestamp;
@@ -358,7 +358,7 @@ void MarkerTracker::renderPreviewHUD(void) {
 			color[1] = 127;
 		}
 	}
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
+	Mat frame = frameServer->getCompletedPreviewFrame();
 	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0 && complete.markerPoint.set) {
 		Utilities::drawX(frame, complete.markerPoint.point, color, 10, 2);

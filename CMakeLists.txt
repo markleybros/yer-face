@@ -14,7 +14,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:/usr/local/lib/pkgconfig:/opt/local/lib/pkgconfig:/sw/lib/pkgconfig")
 
-set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/FrameDerivatives.cpp src/Metrics.cpp src/Utilities.cpp )
+set( YERFACE_MODULES src/yer-face.cpp src/Logger.cpp src/SDLDriver.cpp src/FFmpegDriver.cpp src/FrameServer.cpp src/Metrics.cpp src/Utilities.cpp )
 
 include(CTest)
 

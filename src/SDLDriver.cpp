@@ -14,7 +14,7 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
+SDLDriver::SDLDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
 	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
@@ -48,9 +48,9 @@ SDLDriver::SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDr
 	previewTexture = NULL;
 	onBasisFlagCallbacks.clear();
 
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
@@ -430,7 +430,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	FrameTimestamps frameTimestamps;
 	// FIXME
 	// try {
-	// 	frameTimestamps = self->frameDerivatives->getCompletedFrameTimestamps();
+	// 	frameTimestamps = self->frameServer->getCompletedFrameTimestamps();
 	// } catch(exception &e) {
 		frameTimestamps.startTimestamp = 0.0;
 		frameTimestamps.estimatedEndTimestamp = 0.0;

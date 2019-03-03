@@ -9,7 +9,7 @@
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
 // #include "FaceTracker.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 // #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
@@ -64,7 +64,7 @@ SDL_Thread *workerThread;
 Logger *logger = NULL;
 SDLDriver *sdlDriver = NULL;
 FFmpegDriver *ffmpegDriver = NULL;
-FrameDerivatives *frameDerivatives = NULL;
+FrameServer *frameServer = NULL;
 // FaceTracker *faceTracker = NULL;
 // FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
@@ -84,6 +84,10 @@ SDL_mutex *frameSizeMutex;
 static int runCaptureLoop(void *ptr);
 // Mat doRenderPreviewFrame(void);
 void parseConfigFile(void);
+
+void tempeventhandler(unsigned long frameNumber) {
+	logger->verbose("Got a status change event for frame %ld!", frameNumber);
+}
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -185,23 +189,25 @@ int main(int argc, const char** argv) {
 	}
 
 	//Instantiate our classes.
-	frameDerivatives = new FrameDerivatives(config, lowLatency);
-	ffmpegDriver = new FFmpegDriver(frameDerivatives, lowLatency, from, until, false);
+	frameServer = new FrameServer(config, lowLatency);
+	ffmpegDriver = new FFmpegDriver(frameServer, lowLatency, from, until, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
-	sdlDriver = new SDLDriver(config, frameDerivatives, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	// faceTracker = new FaceTracker(config, sdlDriver, frameDerivatives, lowLatency);
-	// faceMapper = new FaceMapper(config, sdlDriver, frameDerivatives, faceTracker);
+	sdlDriver = new SDLDriver(config, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
+	// faceTracker = new FaceTracker(config, sdlDriver, frameServer, lowLatency);
+	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
 	metrics = new Metrics(config, "YerFace", true);
-	// outputDriver = new OutputDriver(config, outData, frameDerivatives, faceTracker, sdlDriver);
+	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
-	// 	sphinxDriver = new SphinxDriver(config, frameDerivatives, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
+	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
 	// }
-	// eventLogger = new EventLogger(config, inEvents, outputDriver, frameDerivatives, from);
+	// eventLogger = new EventLogger(config, inEvents, outputDriver, frameServer, from);
 
 	// outputDriver->setEventLogger(eventLogger);
+
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_NEW, tempeventhandler);
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
@@ -244,7 +250,7 @@ int main(int argc, const char** argv) {
 		// 	bool previewFrameValid = false;
 		// 	Mat previewFrame;
 		// 	YerFace_MutexLock(flipWorkingCompletedMutex);
-		// 	if(frameDerivatives->getCompletedFrameSet()) {
+		// 	if(frameServer->getCompletedFrameSet()) {
 		// 		previewFrame = doRenderPreviewFrame();
 		// 		previewFrameValid = true;
 		// 	}
@@ -272,7 +278,7 @@ int main(int argc, const char** argv) {
 	delete metrics;
 	// delete faceMapper;
 	// delete faceTracker;
-	delete frameDerivatives;
+	delete frameServer;
 	delete ffmpegDriver;
 	delete sdlDriver;
 	delete logger;
@@ -306,7 +312,7 @@ int runCaptureLoop(void *ptr) {
 			// Start timer
 			MetricsTick tick = metrics->startClock();
 
-			frameDerivatives->setWorkingFrame(&videoFrame);
+			frameServer->insertNewFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
 			// eventLogger->startNewFrame();
@@ -322,7 +328,7 @@ int runCaptureLoop(void *ptr) {
 
 			YerFace_MutexLock(flipWorkingCompletedMutex);
 
-			// frameDerivatives->advanceWorkingFrameToCompleted();
+			// frameServer->advanceWorkingFrameToCompleted();
 			// faceTracker->advanceWorkingToCompleted();
 			// faceMapper->advanceWorkingToCompleted();
 			// if(sphinxDriver != NULL) {
@@ -362,7 +368,7 @@ int runCaptureLoop(void *ptr) {
 // Mat doRenderPreviewFrame(void) {
 // 	YerFace_MutexLock(flipWorkingCompletedMutex);
 
-// 	// frameDerivatives->resetCompletedPreviewFrame();
+// 	// frameServer->resetCompletedPreviewFrame();
 
 // 	// faceTracker->renderPreviewHUD();
 // 	// faceMapper->renderPreviewHUD();
@@ -370,7 +376,7 @@ int runCaptureLoop(void *ptr) {
 // 	// 	sphinxDriver->renderPreviewHUD();
 // 	// }
 
-// 	// Mat previewFrame = frameDerivatives->getCompletedPreviewFrame().clone();
+// 	// Mat previewFrame = frameServer->getCompletedPreviewFrame().clone();
 
 // 	// putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 // 	// putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);

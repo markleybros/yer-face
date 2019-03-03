@@ -25,16 +25,16 @@ bool OutputFrameContainer::isReady(void) {
 	return true;
 }
 
-OutputDriver::OutputDriver(json config, String myOutputFilename, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+OutputDriver::OutputDriver(json config, String myOutputFilename, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	serverThread = NULL;
 	writerThread = NULL;
 	writerMutex = NULL;
 	writerCond = NULL;
 	outputBufMutex = NULL;
 	outputFilename = myOutputFilename;
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
@@ -247,7 +247,7 @@ void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
 }
 
 void OutputDriver::handleCompletedFrame(void) {
-	FrameTimestamps frameTimestamps = frameDerivatives->getCompletedFrameTimestamps();
+	FrameTimestamps frameTimestamps = frameServer->getCompletedFrameTimestamps();
 
 	json frame = extraFrameData;
 	frame["meta"] = nullptr;

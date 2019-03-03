@@ -42,7 +42,7 @@
         "H": 25
       }
     },
-    "FrameDerivatives": {
+    "FrameServer": {
       "LowLatency": {
         "classificationBoundingBox": 320,
         "classificationScaleFactor": 0.0

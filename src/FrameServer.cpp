@@ -1,5 +1,5 @@
 
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Utilities.hpp"
 #include <exception>
 #include <cstdio>
@@ -8,8 +8,8 @@ using namespace std;
 
 namespace YerFace {
 
-FrameDerivatives::FrameDerivatives(json config, bool myLowLatency) {
-	logger = new Logger("FrameDerivatives");
+FrameServer::FrameServer(json config, bool myLowLatency) {
+	logger = new Logger("FrameServer");
 	lowLatency = myLowLatency;
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -18,27 +18,41 @@ FrameDerivatives::FrameDerivatives(json config, bool myLowLatency) {
 	if(!lowLatency) {
 		lowLatencyKey = "Offline";
 	}
-	classificationBoundingBox = config["YerFace"]["FrameDerivatives"][lowLatencyKey]["classificationBoundingBox"];
+	classificationBoundingBox = config["YerFace"]["FrameServer"][lowLatencyKey]["classificationBoundingBox"];
 	if(classificationBoundingBox < 0) {
 		throw invalid_argument("Classification Bounding Box is invalid.");
 	}
-	classificationScaleFactor = config["YerFace"]["FrameDerivatives"][lowLatencyKey]["classificationScaleFactor"];
+	classificationScaleFactor = config["YerFace"]["FrameServer"][lowLatencyKey]["classificationScaleFactor"];
 	if(classificationScaleFactor < 0.0 || classificationScaleFactor > 1.0) {
 		throw invalid_argument("Classification Scale Factor is invalid.");
 	}
-	metrics = new Metrics(config, "FrameDerivatives");
-	logger->debug("FrameDerivatives constructed and ready to go!");
+
+	for(unsigned int i = 0; i <= FRAME_STATUS_MAX; i++) {
+		onFrameStatusChangeCallbacks[i].clear();
+	}
+
+	metrics = new Metrics(config, "FrameServer");
+	logger->debug("FrameServer constructed and ready to go!");
 }
 
-FrameDerivatives::~FrameDerivatives() {
-	logger->debug("FrameDerivatives object destructing...");
+FrameServer::~FrameServer() {
+	logger->debug("FrameServer object destructing...");
 	// FIXME - Actually tear everything down...
 	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
 
-void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
+void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber)> callback) {
+	if(newStatus < 0 || newStatus > FRAME_STATUS_MAX) {
+		throw invalid_argument("onFrameStatusChangeEvent() passed invalid WorkingFrameStatus!");
+	}
+	YerFace_MutexLock(myMutex);
+	onFrameStatusChangeCallbacks[newStatus].push_back(callback);
+	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	YerFace_MutexLock(myMutex);
 	MetricsTick tick = metrics->startClock();
 
@@ -73,11 +87,13 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 	frameStore[workingFrame.frameTimestamps.frameNumber] = workingFrame;
 	logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame.frameTimestamps.frameNumber, frameStore.size());
 
+	setFrameStatus(workingFrame.frameTimestamps.frameNumber, FRAME_STATUS_NEW);
+
 	metrics->endClock(tick);
 	YerFace_MutexUnlock(myMutex);
 }
 
-// Mat FrameDerivatives::getWorkingFrame(void) {
+// Mat FrameServer::getWorkingFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!workingFrameSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -88,7 +104,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return value;
 // }
 
-// Mat FrameDerivatives::getCompletedFrame(void) {
+// Mat FrameServer::getCompletedFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!completedFrameSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -99,7 +115,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return value;
 // }
 
-// void FrameDerivatives::advanceWorkingFrameToCompleted(void) {
+// void FrameServer::advanceWorkingFrameToCompleted(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!workingFrameSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -119,7 +135,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	YerFace_MutexUnlock(myMutex);
 // }
 
-// ClassificationFrame FrameDerivatives::getClassificationFrame(void) {
+// ClassificationFrame FrameServer::getClassificationFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	ClassificationFrame result;
 // 	result.timestamps.set = false;
@@ -136,7 +152,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return result;
 // }
 
-// Mat FrameDerivatives::getWorkingPreviewFrame(void) {
+// Mat FrameServer::getWorkingPreviewFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!workingFrameSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -151,7 +167,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return value;
 // }
 
-// Mat FrameDerivatives::getCompletedPreviewFrame(void) {
+// Mat FrameServer::getCompletedPreviewFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!completedFrameSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -166,13 +182,13 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return value;
 // }
 
-// void FrameDerivatives::resetCompletedPreviewFrame(void) {
+// void FrameServer::resetCompletedPreviewFrame(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	completedPreviewFrameSet = false;
 // 	YerFace_MutexUnlock(myMutex);
 // }
 
-// Size FrameDerivatives::getWorkingFrameSize(void) {
+// Size FrameServer::getWorkingFrameSize(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!workingFrameSizeSet) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -183,7 +199,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return size;
 // }
 
-// FrameTimestamps FrameDerivatives::getWorkingFrameTimestamps(void) {
+// FrameTimestamps FrameServer::getWorkingFrameTimestamps(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!workingFrameTimestamps.set) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -194,7 +210,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return timestamps;
 // }
 
-// FrameTimestamps FrameDerivatives::getCompletedFrameTimestamps(void) {
+// FrameTimestamps FrameServer::getCompletedFrameTimestamps(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	if(!completedFrameTimestamps.set) {
 // 		YerFace_MutexUnlock(myMutex);
@@ -205,11 +221,23 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 // 	return timestamps;
 // }
 
-// bool FrameDerivatives::getCompletedFrameSet(void) {
+// bool FrameServer::getCompletedFrameSet(void) {
 // 	YerFace_MutexLock(myMutex);
 // 	bool status = completedFrameSet;
 // 	YerFace_MutexUnlock(myMutex);
 // 	return status;
 // }
+
+void FrameServer::setFrameStatus(signed long frameNumber, WorkingFrameStatus newStatus) {
+	if(newStatus < 0 || newStatus > FRAME_STATUS_MAX) {
+		throw invalid_argument("setFrameStatus() passed invalid WorkingFrameStatus!");
+	}
+	YerFace_MutexLock(myMutex);
+	frameStore[frameNumber].status = newStatus;
+	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
+		callback(frameNumber);
+	}
+	YerFace_MutexUnlock(myMutex);
+}
 
 }; //namespace YerFace

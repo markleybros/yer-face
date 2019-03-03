@@ -13,7 +13,7 @@
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "MarkerType.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 
@@ -155,7 +155,7 @@ using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5
 
 class FaceTracker {
 public:
-	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency);
+	FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, bool myLowLatency);
 	~FaceTracker() noexcept(false);
 	void processCurrentFrame(void);
 	void advanceWorkingToCompleted(void);
@@ -178,7 +178,7 @@ private:
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	bool lowLatency;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
