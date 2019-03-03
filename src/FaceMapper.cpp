@@ -92,13 +92,13 @@ FaceMapper::~FaceMapper() {
 
 void FaceMapper::processCurrentFrame(void) {
 
-	metrics->startClock();
+	MetricsTick tick = metrics->startClock();
 
 	for(MarkerTracker *tracker : trackers) {
 		tracker->processCurrentFrame();
 	}
 
-	metrics->endClock();
+	metrics->endClock(tick);
 }
 
 void FaceMapper::advanceWorkingToCompleted(void) {

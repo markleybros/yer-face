@@ -47,7 +47,7 @@ FrameDerivatives::~FrameDerivatives() {
 
 void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 	YerFace_MutexLock(myMutex);
-	metrics->startClock();
+	MetricsTick tick = metrics->startClock();
 	workingFrame = videoFrame->frameCV.clone();
 
 	Size frameSize = workingFrame.size();
@@ -80,7 +80,7 @@ void FrameDerivatives::setWorkingFrame(VideoFrame *videoFrame) {
 	workingFrameSet = true;
 	workingPreviewFrameSet = false;
 
-	metrics->endClock();
+	metrics->endClock(tick);
 	YerFace_MutexUnlock(myMutex);
 }
 

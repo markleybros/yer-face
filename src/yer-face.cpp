@@ -305,7 +305,7 @@ int runCaptureLoop(void *ptr) {
 			}
 
 			// Start timer
-			metrics->startClock();
+			MetricsTick tick = metrics->startClock();
 
 			frameDerivatives->setWorkingFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
@@ -315,7 +315,7 @@ int runCaptureLoop(void *ptr) {
 			faceTracker->processCurrentFrame();
 			faceMapper->processCurrentFrame();
 
-			metrics->endClock();
+			metrics->endClock(tick);
 
 			while(sdlDriver->getIsPaused() && sdlDriver->getIsRunning()) {
 				SDL_Delay(100);

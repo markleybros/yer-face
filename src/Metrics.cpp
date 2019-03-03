@@ -38,27 +38,27 @@ Metrics::Metrics(json config, const char *myName, FrameDerivatives *myFrameDeriv
 
 Metrics::~Metrics() {
 	logger->debug("Metrics object destructing...");
+	logReportNow("FINAL REPORT: ");
 	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
 
-void Metrics::startClock(void) {
-	YerFace_MutexLock(myMutex);
-	MetricEntry entry;
-	entry.startTime = (double)getTickCount() / (double)getTickFrequency();
-	entries.push_front(entry);
-	YerFace_MutexUnlock(myMutex);
+MetricsTick Metrics::startClock(void) {
+	MetricsTick tick;
+	tick.startTime = (double)getTickCount() / (double)getTickFrequency();
+	return tick;
 }
 
-void Metrics::endClock(void) {
+void Metrics::endClock(MetricsTick tick) {
 	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount() / (double)getTickFrequency();
+	tick.runTime = now - entries.front().startTime;
 
 	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
 	double frameTimestamp = frameTimestamps.startTimestamp;
 
-	entries.front().runTime = now - entries.front().startTime;
-	entries.front().frameTimestamp = frameTimestamp;
+	tick.frameTimestamp = frameTimestamp;
+	entries.push_front(tick);
 
 	while(entries.back().frameTimestamp <= (frameTimestamp - averageOverSeconds)) {
 		entries.pop_back();
@@ -67,7 +67,7 @@ void Metrics::endClock(void) {
 	averageTimeSeconds = 0.0;
 	worstTimeSeconds = 0.0;
 	size_t numEntries = entries.size();
-	for(MetricEntry entry : entries) {
+	for(MetricsTick entry : entries) {
 		averageTimeSeconds = averageTimeSeconds + entry.runTime;
 		if(entry.runTime > worstTimeSeconds) {
 			worstTimeSeconds = entry.runTime;
@@ -81,14 +81,18 @@ void Metrics::endClock(void) {
 	}
 
 	if(lastReport + reportEverySeconds <= now) {
-		if(metricIsFrames) {
-			logger->verbose("%s %s", fpsString, timesString);
-		} else {
-			logger->verbose("%s", timesString);
-		}
+		logReportNow("");
 		lastReport = now;
 	}
 	YerFace_MutexUnlock(myMutex);
+}
+
+void Metrics::logReportNow(string prefix) {
+	if(metricIsFrames) {
+		logger->verbose("%s%s %s", prefix.c_str(), fpsString, timesString);
+	} else {
+		logger->verbose("%s%s", prefix.c_str(), timesString);
+	}
 }
 
 double Metrics::getAverageTimeSeconds(void) {

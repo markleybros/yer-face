@@ -148,7 +148,7 @@ FaceTracker::~FaceTracker() noexcept(false) {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 void FaceTracker::processCurrentFrame(void) {
-	metrics->startClock();
+	MetricsTick tick = metrics->startClock();
 
 	ClassificationFrame classificationFrame = frameDerivatives->getClassificationFrame();
 
@@ -172,7 +172,7 @@ void FaceTracker::processCurrentFrame(void) {
 
 	doPrecalculateFacialPlaneNormal();
 
-	metrics->endClock();
+	metrics->endClock(tick);
 }
 
 void FaceTracker::advanceWorkingToCompleted(void) {
@@ -256,9 +256,9 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
 		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
 
-	metricsLandmarks->startClock();
+	MetricsTick tick = metricsLandmarks->startClock();
 	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
-	metricsLandmarks->endClock();
+	metricsLandmarks->endClock(tick);
 
 	working.facialFeatures.featuresExposed.features.clear();
 	working.facialFeatures.featuresExposed.features.resize(result.num_parts());
@@ -663,10 +663,10 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 
 		if(classificationFrame.set && classificationFrame.timestamps.set &&
 		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {
-			self->metricsClassifier->startClock();
+			MetricsTick tick = self->metricsClassifier->startClock();
 			self->doClassifyFace(classificationFrame);
 			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
-			self->metricsClassifier->endClock();
+			self->metricsClassifier->endClock(tick);
 		}
 
 		YerFace_MutexLock(self->myClassificationMutex);

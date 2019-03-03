@@ -15,7 +15,7 @@ namespace YerFace {
 
 #define METRICS_STRING_LENGTH 256
 
-class MetricEntry {
+class MetricsTick {
 public:
 	double startTime;
 	double runTime;
@@ -28,14 +28,16 @@ class Metrics {
 public:
 	Metrics(json config, const char *myName, FrameDerivatives *myFrameDerivatives, bool myMetricIsFrames = false);
 	~Metrics();
-	void startClock(void);
-	void endClock(void);
+	MetricsTick startClock(void);
+	void endClock(MetricsTick tick);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
 	double getFPS(void);
 	std::string getTimesString(void);
 	std::string getFPSString(void);
 private:
+	void logReportNow(string prefix);
+
 	string name;
 	FrameDerivatives *frameDerivatives;
 	bool metricIsFrames;
@@ -44,7 +46,7 @@ private:
 
 	Logger *logger;
 	SDL_mutex *myMutex;
-	list<MetricEntry> entries;
+	list<MetricsTick> entries;
 	double averageTimeSeconds;
 	double worstTimeSeconds;
 	double fps;
