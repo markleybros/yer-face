@@ -304,14 +304,14 @@ void OutputDriver::registerLateFrameData(string key) {
 	lateFrameWaitOn.push_back(key);
 }
 
-void OutputDriver::updateLateFrameData(signed long frameNumber, string key, json value) {
+void OutputDriver::updateLateFrameData(FrameNumber frameNumber, string key, json value) {
 	if(!writerThread) {
 		return;
 	}
 	YerFace_MutexLock(outputBufMutex);
 	bool success = false;
 	for(auto iter = outputBuf.begin(); iter != outputBuf.end(); ++iter) {
-		if((signed long)iter->frame["meta"]["frameNumber"] == frameNumber) {
+		if((FrameNumber)iter->frame["meta"]["frameNumber"] == frameNumber) {
 			iter->frame[key] = value;
 			iter->waitingOn[key] = false;
 			success = true;

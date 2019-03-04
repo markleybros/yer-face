@@ -31,10 +31,9 @@ enum WorkingFrameStatus: unsigned int {
 class WorkingFrame {
 public:
 	Mat frame; //BGR format, at the native resolution of the input.
-	bool frameSet;
 	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
 	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
-	bool previewFrameSet;
+	SDL_mutex *previewFrameMutex; //IMPORTANT - make sure you lock previewFrameMutex before WRITING TO or READING FROM previewFrame.
 	FrameTimestamps frameTimestamps;
 
 	WorkingFrameStatus status;
@@ -57,12 +56,11 @@ public:
 	~FrameServer() noexcept(false);
 	void setDraining(void);
 	bool isDrained(void);
-	void onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber, WorkingFrameStatus newStatus)> callback);
+	void onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)> callback);
 	void registerFrameStatusCheckpoint(WorkingFrameStatus status, string checkpointKey);
 	void insertNewFrame(VideoFrame *videoFrame);
-	// Mat getWorkingFrame(void);
-	// Mat getCompletedFrame(void);
-	// void advanceWorkingFrameToCompleted(void);
+	WorkingFrame *getWorkingFrame(FrameNumber frameNumber);
+	void setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, WorkingFrameStatus status, string checkpointKey);
 	// ClassificationFrame getClassificationFrame(void);
 	// Mat getWorkingPreviewFrame(void);
 	// Mat getCompletedPreviewFrame(void);
@@ -73,8 +71,8 @@ public:
 	// bool getCompletedFrameSet(void);
 
 private:
-	void destroyFrame(signed long frameNumber);
-	void setFrameStatus(signed long frameNumber, WorkingFrameStatus newStatus);
+	void destroyFrame(FrameNumber frameNumber);
+	void setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus newStatus);
 	void checkStatusValue(WorkingFrameStatus status);
 	static int frameHerderLoop(void *ptr);
 
@@ -91,9 +89,9 @@ private:
 	bool herderRunning;
 	SDL_Thread *herderThread;
 
-	unordered_map<signed long, WorkingFrame *> frameStore;
+	unordered_map<FrameNumber, WorkingFrame *> frameStore;
 
-	std::vector<function<void(signed long frameNumber, WorkingFrameStatus newStatus)>> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
+	std::vector<function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)>> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
 	std::vector<string> statusCheckpoints[FRAME_STATUS_MAX + 1];
 };
 

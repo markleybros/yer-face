@@ -66,11 +66,13 @@ public:
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
 };
 
+typedef signed long long FrameNumber;
+
 class FrameTimestamps {
 public:
 	double startTimestamp;
 	double estimatedEndTimestamp;
-	signed long frameNumber;
+	FrameNumber frameNumber;
 };
 
 }; //namespace YerFace

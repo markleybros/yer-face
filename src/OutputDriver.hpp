@@ -36,7 +36,7 @@ public:
 	void handleCompletedFrame(void);
 	void drainPipelineDataNow(void);
 	void registerLateFrameData(string key);
-	void updateLateFrameData(signed long frameNumber, string key, json value);
+	void updateLateFrameData(FrameNumber frameNumber, string key, json value);
 	void insertCompletedFrameData(string key, json value);
 private:
 	void handleNewBasisEvent(void);

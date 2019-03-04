@@ -66,7 +66,7 @@ FrameServer::~FrameServer() noexcept(false) {
 	delete logger;
 }
 
-void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(signed long frameNumber, WorkingFrameStatus newStatus)> callback) {
+void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)> callback) {
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	onFrameStatusChangeCallbacks[newStatus].push_back(callback);
@@ -95,8 +95,12 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 
 	WorkingFrame *workingFrame = new WorkingFrame();
 
+	if((workingFrame->previewFrameMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
 	workingFrame->frame = videoFrame->frameCV.clone();
-	workingFrame->frameSet = true;
+	workingFrame->previewFrame = workingFrame->frame.clone();
 
 	frameSize = workingFrame->frame.size();
 	frameSizeSet = true;
@@ -118,8 +122,6 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, workingFrame->classificationFrame.size().width, workingFrame->classificationFrame.size().height);
 		reportedScale = true;
 	}
-
-	workingFrame->previewFrameSet = false;
 
 	// Set all of the registered checkpoints to FALSE to accurately record the frame's status.
 	for(unsigned int i = 0; i <= FRAME_STATUS_MAX; i++) {
@@ -156,64 +158,43 @@ bool FrameServer::isDrained(void) {
 	return drained;
 }
 
-// Mat FrameServer::getWorkingFrame(void) {
-// 	YerFace_MutexLock(myMutex);
-// 	if(!workingFrameSet) {
-// 		YerFace_MutexUnlock(myMutex);
-// 		throw runtime_error("getWorkingFrame() called, but no working frame set");
-// 	}
-// 	Mat value = workingFrame;
-// 	YerFace_MutexUnlock(myMutex);
-// 	return value;
-// }
+WorkingFrame *FrameServer::getWorkingFrame(FrameNumber frameNumber) {
+	YerFace_MutexLock(myMutex);
+	auto frameIter = frameStore.find(frameNumber);
+	if(frameIter == frameStore.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw runtime_error("getWorkingFrame() called, but the referenced frame does not exist in the frame store!");
+	}
+	YerFace_MutexUnlock(myMutex);
+	return frameIter->second;
+}
 
-// Mat FrameServer::getCompletedFrame(void) {
-// 	YerFace_MutexLock(myMutex);
-// 	if(!completedFrameSet) {
-// 		YerFace_MutexUnlock(myMutex);
-// 		throw runtime_error("getCompletedFrame() called, but no completed frame set");
-// 	}
-// 	Mat value = completedFrame;
-// 	YerFace_MutexUnlock(myMutex);
-// 	return value;
-// }
-
-// void FrameServer::advanceWorkingFrameToCompleted(void) {
-// 	YerFace_MutexLock(myMutex);
-// 	if(!workingFrameSet) {
-// 		YerFace_MutexUnlock(myMutex);
-// 		throw runtime_error("advanceWorkingFrameToCompleted() called, but no working frame set");
-// 	}
-// 	completedFrame = workingFrame;
-// 	completedFrameSet = true;
-// 	workingFrameSet = false;
-// 	completedFrameTimestamps = workingFrameTimestamps;
-// 	if(workingPreviewFrameSet) {
-// 		completedPreviewFrameSource = workingPreviewFrame;
-// 	} else {
-// 		completedPreviewFrameSource = completedFrame;
-// 	}
-// 	completedPreviewFrameSet = false;
-// 	workingPreviewFrameSet = false;
-// 	YerFace_MutexUnlock(myMutex);
-// }
-
-// ClassificationFrame FrameServer::getClassificationFrame(void) {
-// 	YerFace_MutexLock(myMutex);
-// 	ClassificationFrame result;
-// 	result.timestamps.set = false;
-// 	result.set = false;
-// 	if(!workingFrameSet || !workingFrameTimestamps.set) {
-// 		YerFace_MutexUnlock(myMutex);
-// 		return result;
-// 	}
-// 	result.timestamps = workingFrameTimestamps;
-// 	result.frame = classificationFrame;
-// 	result.scaleFactor = classificationScaleFactor;
-// 	result.set = true;
-// 	YerFace_MutexUnlock(myMutex);
-// 	return result;
-// }
+void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, WorkingFrameStatus status, string checkpointKey) {
+	checkStatusValue(status);
+	YerFace_MutexLock(myMutex);
+	WorkingFrame *frame;
+	try {
+		frame = getWorkingFrame(frameNumber);
+	} catch(exception &e) {
+		YerFace_MutexUnlock(myMutex);
+		throw;
+	}
+	if(status != frame->status) {
+		YerFace_MutexUnlock(myMutex);
+		throw logic_error("Trying to set a checkpoint on a status for a frame whose current status does not match!");
+	}
+	auto checkpointIter = frame->checkpoints[status].find(checkpointKey);
+	if(checkpointIter == frame->checkpoints[status].end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw logic_error("Trying to set a checkpoint on a status for a frame but that checkpoint was never registered!");
+	}
+	if(checkpointIter->second) {
+		YerFace_MutexUnlock(myMutex);
+		throw logic_error("Trying to set a checkpoint on a status for a frame, but the checkpoint was already set!");
+	}
+	frame->checkpoints[status][checkpointKey] = true;
+	YerFace_MutexUnlock(myMutex);
+}
 
 // Mat FrameServer::getWorkingPreviewFrame(void) {
 // 	YerFace_MutexLock(myMutex);
@@ -291,12 +272,13 @@ bool FrameServer::isDrained(void) {
 // 	return status;
 // }
 
-void FrameServer::destroyFrame(signed long frameNumber) {
+void FrameServer::destroyFrame(FrameNumber frameNumber) {
+	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
 }
 
-void FrameServer::setFrameStatus(signed long frameNumber, WorkingFrameStatus newStatus) {
+void FrameServer::setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	frameStore[frameNumber]->status = newStatus;
@@ -318,9 +300,9 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 	YerFace_MutexLock(self->myMutex);
 	while(self->herderRunning || !self->isDrained()) {
-		std::vector<signed long> garbageFrames;
+		std::list<FrameNumber> garbageFrames;
 		for(auto framePair : self->frameStore) {
-			signed long frameNumber = framePair.first;
+			FrameNumber frameNumber = framePair.first;
 			WorkingFrame *workingFrame = framePair.second;
 			WorkingFrameStatus status = workingFrame->status;
 
@@ -346,8 +328,8 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 		//Destroy GONE frames.
 		while(garbageFrames.size() > 0) {
-			self->destroyFrame(garbageFrames.back());
-			garbageFrames.pop_back();
+			self->destroyFrame(garbageFrames.front());
+			garbageFrames.pop_front();
 		}
 
 		//Relinquish control.

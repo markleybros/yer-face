@@ -72,8 +72,7 @@ Metrics *metrics = NULL;
 // SphinxDriver *sphinxDriver = NULL;
 // EventLogger *eventLogger = NULL;
 
-// unsigned long workingFrameNumber = 0;
-SDL_mutex *flipWorkingCompletedMutex;
+// FrameNumber workingFrameNumber = 0;
 
 //VARIABLES PROTECTED BY frameSizeMutex
 Size frameSize;
@@ -81,13 +80,20 @@ bool frameSizeValid = false;
 SDL_mutex *frameSizeMutex;
 //END VARIABLES PROTECTED BY frameSizeMutex
 
-static int runCaptureLoop(void *ptr);
-// Mat doRenderPreviewFrame(void);
-void parseConfigFile(void);
+//VARIABLES PROTECTED BY previewRenderMutex
+list<FrameNumber> previewRenderFrameNumbers;
+SDL_mutex *previewRenderMutex;
+//END VARIABLES PROTECTED BY previewRenderMutex
 
-void tempeventhandler(unsigned long frameNumber, WorkingFrameStatus newStatus) {
-	logger->verbose("Got a status change event for frame %ld! New status is %d", frameNumber, newStatus);
-}
+//VARIABLES PROTECTED BY previewDisplayMutex
+list<FrameNumber> previewDisplayFrameNumbers;
+SDL_mutex *previewDisplayMutex;
+//END VARIABLES PROTECTED BY previewDisplayMutex
+
+static int runCaptureLoop(void *ptr);
+void parseConfigFile(void);
+void handleFrameStatusPreviewing(FrameNumber frameNumber, WorkingFrameStatus newStatus);
+void handleFrameStatusLateProcessing(FrameNumber frameNumber, WorkingFrameStatus newStatus);
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -188,6 +194,21 @@ int main(int argc, const char** argv) {
 		}
 	}
 
+	sdlWindowRenderer.window = NULL;
+	sdlWindowRenderer.renderer = NULL;
+	windowInitializationFailed = false;
+
+	//Create locks.
+	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((previewRenderMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	if((previewDisplayMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
 	//Instantiate our classes.
 	frameServer = new FrameServer(config, lowLatency);
 	ffmpegDriver = new FFmpegDriver(frameServer, lowLatency, from, until, false);
@@ -207,23 +228,12 @@ int main(int argc, const char** argv) {
 
 	// outputDriver->setEventLogger(eventLogger);
 
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_NEW, tempeventhandler);
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PROCESSING, tempeventhandler);
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PREVIEWING, tempeventhandler);
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_LATE_PROCESSING, tempeventhandler);
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_DRAINING, tempeventhandler);
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_GONE, tempeventhandler);
-
-	sdlWindowRenderer.window = NULL;
-	sdlWindowRenderer.renderer = NULL;
-	windowInitializationFailed = false;
-
-	//Create locks.
-	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
-	if((flipWorkingCompletedMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
+	//Hook into the frame lifecycle.
+	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PREVIEWING, handleFrameStatusPreviewing);
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEWING, "main.PreviewRendered");
+	if(!headless) {
+		frameServer->onFrameStatusChangeEvent(FRAME_STATUS_LATE_PROCESSING, handleFrameStatusLateProcessing);
+		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
 	}
 
 	//Create worker thread.
@@ -232,9 +242,8 @@ int main(int argc, const char** argv) {
 	}
 
 	//Launch event / rendering loop.
-	while(sdlDriver->getIsRunning()) {
-		SDL_Delay(10); //FIXME - This doesn't have much of an impact on performance, but a better timing mechanism would be preferable.
-
+	while(sdlDriver->getIsRunning() || !frameServer->isDrained()) {
+		// Window initialization.
 		if(!headless && sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
 			if(!frameSizeValid) {
@@ -251,21 +260,68 @@ int main(int argc, const char** argv) {
 			YerFace_MutexUnlock(frameSizeMutex);
 		}
 
-		// if(!headless) {
-		// 	bool previewFrameValid = false;
-		// 	Mat previewFrame;
-		// 	YerFace_MutexLock(flipWorkingCompletedMutex);
-		// 	if(frameServer->getCompletedFrameSet()) {
-		// 		previewFrame = doRenderPreviewFrame();
-		// 		previewFrameValid = true;
-		// 	}
-		// 	YerFace_MutexUnlock(flipWorkingCompletedMutex);
-		// 	if(previewFrameValid && sdlWindowRenderer.window != NULL) {
-		// 		sdlDriver->doRenderPreviewFrame(previewFrame);
-		// 	}
-		// }
+		//Preview frame display.
+		if(!headless) {
+			FrameNumber previewDisplayFrameNumber = -1;
+			std::list<FrameNumber> garbageFrames;
+			YerFace_MutexLock(previewDisplayMutex);
+			//If there are preview frames waiting to be displayed, handle them.
+			if(previewDisplayFrameNumbers.size() > 0) {
+				//If there are multiples, skip the older ones.
+				while(previewDisplayFrameNumbers.size() > 1) {
+					garbageFrames.push_front(previewDisplayFrameNumbers.back());
+					previewDisplayFrameNumbers.pop_back();
+				}
+				//Only display the latest one.
+				previewDisplayFrameNumber = previewDisplayFrameNumbers.back();
+				previewDisplayFrameNumbers.pop_back();
+			}
+			YerFace_MutexUnlock(previewDisplayMutex);
 
+			//Note that we can't call frameServer->setWorkingFrameStatusCheckpoint() inside the above loop, because we would deadlock.
+			while(garbageFrames.size() > 0) {
+				frameServer->setWorkingFrameStatusCheckpoint(garbageFrames.front(), FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
+				garbageFrames.pop_front();
+			}
+
+			//If we have a new frame to display, display it.
+			if(previewDisplayFrameNumber > 0) {
+				WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewDisplayFrameNumber);
+				if(sdlWindowRenderer.window != NULL) {
+					YerFace_MutexLock(previewFrame->previewFrameMutex);
+					Mat previewFrameCopy = previewFrame->previewFrame.clone();
+					YerFace_MutexUnlock(previewFrame->previewFrameMutex);
+					sdlDriver->doRenderPreviewFrame(previewFrameCopy);
+				}
+				frameServer->setWorkingFrameStatusCheckpoint(previewDisplayFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
+			}
+		}
+
+		//Render main HUD on preview frames.
+		std::list<FrameNumber> renderFrames;
+		renderFrames.clear();
+		YerFace_MutexLock(previewRenderMutex);
+		while(previewRenderFrameNumbers.size() > 0) {
+			renderFrames.push_front(previewRenderFrameNumbers.back());
+			previewRenderFrameNumbers.pop_back();
+		}
+		YerFace_MutexUnlock(previewRenderMutex);
+		while(renderFrames.size() > 0) {
+			FrameNumber previewFrameNumber = renderFrames.back();
+			WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewFrameNumber);
+			YerFace_MutexLock(previewFrame->previewFrameMutex);
+			putText(previewFrame->previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+			putText(previewFrame->previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+			YerFace_MutexUnlock(previewFrame->previewFrameMutex);
+			frameServer->setWorkingFrameStatusCheckpoint(renderFrames.back(), FRAME_STATUS_PREVIEWING, "main.PreviewRendered");
+			renderFrames.pop_back();
+		}
+
+		//SDL bookkeeping.
 		sdlDriver->doHandleEvents();
+
+		//Relinquish control.
+		SDL_Delay(0);
 	}
 
 	//Join worker thread.
@@ -273,7 +329,8 @@ int main(int argc, const char** argv) {
 
 	//Cleanup.
 	SDL_DestroyMutex(frameSizeMutex);
-	SDL_DestroyMutex(flipWorkingCompletedMutex);
+	SDL_DestroyMutex(previewRenderMutex);
+	SDL_DestroyMutex(previewDisplayMutex);
 
 	// delete eventLogger;
 	// if(sphinxDriver != NULL) {
@@ -332,8 +389,6 @@ int runCaptureLoop(void *ptr) {
 				SDL_Delay(100);
 			}
 
-			YerFace_MutexLock(flipWorkingCompletedMutex);
-
 			// frameServer->advanceWorkingFrameToCompleted();
 			// faceTracker->advanceWorkingToCompleted();
 			// faceMapper->advanceWorkingToCompleted();
@@ -354,8 +409,6 @@ int runCaptureLoop(void *ptr) {
 			// 	logger->debug("YerFace writing preview frame to %s ...", filename);
 			// 	imwrite(filename, previewFrame);
 			// }
-
-			YerFace_MutexUnlock(flipWorkingCompletedMutex);
 		}
 		SDL_Delay(0); //Be a good neighbor.
 	}
@@ -405,4 +458,16 @@ void parseConfigFile(void) {
 	std::stringstream ssBuffer;
 	ssBuffer << fileStream.rdbuf();
 	config = json::parse(ssBuffer.str());
+}
+
+void handleFrameStatusPreviewing(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
+	YerFace_MutexLock(previewRenderMutex);
+	previewRenderFrameNumbers.push_front(frameNumber);
+	YerFace_MutexUnlock(previewRenderMutex);
+}
+
+void handleFrameStatusLateProcessing(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
+	YerFace_MutexLock(previewDisplayMutex);
+	previewDisplayFrameNumbers.push_front(frameNumber);
+	YerFace_MutexUnlock(previewDisplayMutex);
 }

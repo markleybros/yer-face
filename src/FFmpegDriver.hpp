@@ -39,7 +39,7 @@ public:
 	AVFormatContext *formatContext;
 
 	AVFrame *frame;
-	signed long frameNumber;
+	FrameNumber frameNumber;
 
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;

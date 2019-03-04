@@ -656,7 +656,7 @@ int FaceTracker::runClassificationLoop(void *ptr) {
 	FaceTracker *self = (FaceTracker *)ptr;
 	self->logger->verbose("Face Tracker Classification Thread alive!");
 
-	signed long lastClassificationFrameNumber = -1;
+	FrameNumber lastClassificationFrameNumber = -1;
 
 	while(true) {
 		ClassificationFrame classificationFrame = self->frameServer->getClassificationFrame();
