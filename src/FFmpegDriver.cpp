@@ -332,7 +332,7 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
 			readyVideoFrameBufferEmptyWarning = true;
 		}
-		SDL_Delay(0);
+		SDL_Delay(10);
 		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();
@@ -651,7 +651,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 
 		if(context->demuxerRunning) {
 			YerFace_MutexUnlock(context->demuxerMutex);
-			SDL_Delay(0);
+			SDL_Delay(0); //FIXME - CPU Starvation?
 			YerFace_MutexLock(context->demuxerMutex);
 		}
 	}

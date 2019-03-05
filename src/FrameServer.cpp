@@ -31,9 +31,11 @@ FrameServer::FrameServer(json config, bool myLowLatency) {
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((myCond = SDL_CreateCond()) == NULL) {
+		throw runtime_error("Failed creating condition!");
+	}
 
 	draining = false;
-	herderRunning = true;
 	if((herderThread = SDL_CreateThread(FrameServer::frameHerderLoop, "FrameHerder", (void *)this)) == NULL) {
 		throw runtime_error("Failed starting thread!");
 	}
@@ -50,7 +52,6 @@ FrameServer::~FrameServer() noexcept(false) {
 		logger->warn("Was never set to draining! You should always drain the FrameServer before destructing it.");
 		draining = true;
 	}
-	herderRunning = false;
 	YerFace_MutexUnlock(myMutex);
 
 	SDL_WaitThread(herderThread, NULL);
@@ -61,15 +62,22 @@ FrameServer::~FrameServer() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
+	SDL_DestroyCond(myCond);
 	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
 
-void FrameServer::onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)> callback) {
-	checkStatusValue(newStatus);
+void FrameServer::onFrameServerDrainedEvent(FrameServerDrainedEventCallback callback) {
 	YerFace_MutexLock(myMutex);
-	onFrameStatusChangeCallbacks[newStatus].push_back(callback);
+	onFrameServerDrainedCallbacks.push_back(callback);
+	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::onFrameStatusChangeEvent(FrameStatusChangeEventCallback callback) {
+	checkStatusValue(callback.newStatus);
+	YerFace_MutexLock(myMutex);
+	onFrameStatusChangeCallbacks[callback.newStatus].push_back(callback);
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -131,11 +139,13 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	}
 
 	frameStore[workingFrame->frameTimestamps.frameNumber] = workingFrame;
-	logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
+	// logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
 
 	setFrameStatus(workingFrame->frameTimestamps.frameNumber, FRAME_STATUS_NEW);
 
 	metrics->endClock(tick);
+
+	SDL_CondSignal(myCond);
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -148,14 +158,6 @@ void FrameServer::setDraining(void) {
 	draining = true;
 	logger->verbose("Set to draining!");
 	YerFace_MutexUnlock(myMutex);
-}
-
-bool FrameServer::isDrained(void) {
-	bool drained;
-	YerFace_MutexLock(myMutex);
-	drained = draining && frameStore.size() == 0;
-	YerFace_MutexUnlock(myMutex);
-	return drained;
 }
 
 WorkingFrame *FrameServer::getWorkingFrame(FrameNumber frameNumber) {
@@ -193,6 +195,7 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 		throw logic_error("Trying to set a checkpoint on a status for a frame, but the checkpoint was already set!");
 	}
 	frame->checkpoints[status][checkpointKey] = true;
+	SDL_CondSignal(myCond);
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -272,8 +275,17 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 // 	return status;
 // }
 
+bool FrameServer::isDrained(void) {
+	bool drained;
+	YerFace_MutexLock(myMutex);
+	drained = draining && frameStore.size() == 0;
+	YerFace_MutexUnlock(myMutex);
+	return drained;
+}
+
 void FrameServer::destroyFrame(FrameNumber frameNumber) {
 	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
+	// logger->verbose("Cleaning up GONE Frame #%lld ...", frameNumber);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
 }
@@ -282,8 +294,9 @@ void FrameServer::setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus new
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	frameStore[frameNumber]->status = newStatus;
+	// logger->verbose("Setting Frame #%lld Status to %d ...", frameNumber, newStatus);
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
-		callback(frameNumber, newStatus);
+		callback.callback(callback.userdata, newStatus, frameNumber);
 	}
 	YerFace_MutexUnlock(myMutex);
 }
@@ -299,8 +312,10 @@ int FrameServer::frameHerderLoop(void *ptr) {
 	self->logger->verbose("Frame Herder Thread alive!");
 
 	YerFace_MutexLock(self->myMutex);
-	while(self->herderRunning || !self->isDrained()) {
+	while(!self->isDrained()) {
+		bool didWork = false;
 		std::list<FrameNumber> garbageFrames;
+		// self->logger->verbose("Frame Herder Top-of-loop. FrameStore size: %lu", self->frameStore.size());
 		for(auto framePair : self->frameStore) {
 			FrameNumber frameNumber = framePair.first;
 			WorkingFrame *workingFrame = framePair.second;
@@ -308,6 +323,7 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 			//Does this frame need to be garbage collected?
 			if(status == FRAME_STATUS_GONE) {
+				didWork = true;
 				garbageFrames.push_back(frameNumber);
 				continue;
 			}
@@ -322,6 +338,7 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 			//Advance this frame to the next status.
 			if(checkpointsPassed) {
+				didWork = true;
 				self->setFrameStatus(frameNumber, (WorkingFrameStatus)(status + 1));
 			}
 		}
@@ -332,11 +349,22 @@ int FrameServer::frameHerderLoop(void *ptr) {
 			garbageFrames.pop_front();
 		}
 
-		//Relinquish control.
-		YerFace_MutexUnlock(self->myMutex);
-		SDL_Delay(0);
-		YerFace_MutexLock(self->myMutex);
+		//Sleep until needed.
+		if(!didWork) {
+			int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
+			if(result < 0) {
+				throw runtime_error("CondWaitTimeout() failed!");
+			} else if(result == SDL_MUTEX_TIMEDOUT) {
+				self->logger->warn("Timed out waiting for Condition signal!");
+			}
+		}
 	}
+
+	//Drained.
+	for(auto callback : self->onFrameServerDrainedCallbacks) {
+		callback.callback(callback.userdata);
+	}
+
 	YerFace_MutexUnlock(self->myMutex);
 
 	self->logger->verbose("Frame Herder Thread quitting...");

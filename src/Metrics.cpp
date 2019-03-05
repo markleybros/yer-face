@@ -46,9 +46,10 @@ MetricsTick Metrics::startClock(void) {
 }
 
 void Metrics::endClock(MetricsTick tick) {
-	YerFace_MutexLock(myMutex);
 	double now = (double)getTickCount() / (double)getTickFrequency();
 	tick.runTime = now - tick.startTime;
+
+	YerFace_MutexLock(myMutex);
 
 	entries.push_front(tick);
 

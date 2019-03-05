@@ -48,15 +48,26 @@ public:
 	bool set;
 };
 
-class Metrics;
+class FrameStatusChangeEventCallback {
+public:
+	WorkingFrameStatus newStatus;
+	void *userdata;
+	function<void(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber)> callback;
+};
+
+class FrameServerDrainedEventCallback {
+public:
+	void *userdata;
+	function<void(void *userdata)> callback;
+};
 
 class FrameServer {
 public:
 	FrameServer(json config, bool myLowLatency);
 	~FrameServer() noexcept(false);
 	void setDraining(void);
-	bool isDrained(void);
-	void onFrameStatusChangeEvent(WorkingFrameStatus newStatus, function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)> callback);
+	void onFrameServerDrainedEvent(FrameServerDrainedEventCallback callback);
+	void onFrameStatusChangeEvent(FrameStatusChangeEventCallback callback);
 	void registerFrameStatusCheckpoint(WorkingFrameStatus status, string checkpointKey);
 	void insertNewFrame(VideoFrame *videoFrame);
 	WorkingFrame *getWorkingFrame(FrameNumber frameNumber);
@@ -71,6 +82,7 @@ public:
 	// bool getCompletedFrameSet(void);
 
 private:
+	bool isDrained(void);
 	void destroyFrame(FrameNumber frameNumber);
 	void setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus newStatus);
 	void checkStatusValue(WorkingFrameStatus status);
@@ -82,17 +94,19 @@ private:
 	double classificationScaleFactor;
 	Logger *logger;
 	SDL_mutex *myMutex;
+	SDL_cond *myCond;
 	Metrics *metrics;
 	Size frameSize;
 	bool frameSizeSet;
 
-	bool herderRunning;
 	SDL_Thread *herderThread;
 
 	unordered_map<FrameNumber, WorkingFrame *> frameStore;
 
-	std::vector<function<void(FrameNumber frameNumber, WorkingFrameStatus newStatus)>> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
+	std::vector<FrameStatusChangeEventCallback> onFrameStatusChangeCallbacks[FRAME_STATUS_MAX + 1];
 	std::vector<string> statusCheckpoints[FRAME_STATUS_MAX + 1];
+
+	std::vector<FrameServerDrainedEventCallback> onFrameServerDrainedCallbacks;
 };
 
 }; //namespace YerFace

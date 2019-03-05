@@ -66,7 +66,7 @@ public:
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
 };
 
-typedef signed long long FrameNumber;
+typedef signed long long int FrameNumber;
 
 class FrameTimestamps {
 public:

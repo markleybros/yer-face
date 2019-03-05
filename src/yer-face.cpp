@@ -16,6 +16,7 @@
 // #include "OutputDriver.hpp"
 // #include "SphinxDriver.hpp"
 // #include "EventLogger.hpp"
+#include "ImageSequence.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -71,8 +72,7 @@ Metrics *metrics = NULL;
 // OutputDriver *outputDriver = NULL;
 // SphinxDriver *sphinxDriver = NULL;
 // EventLogger *eventLogger = NULL;
-
-// FrameNumber workingFrameNumber = 0;
+ImageSequence *imageSequence = NULL;
 
 //VARIABLES PROTECTED BY frameSizeMutex
 Size frameSize;
@@ -90,10 +90,16 @@ list<FrameNumber> previewDisplayFrameNumbers;
 SDL_mutex *previewDisplayMutex;
 //END VARIABLES PROTECTED BY previewDisplayMutex
 
+//VARIABLES PROTECTED BY frameServerDrainedMutex
+bool frameServerDrained = false;
+SDL_mutex *frameServerDrainedMutex;
+//END VARIABLES PROTECTED BY frameServerDrainedMutex
+
 static int runCaptureLoop(void *ptr);
 void parseConfigFile(void);
-void handleFrameStatusPreviewing(FrameNumber frameNumber, WorkingFrameStatus newStatus);
-void handleFrameStatusLateProcessing(FrameNumber frameNumber, WorkingFrameStatus newStatus);
+void handleFrameStatusPreviewing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+void handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+void handleFrameServerDrainedEvent(void *userdata);
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -208,6 +214,9 @@ int main(int argc, const char** argv) {
 	if((previewDisplayMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((frameServerDrainedMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
 	//Instantiate our classes.
 	frameServer = new FrameServer(config, lowLatency);
@@ -228,11 +237,29 @@ int main(int argc, const char** argv) {
 
 	// outputDriver->setEventLogger(eventLogger);
 
+	if(previewImgSeq.length() > 0) {
+		imageSequence = new ImageSequence(config, frameServer, previewImgSeq);
+	}
+
 	//Hook into the frame lifecycle.
-	frameServer->onFrameStatusChangeEvent(FRAME_STATUS_PREVIEWING, handleFrameStatusPreviewing);
+	FrameServerDrainedEventCallback frameServerDrainedCallback;
+	frameServerDrainedCallback.userdata = NULL;
+	frameServerDrainedCallback.callback = handleFrameServerDrainedEvent;
+	frameServer->onFrameServerDrainedEvent(frameServerDrainedCallback);
+
+	FrameStatusChangeEventCallback frameStatusPreviewingCallback;
+	frameStatusPreviewingCallback.userdata = NULL;
+	frameStatusPreviewingCallback.newStatus = FRAME_STATUS_PREVIEWING;
+	frameStatusPreviewingCallback.callback = handleFrameStatusPreviewing;
+	frameServer->onFrameStatusChangeEvent(frameStatusPreviewingCallback);
 	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEWING, "main.PreviewRendered");
+
 	if(!headless) {
-		frameServer->onFrameStatusChangeEvent(FRAME_STATUS_LATE_PROCESSING, handleFrameStatusLateProcessing);
+		FrameStatusChangeEventCallback frameStatusLateProcessingCallback;
+		frameStatusLateProcessingCallback.userdata = NULL;
+		frameStatusLateProcessingCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+		frameStatusLateProcessingCallback.callback = handleFrameStatusLateProcessing;
+		frameServer->onFrameStatusChangeEvent(frameStatusLateProcessingCallback);
 		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
 	}
 
@@ -242,7 +269,8 @@ int main(int argc, const char** argv) {
 	}
 
 	//Launch event / rendering loop.
-	while(sdlDriver->getIsRunning() || !frameServer->isDrained()) {
+	bool myDrained = false;
+	while(sdlDriver->getIsRunning() || !myDrained) {
 		// Window initialization.
 		if(!headless && sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
@@ -320,8 +348,12 @@ int main(int argc, const char** argv) {
 		//SDL bookkeeping.
 		sdlDriver->doHandleEvents();
 
-		//Relinquish control.
-		SDL_Delay(0);
+		//Be a good neighbor.
+		SDL_Delay(10); //FIXME - better timing?
+
+		YerFace_MutexLock(frameServerDrainedMutex);
+		myDrained = frameServerDrained;
+		YerFace_MutexUnlock(frameServerDrainedMutex);
 	}
 
 	//Join worker thread.
@@ -331,7 +363,11 @@ int main(int argc, const char** argv) {
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(previewRenderMutex);
 	SDL_DestroyMutex(previewDisplayMutex);
+	SDL_DestroyMutex(frameServerDrainedMutex);
 
+	if(imageSequence != NULL) {
+		delete imageSequence;
+	}
 	// delete eventLogger;
 	// if(sphinxDriver != NULL) {
 	// 	delete sphinxDriver;
@@ -358,7 +394,6 @@ int runCaptureLoop(void *ptr) {
 			if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
 				logger->info("FFmpeg Demuxer thread finished.");
 				sdlDriver->setIsRunning(false);
-				frameServer->setDraining();
 				continue;
 			}
 
@@ -398,24 +433,19 @@ int runCaptureLoop(void *ptr) {
 
 			// eventLogger->handleCompletedFrame();
 			// outputDriver->handleCompletedFrame();
-
-			//If requested, write image sequence. Note this is VERY EXPENSIVE because it's blocking on the capture loop.
-			// if(previewImgSeq.length() > 0) {
-			// 	Mat previewFrame = doRenderPreviewFrame();
-
-			// 	int filenameLength = previewImgSeq.length() + 32;
-			// 	char filename[filenameLength];
-			// 	snprintf(filename, filenameLength, "%s-%06lu.png", previewImgSeq.c_str(), workingFrameNumber);
-			// 	logger->debug("YerFace writing preview frame to %s ...", filename);
-			// 	imwrite(filename, previewFrame);
-			// }
 		}
-		SDL_Delay(0); //Be a good neighbor.
+		SDL_Delay(0); //FIXME - CPU Starvation?
 	}
 
-	while(!frameServer->isDrained()) {
+	frameServer->setDraining();
+
+	bool myDrained = false;
+	do {
 		SDL_Delay(10);
-	}
+		YerFace_MutexLock(frameServerDrainedMutex);
+		myDrained = frameServerDrained;
+		YerFace_MutexUnlock(frameServerDrainedMutex);
+	} while(!myDrained);
 
 	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
@@ -460,14 +490,20 @@ void parseConfigFile(void) {
 	config = json::parse(ssBuffer.str());
 }
 
-void handleFrameStatusPreviewing(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
+void handleFrameStatusPreviewing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
 	YerFace_MutexLock(previewRenderMutex);
 	previewRenderFrameNumbers.push_front(frameNumber);
 	YerFace_MutexUnlock(previewRenderMutex);
 }
 
-void handleFrameStatusLateProcessing(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
+void handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
 	YerFace_MutexLock(previewDisplayMutex);
 	previewDisplayFrameNumbers.push_front(frameNumber);
 	YerFace_MutexUnlock(previewDisplayMutex);
+}
+
+void handleFrameServerDrainedEvent(void *userdata) {
+	YerFace_MutexLock(frameServerDrainedMutex);
+	frameServerDrained = true;
+	YerFace_MutexUnlock(frameServerDrainedMutex);
 }

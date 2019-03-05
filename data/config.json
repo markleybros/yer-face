@@ -132,6 +132,9 @@
         "previewWidthPercentage": 0.2,
         "previewCenterHeightPercentage": 0.2
       }
+    },
+    "ImageSequence": {
+      "NumWorkersPerCPU": 0.5
     }
   }
 }
