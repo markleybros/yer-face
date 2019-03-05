@@ -14,15 +14,9 @@ using namespace std;
 
 namespace YerFace {
 
-SDLDriver::SDLDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
+SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
-	if((isRunningMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
-	if((isPausedMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	if((previewPositionInFrameMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
@@ -39,15 +33,17 @@ SDLDriver::SDLDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFF
 	previewWidthPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewWidthPercentage"];
 	previewCenterHeightPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
-	setIsRunning(true);
-	setIsPaused(false);
 	setPreviewPositionInFrame(BottomRight);
-	setPreviewDebugDensity(1);
+	setPreviewDebugDensity(2);
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
 	onBasisFlagCallbacks.clear();
 
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
 	frameServer = myFrameServer;
 	if(frameServer == NULL) {
 		throw invalid_argument("frameServer cannot be NULL");
@@ -127,10 +123,6 @@ SDLDriver::~SDLDriver() {
 	if(previewWindow.renderer != NULL) {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
-	SDL_DestroyMutex(isRunningMutex);
-	isRunningMutex = NULL;
-	SDL_DestroyMutex(isPausedMutex);
-	isPausedMutex = NULL;
 	SDL_DestroyMutex(previewPositionInFrameMutex);
 	previewPositionInFrameMutex = NULL;
 	SDL_DestroyMutex(previewDebugDensityMutex);
@@ -226,15 +218,15 @@ void SDLDriver::doHandleEvents(void) {
 	while(SDL_PollEvent(&event)){
 		switch(event.type) {
 			case SDL_QUIT:
-				setIsRunning(false);
+				status->setIsRunning(false);
 				break;
 			case SDL_KEYDOWN:
 				switch(event.key.keysym.sym) {
 					case SDLK_ESCAPE:
-						setIsRunning(false);
+						status->setIsRunning(false);
 						break;
 					case SDLK_SPACE:
-						toggleIsPaused();
+						status->toggleIsPaused();
 						break;
 					case SDLK_LEFT:
 						movePreviewPositionInFrame(MoveLeft);
@@ -263,41 +255,6 @@ void SDLDriver::doHandleEvents(void) {
 				break;
 		}
 	}
-}
-
-void SDLDriver::setIsRunning(bool newIsRunning) {
-	YerFace_MutexLock(isRunningMutex);
-	isRunning = newIsRunning;
-	YerFace_MutexUnlock(isRunningMutex);
-}
-
-bool SDLDriver::getIsRunning(void) {
-	YerFace_MutexLock(isRunningMutex);
-	bool status = isRunning;
-	YerFace_MutexUnlock(isRunningMutex);
-	return status;
-}
-
-void SDLDriver::setIsPaused(bool newIsPaused) {
-	YerFace_MutexLock(isPausedMutex);
-	isPaused = newIsPaused;
-	logger->info("Processing status is set to %s...", isPaused ? "PAUSED" : "RESUMED");
-	YerFace_MutexUnlock(isPausedMutex);
-}
-
-bool SDLDriver::toggleIsPaused(void) {
-	YerFace_MutexLock(isPausedMutex);
-	setIsPaused(!isPaused);
-	bool status = isPaused;
-	YerFace_MutexUnlock(isPausedMutex);
-	return status;
-}
-
-bool SDLDriver::getIsPaused(void) {
-	YerFace_MutexLock(isPausedMutex);
-	bool status = isPaused;
-	YerFace_MutexUnlock(isPausedMutex);
-	return status;
 }
 
 void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
@@ -347,6 +304,7 @@ void SDLDriver::setPreviewDebugDensity(int newDensity) {
 	} else {
 		previewDebugDensity = newDensity;
 	}
+	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
 	YerFace_MutexUnlock(previewDebugDensityMutex);
 }
 
@@ -357,6 +315,7 @@ int SDLDriver::incrementPreviewDebugDensity(void) {
 		previewDebugDensity = 0;
 	}
 	int status = previewDebugDensity;
+	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
 	YerFace_MutexUnlock(previewDebugDensityMutex);
 	return status;
 }

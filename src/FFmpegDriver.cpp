@@ -24,9 +24,13 @@ MediaContext::MediaContext(void) {
 	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
 	frameServer = myFrameServer;
 	if(frameServer == NULL) {
 		throw invalid_argument("frameServer cannot be NULL");
@@ -628,6 +632,13 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 
 	YerFace_MutexLock(context->demuxerMutex);
 	while(context->demuxerRunning) {
+		if(status->getIsPaused() && status->getIsRunning()) {
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(100);
+			YerFace_MutexLock(context->demuxerMutex);
+			continue;
+		}
+		
 		if(type == AVMEDIA_TYPE_VIDEO) {
 			if(!getIsVideoDraining()) {
 				// logger->verbose("Pumping VIDEO stream.");

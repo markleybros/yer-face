@@ -17,7 +17,6 @@ namespace YerFace {
 
 FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, bool myLowLatency) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
-	faceDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceDetector"];
 	working.faceRect.set = false;
 	working.facialFeatures.set = false;
 	working.facialFeatures.featuresExposed.set = false;
@@ -102,9 +101,9 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFra
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker.Process.All", frameServer);
-	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameServer);
-	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameServer, true);
+	metrics = new Metrics(config, "FaceTracker.Process.All");
+	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks");
+	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", true);
 
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -114,20 +113,13 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFra
 	}
 
 	deserialize(featureDetectionModelFileName.c_str()) >> shapePredictor;
-	if(faceDetectionModelFileName.length() > 0) {
-		usingDNNFaceDetection = true;
-		deserialize(faceDetectionModelFileName.c_str()) >> faceDetectionModel;
-	} else {
-		usingDNNFaceDetection = false;
-		frontalFaceDetector = get_frontal_face_detector();
-	}
 
 	classifierRunning = true;
 	if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
 		throw runtime_error("Failed starting thread!");
 	}
 
-	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s, Low Latency Mode: %s", usingDNNFaceDetection ? "DNN" : "HOG", lowLatency ? "Enabled" : "Disabled");
+	logger->debug("FaceTracker object constructed and ready to go! Low Latency Mode: %s", lowLatency ? "Enabled" : "Disabled");
 }
 
 FaceTracker::~FaceTracker() noexcept(false) {
@@ -183,53 +175,6 @@ void FaceTracker::advanceWorkingToCompleted(void) {
 	working.facialFeatures.set = false;
 	working.facialFeatures.featuresExposed.set = false;
 	working.facialPose.set = false;
-}
-
-void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
-	std::vector<dlib::rectangle> faces;
-
-	if(usingDNNFaceDetection) {
-		//Using dlib's CNN-based face detector which can (optimistically) be pushed out to the GPU
-		dlib::matrix<dlib::rgb_pixel> imageMatrix;
-		dlib::assign_image(imageMatrix, dlibClassificationFrame);
-		std::vector<dlib::mmod_rect> detections = faceDetectionModel(imageMatrix);
-		for(dlib::mmod_rect detection : detections) {
-			faces.push_back(detection.rect);
-		}
-	} else {
-		//Using dlib's built-in HOG face detector instead of a CNN-based detector
-		faces = frontalFaceDetector(dlibClassificationFrame);
-	}
-
-	int bestFace = -1;
-	int bestFaceArea = -1;
-	Rect2d tempBox, tempBoxNormalSize, bestFaceBox, bestFaceBoxNormalSize;
-	int i = -1;
-	for(dlib::rectangle face : faces) {
-		i++;
-		tempBox.x = face.left();
-		tempBox.y = face.top();
-		tempBox.width = face.right() - tempBox.x;
-		tempBox.height = face.bottom() - tempBox.y;
-		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationFrame.scaleFactor);
-		if((int)face.area() > bestFaceArea) {
-			bestFace = i;
-			bestFaceArea = face.area();
-			bestFaceBox = tempBox;
-			bestFaceBoxNormalSize = tempBoxNormalSize;
-		}
-	}
-	YerFace_MutexLock(myClassificationMutex);
-	newestClassificationBox.timestamps = classificationFrame.timestamps;
-	newestClassificationBox.run = true;
-	newestClassificationBox.set = false;
-	if(bestFace >= 0) {
-		newestClassificationBox.box = bestFaceBox;
-		newestClassificationBox.boxNormalSize = bestFaceBoxNormalSize;
-		newestClassificationBox.set = true;
-	}
-	YerFace_MutexUnlock(myClassificationMutex);
 }
 
 void FaceTracker::assignFaceRect(void) {

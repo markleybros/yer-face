@@ -1,8 +1,13 @@
 {
   "YerFace": {
+    "FaceClassifier": {
+      "numWorkersPerCPU": 0.0,
+      "numWorkers": 1,
+      "resultGoodForSeconds": 0.1,
+      "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
+    },
     "FaceTracker": {
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
-      "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat",
       "poseSmoothingOverSeconds": 0.5,
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.0,
@@ -134,7 +139,8 @@
       }
     },
     "ImageSequence": {
-      "NumWorkersPerCPU": 0.5
+      "numWorkersPerCPU": 0.25,
+      "numWorkers": 0
     }
   }
 }

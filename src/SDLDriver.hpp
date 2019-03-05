@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Logger.hpp"
+#include "Status.hpp"
 #include "FrameServer.hpp"
 #include "FFmpegDriver.hpp"
 
@@ -50,7 +51,7 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(json config, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
+	SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -58,11 +59,6 @@ public:
 	void doRenderPreviewFrame(Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
-	void setIsRunning(bool newisRunning);
-	bool getIsRunning(void);
-	void setIsPaused(bool newIsPaused);
-	bool toggleIsPaused(void);
-	bool getIsPaused(void);
 	void setPreviewPositionInFrame(PreviewPositionInFrame newPosition);
 	PreviewPositionInFrame movePreviewPositionInFrame(PreviewPositionInFrameDirection moveDirection);
 	PreviewPositionInFrame getPreviewPositionInFrame(void);
@@ -76,6 +72,7 @@ public:
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
+	Status *status;
 	FrameServer *frameServer;
 	FFmpegDriver *ffmpegDriver;
 	bool headless;
@@ -83,10 +80,6 @@ private:
 
 	Logger *logger;
 
-	bool isRunning;
-	SDL_mutex *isRunningMutex;
-	bool isPaused;
-	SDL_mutex *isPausedMutex;
 	PreviewPositionInFrame previewPositionInFrame;
 	SDL_mutex *previewPositionInFrameMutex;
 	int previewDebugDensity;

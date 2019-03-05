@@ -2,6 +2,7 @@
 
 #include "Metrics.hpp"
 #include "Logger.hpp"
+#include "Status.hpp"
 #include "Utilities.hpp"
 #include "FFmpegDriver.hpp"
 
@@ -32,6 +33,7 @@ class WorkingFrame {
 public:
 	Mat frame; //BGR format, at the native resolution of the input.
 	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
+	double classificationScaleFactor;
 	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
 	SDL_mutex *previewFrameMutex; //IMPORTANT - make sure you lock previewFrameMutex before WRITING TO or READING FROM previewFrame.
 	FrameTimestamps frameTimestamps;
@@ -40,13 +42,13 @@ public:
 	unordered_map<string, bool> checkpoints[FRAME_STATUS_MAX + 1];
 };
 
-class ClassificationFrame {
-public:
-	FrameTimestamps timestamps;
-	Mat frame;
-	double scaleFactor;
-	bool set;
-};
+// class ClassificationFrame {
+// public:
+// 	FrameTimestamps timestamps;
+// 	Mat frame;
+// 	double scaleFactor;
+// 	bool set;
+// };
 
 class FrameStatusChangeEventCallback {
 public:
@@ -63,7 +65,7 @@ public:
 
 class FrameServer {
 public:
-	FrameServer(json config, bool myLowLatency);
+	FrameServer(json config, Status *myStatus, bool myLowLatency);
 	~FrameServer() noexcept(false);
 	void setDraining(void);
 	void onFrameServerDrainedEvent(FrameServerDrainedEventCallback callback);
@@ -88,6 +90,7 @@ private:
 	void checkStatusValue(WorkingFrameStatus status);
 	static int frameHerderLoop(void *ptr);
 
+	Status *status;
 	bool lowLatency;
 	bool draining;
 	int classificationBoundingBox;

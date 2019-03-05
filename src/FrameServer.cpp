@@ -8,8 +8,12 @@ using namespace std;
 
 namespace YerFace {
 
-FrameServer::FrameServer(json config, bool myLowLatency) {
+FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	logger = new Logger("FrameServer");
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
 	lowLatency = myLowLatency;
 	string lowLatencyKey = "LowLatency";
 	if(!lowLatency) {
@@ -122,6 +126,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 			classificationScaleFactor = (double)classificationBoundingBox / (double)frameSize.height;
 		}
 	}
+	workingFrame->classificationScaleFactor = classificationScaleFactor;
 
 	resize(workingFrame->frame, workingFrame->classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
 
@@ -313,6 +318,13 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 	YerFace_MutexLock(self->myMutex);
 	while(!self->isDrained()) {
+		if(self->status->getIsPaused() && self->status->getIsRunning()) {
+			YerFace_MutexUnlock(self->myMutex);
+			SDL_Delay(100);
+			YerFace_MutexLock(self->myMutex);
+			continue;
+		}
+
 		bool didWork = false;
 		std::list<FrameNumber> garbageFrames;
 		// self->logger->verbose("Frame Herder Top-of-loop. FrameStore size: %lu", self->frameStore.size());
@@ -355,7 +367,9 @@ int FrameServer::frameHerderLoop(void *ptr) {
 			if(result < 0) {
 				throw runtime_error("CondWaitTimeout() failed!");
 			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				self->logger->warn("Timed out waiting for Condition signal!");
+				if(!self->status->getIsPaused()) {
+					self->logger->warn("Timed out waiting for Condition signal!");
+				}
 			}
 		}
 	}

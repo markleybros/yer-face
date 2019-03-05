@@ -104,7 +104,7 @@ public:
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
+	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
@@ -137,6 +137,7 @@ private:
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 	bool handleScanning(MediaContext *context, double *timestamp);
 
+	Status *status;
 	FrameServer *frameServer;
 	bool lowLatency;
 	double from, until;

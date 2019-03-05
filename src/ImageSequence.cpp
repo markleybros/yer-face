@@ -25,9 +25,13 @@ ImageSequence::ImageSequence(json config, FrameServer *myFrameServer, string myO
 		throw runtime_error("Failed creating condition!");
 	}
 	metrics = new Metrics(config, "ImageSequence", true);
-	numWorkersPerCPU = config["YerFace"]["ImageSequence"]["NumWorkersPerCPU"];
-	if(numWorkersPerCPU <= 0.0 || numWorkersPerCPU > 2.0) {
-		throw invalid_argument("NumWorkersPerCPU is nonsense.");
+	numWorkers = config["YerFace"]["FaceClassifier"]["numWorkers"];
+	if(numWorkers < 0.0) {
+		throw invalid_argument("numWorkers is nonsense.");
+	}
+	numWorkersPerCPU = config["YerFace"]["ImageSequence"]["numWorkersPerCPU"];
+	if(numWorkersPerCPU < 0.0) {
+		throw invalid_argument("numWorkersPerCPU is nonsense.");
 	}
 
 	//Hook into the frame lifecycle.
@@ -50,9 +54,16 @@ ImageSequence::ImageSequence(json config, FrameServer *myFrameServer, string myO
 	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "imageSequence.written");
 
 	//Start worker threads.
-	int numCPUs = SDL_GetCPUCount();
-	numWorkers = (int)ceil((double)numCPUs * (double)numWorkersPerCPU);
-	logger->debug("System has %d CPUs. Configured %.02lf Workers per CPU. Starting %d Workers.", numCPUs, numWorkersPerCPU, numWorkers);
+	if(numWorkers == 0) {
+		int numCPUs = SDL_GetCPUCount();
+		numWorkers = (int)ceil((double)numCPUs * (double)numWorkersPerCPU);
+		logger->debug("Calculating NumWorkers: System has %d CPUs, at %.02lf Workers per CPU that's %d NumWorkers.", numCPUs, numWorkersPerCPU, numWorkers);
+	} else {
+		logger->debug("NumWorkers explicitly set to %d.", numWorkers);
+	}
+	if(numWorkers < 1) {
+		throw invalid_argument("NumWorkers can't be zero!");
+	}
 	for(int i = 1; i <= numWorkers; i++) {
 		ImageSequenceWorker *worker = new ImageSequenceWorker();
 		worker->num = i;
@@ -89,6 +100,7 @@ ImageSequence::~ImageSequence() noexcept(false) {
 	SDL_DestroyCond(myCond);
 	SDL_DestroyMutex(myMutex);
 	delete logger;
+	delete metrics;
 }
 
 void ImageSequence::handleFrameServerDrainedEvent(void *userdata) {

@@ -127,15 +127,6 @@ public:
 	bool set;
 };
 
-class FacialClassificationBox {
-public:
-	Rect2d box;
-	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	FrameTimestamps timestamps; //The timestamp (including frame number) to which this classification belongs.
-	bool run; //Did the classifier run?
-	bool set; //Is the box valid?
-};
-
 class FaceTrackerWorkingVariables {
 public:
 	FacialRect faceRect;
@@ -144,14 +135,6 @@ public:
 	FacialPose previouslyReportedFacialPose;
 };
 
-
-template <long num_filters, typename SUBNET> using con5d = dlib::con<num_filters,5,5,2,2,SUBNET>;
-template <long num_filters, typename SUBNET> using con5  = dlib::con<num_filters,5,5,1,1,SUBNET>;
-
-template <typename SUBNET> using downsampler  = dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<16,SUBNET>>>>>>>>>;
-template <typename SUBNET> using rcon5  = dlib::relu<dlib::affine<con5<45,SUBNET>>>;
-
-using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<dlib::input_rgb_image_pyramid<dlib::pyramid_down<6>>>>>>>>;
 
 class FaceTracker {
 public:
@@ -211,15 +194,11 @@ private:
 	Logger *logger;
 	Metrics *metrics, *metricsLandmarks, *metricsClassifier;
 
-	bool usingDNNFaceDetection;
-
 	FacialCameraModel facialCameraModel;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
 
-	dlib::frontal_face_detector frontalFaceDetector;
 	dlib::shape_predictor shapePredictor;
-	FaceDetectionModel faceDetectionModel;
 
 	FacialClassificationBox newestClassificationBox;
 
