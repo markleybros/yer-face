@@ -332,10 +332,11 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
 
-		if(!readyVideoFrameBufferEmptyWarning) {
+		//FIXME - this is actually quite bad... need to get more insight into this situation.
+		// if(!readyVideoFrameBufferEmptyWarning) {
 			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
-			readyVideoFrameBufferEmptyWarning = true;
-		}
+			// readyVideoFrameBufferEmptyWarning = true;
+		// }
 		SDL_Delay(10);
 		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
