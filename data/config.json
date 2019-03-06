@@ -1,6 +1,6 @@
 {
   "YerFace": {
-    "FaceClassifier": {
+    "FaceDetector": {
       "numWorkersPerCPU": 0.0,
       "numWorkers": 1,
       "resultGoodForSeconds": 0.1,
@@ -49,12 +49,12 @@
     },
     "FrameServer": {
       "LowLatency": {
-        "classificationBoundingBox": 320,
-        "classificationScaleFactor": 0.0
+        "detectionBoundingBox": 320,
+        "detectionScaleFactor": 0.0
       },
       "Offline": {
-        "classificationBoundingBox": 640,
-        "classificationScaleFactor": 0.0
+        "detectionBoundingBox": 640,
+        "detectionScaleFactor": 0.0
       }
     },
     "MarkerTracker": {

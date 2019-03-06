@@ -150,14 +150,14 @@ public:
 	FacialPose getCompletedFacialPose(void);
 	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
-	void doClassifyFace(ClassificationFrame classificationFrame);
+	void doDetectFace(DetectionFrame detectionFrame);
 	void assignFaceRect(void);
-	void doIdentifyFeatures(ClassificationFrame classificationFrame);
+	void doIdentifyFeatures(DetectionFrame detectionFrame);
 	void doInitializeCameraModel(void);
 	void doCalculateFacialTransformation(void);
 	void doPrecalculateFacialPlaneNormal(void);
-	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor);
-	static int runClassificationLoop(void *ptr);
+	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
+	static int runDetectionLoop(void *ptr);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	SDLDriver *sdlDriver;
@@ -192,7 +192,7 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics, *metricsLandmarks, *metricsClassifier;
+	Metrics *metrics, *metricsLandmarks, *metricsDetector;
 
 	FacialCameraModel facialCameraModel;
 
@@ -200,13 +200,13 @@ private:
 
 	dlib::shape_predictor shapePredictor;
 
-	FacialClassificationBox newestClassificationBox;
+	FacialDetectionBox newestDetectionBox;
 
 	FaceTrackerWorkingVariables working, complete;
 
-	SDL_mutex *myCmpMutex, *myClassificationMutex;
-	SDL_Thread *classifierThread;
-	bool classifierRunning;
+	SDL_mutex *myCmpMutex, *myDetectionMutex;
+	SDL_Thread *detectorThread;
+	bool detectorRunning;
 };
 
 }; //namespace YerFace

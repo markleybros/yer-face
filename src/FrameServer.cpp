@@ -19,13 +19,13 @@ FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	if(!lowLatency) {
 		lowLatencyKey = "Offline";
 	}
-	classificationBoundingBox = config["YerFace"]["FrameServer"][lowLatencyKey]["classificationBoundingBox"];
-	if(classificationBoundingBox < 0) {
-		throw invalid_argument("Classification Bounding Box is invalid.");
+	detectionBoundingBox = config["YerFace"]["FrameServer"][lowLatencyKey]["detectionBoundingBox"];
+	if(detectionBoundingBox < 0) {
+		throw invalid_argument("Detection Bounding Box is invalid.");
 	}
-	classificationScaleFactor = config["YerFace"]["FrameServer"][lowLatencyKey]["classificationScaleFactor"];
-	if(classificationScaleFactor < 0.0 || classificationScaleFactor > 1.0) {
-		throw invalid_argument("Classification Scale Factor is invalid.");
+	detectionScaleFactor = config["YerFace"]["FrameServer"][lowLatencyKey]["detectionScaleFactor"];
+	if(detectionScaleFactor < 0.0 || detectionScaleFactor > 1.0) {
+		throw invalid_argument("Detection Scale Factor is invalid.");
 	}
 
 	for(unsigned int i = 0; i <= FRAME_STATUS_MAX; i++) {
@@ -119,20 +119,20 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 
 	workingFrame->frameTimestamps = videoFrame->timestamp;
 
-	if(classificationBoundingBox > 0) {
+	if(detectionBoundingBox > 0) {
 		if(frameSize.width >= frameSize.height) {
-			classificationScaleFactor = (double)classificationBoundingBox / (double)frameSize.width;
+			detectionScaleFactor = (double)detectionBoundingBox / (double)frameSize.width;
 		} else {
-			classificationScaleFactor = (double)classificationBoundingBox / (double)frameSize.height;
+			detectionScaleFactor = (double)detectionBoundingBox / (double)frameSize.height;
 		}
 	}
-	workingFrame->classificationScaleFactor = classificationScaleFactor;
+	workingFrame->detectionScaleFactor = detectionScaleFactor;
 
-	resize(workingFrame->frame, workingFrame->classificationFrame, Size(), classificationScaleFactor, classificationScaleFactor);
+	resize(workingFrame->frame, workingFrame->detectionFrame, Size(), detectionScaleFactor, detectionScaleFactor);
 
 	static bool reportedScale = false;
 	if(!reportedScale) {
-		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for classification", frameSize.width, frameSize.height, workingFrame->classificationFrame.size().width, workingFrame->classificationFrame.size().height);
+		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for detection", frameSize.width, frameSize.height, workingFrame->detectionFrame.size().width, workingFrame->detectionFrame.size().height);
 		reportedScale = true;
 	}
 

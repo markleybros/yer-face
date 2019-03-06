@@ -9,7 +9,7 @@
 #include "Status.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
-#include "FaceClassifier.hpp"
+#include "FaceDetector.hpp"
 // #include "FaceTracker.hpp"
 #include "FrameServer.hpp"
 // #include "FaceMapper.hpp"
@@ -70,7 +70,7 @@ Logger *logger = NULL;
 SDLDriver *sdlDriver = NULL;
 FFmpegDriver *ffmpegDriver = NULL;
 FrameServer *frameServer = NULL;
-FaceClassifier *faceClassifier = NULL;
+FaceDetector *faceDetector = NULL;
 // FaceTracker *faceTracker = NULL;
 // FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
@@ -243,7 +243,7 @@ int main(int argc, const char** argv) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	// faceClassifier = new FaceClassifier(config, status, frameServer);
+	// faceDetector = new FaceDetector(config, status, frameServer);
 	// faceTracker = new FaceTracker(config, sdlDriver, frameServer, lowLatency);
 	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
@@ -360,7 +360,7 @@ int main(int argc, const char** argv) {
 	// delete outputDriver;
 	// delete faceMapper;
 	// delete faceTracker;
-	// delete faceClassifier;
+	// delete faceDetector;
 	delete previewHUD;
 	delete frameServer;
 	delete ffmpegDriver;

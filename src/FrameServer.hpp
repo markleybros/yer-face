@@ -32,8 +32,8 @@ enum WorkingFrameStatus: unsigned int {
 class WorkingFrame {
 public:
 	Mat frame; //BGR format, at the native resolution of the input.
-	Mat classificationFrame; //BGR, scaled down to ClassificationScaleFactor.
-	double classificationScaleFactor;
+	Mat detectionFrame; //BGR, scaled down to DetectionScaleFactor.
+	double detectionScaleFactor;
 	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
 	SDL_mutex *previewFrameMutex; //IMPORTANT - make sure you lock previewFrameMutex before WRITING TO or READING FROM previewFrame.
 	FrameTimestamps frameTimestamps;
@@ -66,7 +66,7 @@ public:
 	void insertNewFrame(VideoFrame *videoFrame);
 	WorkingFrame *getWorkingFrame(FrameNumber frameNumber);
 	void setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, WorkingFrameStatus status, string checkpointKey);
-	// ClassificationFrame getClassificationFrame(void);
+	// DetectionFrame getDetectionFrame(void);
 	// Mat getWorkingPreviewFrame(void);
 	// Mat getCompletedPreviewFrame(void);
 	// void resetCompletedPreviewFrame(void);
@@ -85,8 +85,8 @@ private:
 	Status *status;
 	bool lowLatency;
 	bool draining;
-	int classificationBoundingBox;
-	double classificationScaleFactor;
+	int detectionBoundingBox;
+	double detectionScaleFactor;
 	Logger *logger;
 	SDL_mutex *myMutex;
 	SDL_cond *myCond;

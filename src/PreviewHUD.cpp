@@ -190,7 +190,7 @@ int PreviewHUD::workerLoop(void *ptr) {
 			if(result < 0) {
 				throw runtime_error("CondWaitTimeout() failed!");
 			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				if(!self->status->getIsPaused()) {
+				if(!self->status->getIsPaused() && !self->frameServerDrained) {
 					self->logger->warn("Thread #%d timed out waiting for Condition signal!", worker->num);
 				}
 			}

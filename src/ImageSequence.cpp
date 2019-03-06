@@ -25,7 +25,7 @@ ImageSequence::ImageSequence(json config, FrameServer *myFrameServer, string myO
 		throw runtime_error("Failed creating condition!");
 	}
 	metrics = new Metrics(config, "ImageSequence", true);
-	numWorkers = config["YerFace"]["FaceClassifier"]["numWorkers"];
+	numWorkers = config["YerFace"]["FaceDetector"]["numWorkers"];
 	if(numWorkers < 0.0) {
 		throw invalid_argument("numWorkers is nonsense.");
 	}

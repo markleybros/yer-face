@@ -1,5 +1,5 @@
 
-#include "FaceClassifier.hpp"
+#include "FaceDetector.hpp"
 #include "Utilities.hpp"
 
 #include <math.h>
@@ -9,7 +9,7 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFrameServer) {
+FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameServer) {
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -18,8 +18,8 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 	if(frameServer == NULL) {
 		throw invalid_argument("frameServer cannot be NULL");
 	}
-	logger = new Logger("FaceClassifier");
-	if((classificationsMutex = SDL_CreateMutex()) == NULL) {
+	logger = new Logger("FaceDetector");
+	if((detectionsMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((myMutex = SDL_CreateMutex()) == NULL) {
@@ -28,28 +28,28 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 	if((myCond = SDL_CreateCond()) == NULL) {
 		throw runtime_error("Failed creating condition!");
 	}
-	metrics = new Metrics(config, "FaceClassifier", true);
-	numWorkers = config["YerFace"]["FaceClassifier"]["numWorkers"];
+	metrics = new Metrics(config, "FaceDetector", true);
+	numWorkers = config["YerFace"]["FaceDetector"]["numWorkers"];
 	if(numWorkers < 0.0) {
 		throw invalid_argument("numWorkers is nonsense.");
 	}
-	numWorkersPerCPU = config["YerFace"]["FaceClassifier"]["numWorkersPerCPU"];
+	numWorkersPerCPU = config["YerFace"]["FaceDetector"]["numWorkersPerCPU"];
 	if(numWorkersPerCPU < 0.0) {
 		throw invalid_argument("numWorkersPerCPU is nonsense.");
 	}
-	resultGoodForSeconds = config["YerFace"]["FaceClassifier"]["resultGoodForSeconds"];
+	resultGoodForSeconds = config["YerFace"]["FaceDetector"]["resultGoodForSeconds"];
 	if(resultGoodForSeconds < 0.0) {
 		throw invalid_argument("resultGoodForSeconds cannot be less than zero.");
 	}
-	faceDetectionModelFileName = config["YerFace"]["FaceClassifier"]["dlibFaceDetector"];
+	faceDetectionModelFileName = config["YerFace"]["FaceDetector"]["dlibFaceDetector"];
 
 	if(faceDetectionModelFileName.length() > 0) {
 		usingDNNFaceDetection = true;
 	} else {
 		usingDNNFaceDetection = false;
 	}
-	latestClassification.run = false;
-	latestClassification.set = false;
+	latestDetection.run = false;
+	latestDetection.set = false;
 
 	//Hook into the frame lifecycle.
 
@@ -72,7 +72,7 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
 	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PROCESSING without our blessing.
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PROCESSING, "faceClassifier.ran");
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PROCESSING, "faceDetector.ran");
 
 	//Start worker threads.
 	if(numWorkers == 0) {
@@ -86,7 +86,7 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 		throw invalid_argument("NumWorkers can't be zero!");
 	}
 	for(int i = 1; i <= numWorkers; i++) {
-		FaceClassifierWorker *worker = new FaceClassifierWorker();
+		FaceDetectorWorker *worker = new FaceDetectorWorker();
 		worker->num = i;
 		worker->self = this;
 		if(usingDNNFaceDetection) {
@@ -94,17 +94,17 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 		} else {
 			worker->frontalFaceDetector = get_frontal_face_detector();
 		}
-		if((worker->thread = SDL_CreateThread(workerLoop, "FaceClassifier", (void *)worker)) == NULL) {
+		if((worker->thread = SDL_CreateThread(workerLoop, "FaceDetector", (void *)worker)) == NULL) {
 			throw runtime_error("Failed starting thread!");
 		}
 		workers.push_back(worker);
 	}
 
-	logger->debug("FaceClassifier object constructed with Face Detection Method: %s, NumWorkers: %d", usingDNNFaceDetection ? "DNN" : "HOG", numWorkers);
+	logger->debug("FaceDetector object constructed with Face Detection Method: %s, NumWorkers: %d", usingDNNFaceDetection ? "DNN" : "HOG", numWorkers);
 }
 
-FaceClassifier::~FaceClassifier() noexcept(false) {
-	logger->debug("FaceClassifier object destructing...");
+FaceDetector::~FaceDetector() noexcept(false) {
+	logger->debug("FaceDetector object destructing...");
 
 	YerFace_MutexLock(myMutex);
 	if(!frameServerDrained) {
@@ -125,50 +125,50 @@ FaceClassifier::~FaceClassifier() noexcept(false) {
 
 	SDL_DestroyCond(myCond);
 	SDL_DestroyMutex(myMutex);
-	SDL_DestroyMutex(classificationsMutex);
+	SDL_DestroyMutex(detectionsMutex);
 	delete logger;
 	delete metrics;
 }
 
-FacialClassificationBox FaceClassifier::getFacialClassification(FrameNumber frameNumber) {
-	FacialClassificationBox classification;
-	YerFace_MutexLock(classificationsMutex);
-	classification = classifications[frameNumber];
-	YerFace_MutexUnlock(classificationsMutex);
-	return classification;
+FacialDetectionBox FaceDetector::getFacialDetection(FrameNumber frameNumber) {
+	FacialDetectionBox detection;
+	YerFace_MutexLock(detectionsMutex);
+	detection = detections[frameNumber];
+	YerFace_MutexUnlock(detectionsMutex);
+	return detection;
 }
 
-void FaceClassifier::renderPreviewHUD(FrameNumber frameNumber, int density) {
-	YerFace_MutexLock(classificationsMutex);
-	FacialClassificationBox classification = classifications[frameNumber];
-	YerFace_MutexUnlock(classificationsMutex);
+void FaceDetector::renderPreviewHUD(FrameNumber frameNumber, int density) {
+	YerFace_MutexLock(detectionsMutex);
+	FacialDetectionBox detection = detections[frameNumber];
+	YerFace_MutexUnlock(detectionsMutex);
 
 	WorkingFrame *previewFrame = frameServer->getWorkingFrame(frameNumber);
 	YerFace_MutexLock(previewFrame->previewFrameMutex);
 	if(density > 1) {
-		if(classification.set) {
-			logger->verbose("Classification for Frame #%lld was generated against Frame #%lld. Surprise!", frameNumber, classification.timestamps.frameNumber);
-			cv::rectangle(previewFrame->previewFrame, classification.boxNormalSize, Scalar(255, 255, 0), 1);
+		if(detection.set) {
+			logger->verbose("Detection for Frame #%lld was generated against Frame #%lld. Surprise!", frameNumber, detection.timestamps.frameNumber);
+			cv::rectangle(previewFrame->previewFrame, detection.boxNormalSize, Scalar(255, 255, 0), 1);
 		}
 	}
 	YerFace_MutexUnlock(previewFrame->previewFrameMutex);
 }
 
-void FaceClassifier::doClassifyFace(FaceClassifierWorker *worker, WorkingFrame *frame) {
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(frame->classificationFrame);
+void FaceDetector::doDetectFace(FaceDetectorWorker *worker, WorkingFrame *frame) {
+	dlib::cv_image<dlib::bgr_pixel> dlibDetectionFrame = cv_image<bgr_pixel>(frame->detectionFrame);
 	std::vector<dlib::rectangle> faces;
 
 	if(usingDNNFaceDetection) {
 		//Using dlib's CNN-based face detector which can (optimistically) be pushed out to the GPU
 		dlib::matrix<dlib::rgb_pixel> imageMatrix;
-		dlib::assign_image(imageMatrix, dlibClassificationFrame);
+		dlib::assign_image(imageMatrix, dlibDetectionFrame);
 		std::vector<dlib::mmod_rect> detections = worker->faceDetectionModel(imageMatrix);
 		for(dlib::mmod_rect detection : detections) {
 			faces.push_back(detection.rect);
 		}
 	} else {
 		//Using dlib's built-in HOG face detector instead of a CNN-based detector
-		faces = worker->frontalFaceDetector(dlibClassificationFrame);
+		faces = worker->frontalFaceDetector(dlibDetectionFrame);
 	}
 
 	int bestFace = -1;
@@ -181,7 +181,7 @@ void FaceClassifier::doClassifyFace(FaceClassifierWorker *worker, WorkingFrame *
 		tempBox.y = face.top();
 		tempBox.width = face.right() - tempBox.x;
 		tempBox.height = face.bottom() - tempBox.y;
-		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / frame->classificationScaleFactor);
+		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / frame->detectionScaleFactor);
 		if((int)face.area() > bestFaceArea) {
 			bestFace = i;
 			bestFaceArea = face.area();
@@ -189,34 +189,34 @@ void FaceClassifier::doClassifyFace(FaceClassifierWorker *worker, WorkingFrame *
 			bestFaceBoxNormalSize = tempBoxNormalSize;
 		}
 	}
-	FacialClassificationBox classification;
-	classification.timestamps = frame->frameTimestamps;
-	classification.run = true;
-	classification.set = false;
+	FacialDetectionBox detection;
+	detection.timestamps = frame->frameTimestamps;
+	detection.run = true;
+	detection.set = false;
 	if(bestFace >= 0) {
-		classification.box = bestFaceBox;
-		classification.boxNormalSize = bestFaceBoxNormalSize;
-		classification.set = true;
+		detection.box = bestFaceBox;
+		detection.boxNormalSize = bestFaceBoxNormalSize;
+		detection.set = true;
 	}
 
 	bool resultUsed = false;
-	YerFace_MutexLock(classificationsMutex);
-	if(!classifications[frame->frameTimestamps.frameNumber].set) {
-		classifications[frame->frameTimestamps.frameNumber] = classification;
+	YerFace_MutexLock(detectionsMutex);
+	if(!detections[frame->frameTimestamps.frameNumber].set) {
+		detections[frame->frameTimestamps.frameNumber] = detection;
 		resultUsed = true;
 	}
-	if(classification.set && (!latestClassification.set || latestClassification.timestamps.startTimestamp < classification.timestamps.startTimestamp)) {
-		latestClassification = classification;
+	if(detection.set && (!latestDetection.set || latestDetection.timestamps.startTimestamp < detection.timestamps.startTimestamp)) {
+		latestDetection = detection;
 		resultUsed = true;
 	}
-	YerFace_MutexUnlock(classificationsMutex);
+	YerFace_MutexUnlock(detectionsMutex);
 	if(!resultUsed) {
-		logger->warn("Classification performed, but it was of no use!");
+		logger->warn("Detection performed, but it was of no use!");
 	}
 }
 
-void FaceClassifier::handleFrameServerDrainedEvent(void *userdata) {
-	FaceClassifier *self = (FaceClassifier *)userdata;
+void FaceDetector::handleFrameServerDrainedEvent(void *userdata) {
+	FaceDetector *self = (FaceDetector *)userdata;
 	// self->logger->verbose("Got notification that FrameServer has drained!");
 	YerFace_MutexLock(self->myMutex);
 	self->frameServerDrained = true;
@@ -224,19 +224,19 @@ void FaceClassifier::handleFrameServerDrainedEvent(void *userdata) {
 	YerFace_MutexUnlock(self->myMutex);
 }
 
-void FaceClassifier::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
-	FaceClassifier *self = (FaceClassifier *)userdata;
+void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+	FaceDetector *self = (FaceDetector *)userdata;
 	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
-	FacialClassificationBox classification;
+	FacialDetectionBox detection;
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
 		case FRAME_STATUS_NEW:
-			classification.run = false;
-			classification.set = false;
-			YerFace_MutexLock(self->classificationsMutex);
-			self->classifications[frameNumber] = classification;
-			YerFace_MutexUnlock(self->classificationsMutex);
+			detection.run = false;
+			detection.set = false;
+			YerFace_MutexLock(self->detectionsMutex);
+			self->detections[frameNumber] = detection;
+			YerFace_MutexUnlock(self->detectionsMutex);
 			break;
 		case FRAME_STATUS_PROCESSING:
 			YerFace_MutexLock(self->myMutex);
@@ -245,17 +245,17 @@ void FaceClassifier::handleFrameStatusChange(void *userdata, WorkingFrameStatus 
 			YerFace_MutexUnlock(self->myMutex);
 			break;
 		case FRAME_STATUS_GONE:
-			YerFace_MutexLock(self->classificationsMutex);
-			self->classifications.erase(frameNumber);
-			YerFace_MutexUnlock(self->classificationsMutex);
+			YerFace_MutexLock(self->detectionsMutex);
+			self->detections.erase(frameNumber);
+			YerFace_MutexUnlock(self->detectionsMutex);
 			break;
 	}
 }
 
-int FaceClassifier::workerLoop(void *ptr) {
-	FaceClassifierWorker *worker = (FaceClassifierWorker *)ptr;
-	FaceClassifier *self = worker->self;
-	self->logger->verbose("FaceClassifier Worker Thread #%d Alive!", worker->num);
+int FaceDetector::workerLoop(void *ptr) {
+	FaceDetectorWorker *worker = (FaceDetectorWorker *)ptr;
+	FaceDetector *self = worker->self;
+	self->logger->verbose("FaceDetector Worker Thread #%d Alive!", worker->num);
 
 	YerFace_MutexLock(self->myMutex);
 	while(!self->frameServerDrained) {
@@ -287,30 +287,30 @@ int FaceClassifier::workerLoop(void *ptr) {
 			WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(workingFrameNumber);
 			FrameTimestamps workingFrameTimestamps = workingFrame->frameTimestamps;
 
-			bool runClassificationOnThisFrame = true;
-			YerFace_MutexLock(self->classificationsMutex);
-			if(self->latestClassification.set) {
-				double latestClassificationGoodUntil = self->latestClassification.timestamps.startTimestamp + self->resultGoodForSeconds;
-				self->logger->verbose("Thread #%d, Frame #%lld - FrameStart: %.03lf, LCFrame: %lld, LCGoodUntil: %.03lf", worker->num, workingFrameNumber, workingFrameTimestamps.startTimestamp, self->latestClassification.timestamps.frameNumber, latestClassificationGoodUntil);
-				if(workingFrameTimestamps.startTimestamp <= latestClassificationGoodUntil) {
-					self->classifications[workingFrameNumber] = self->latestClassification;
+			bool runDetectionOnThisFrame = true;
+			YerFace_MutexLock(self->detectionsMutex);
+			if(self->latestDetection.set) {
+				double latestDetectionGoodUntil = self->latestDetection.timestamps.startTimestamp + self->resultGoodForSeconds;
+				self->logger->verbose("Thread #%d, Frame #%lld - FrameStart: %.03lf, LCFrame: %lld, LCGoodUntil: %.03lf", worker->num, workingFrameNumber, workingFrameTimestamps.startTimestamp, self->latestDetection.timestamps.frameNumber, latestDetectionGoodUntil);
+				if(workingFrameTimestamps.startTimestamp <= latestDetectionGoodUntil) {
+					self->detections[workingFrameNumber] = self->latestDetection;
 					self->logger->verbose("Thread #%d, Frame #%lld - Using LC!", worker->num, workingFrameNumber);
-					if(workingFrameTimestamps.estimatedEndTimestamp <= latestClassificationGoodUntil) {
-						self->logger->verbose("Thread #%d, Frame #%lld - Don't Run Classification", worker->num, workingFrameNumber);
-						runClassificationOnThisFrame = false;
+					if(workingFrameTimestamps.estimatedEndTimestamp <= latestDetectionGoodUntil) {
+						self->logger->verbose("Thread #%d, Frame #%lld - Don't Run Detection", worker->num, workingFrameNumber);
+						runDetectionOnThisFrame = false;
 					}
 				}
 			} else {
-				self->logger->verbose("Thread #%d, Frame #%lld - Seems like latestClassification is not set!", worker->num, workingFrameNumber);
+				self->logger->verbose("Thread #%d, Frame #%lld - Seems like latestDetection is not set!", worker->num, workingFrameNumber);
 			}
-			YerFace_MutexUnlock(self->classificationsMutex);
+			YerFace_MutexUnlock(self->detectionsMutex);
 
-			if(runClassificationOnThisFrame) {
-				self->logger->verbose("Thread #%d, Frame #%lld - Running Classification", worker->num, workingFrameNumber);
-				self->doClassifyFace(worker, workingFrame);
+			if(runDetectionOnThisFrame) {
+				self->logger->verbose("Thread #%d, Frame #%lld - Running Detection", worker->num, workingFrameNumber);
+				self->doDetectFace(worker, workingFrame);
 			}
 
-			self->frameServer->setWorkingFrameStatusCheckpoint(workingFrameNumber, FRAME_STATUS_PROCESSING, "faceClassifier.ran");
+			self->frameServer->setWorkingFrameStatusCheckpoint(workingFrameNumber, FRAME_STATUS_PROCESSING, "faceDetector.ran");
 			self->metrics->endClock(tick);
 
 			//Need to re-lock while spinning.

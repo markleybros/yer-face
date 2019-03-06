@@ -25,8 +25,8 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFra
 	complete.faceRect.set = false;
 	complete.facialFeatures.set = false;
 	complete.facialPose.set = false;
-	newestClassificationBox.run = false;
-	newestClassificationBox.set = false;
+	newestDetectionBox.run = false;
+	newestDetectionBox.set = false;
 	facialCameraModel.set = false;
 
 	sdlDriver = mySDLDriver;
@@ -103,19 +103,19 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFra
 	logger = new Logger("FaceTracker");
 	metrics = new Metrics(config, "FaceTracker.Process.All");
 	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks");
-	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", true);
+	metricsDetector = new Metrics(config, "FaceTracker.DetectorThread", true);
 
 	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myClassificationMutex = SDL_CreateMutex()) == NULL) {
+	if((myDetectionMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
 	deserialize(featureDetectionModelFileName.c_str()) >> shapePredictor;
 
-	classifierRunning = true;
-	if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
+	detectorRunning = true;
+	if((detectorThread = SDL_CreateThread(FaceTracker::runDetectionLoop, "TrackerLoop", (void *)this)) == NULL) {
 		throw runtime_error("Failed starting thread!");
 	}
 
@@ -124,15 +124,15 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFra
 
 FaceTracker::~FaceTracker() noexcept(false) {
 	logger->debug("FaceTracker object destructing...");
-	YerFace_MutexLock(myClassificationMutex);
-	classifierRunning = false;
-	YerFace_MutexUnlock(myClassificationMutex);
-	SDL_WaitThread(classifierThread, NULL);
+	YerFace_MutexLock(myDetectionMutex);
+	detectorRunning = false;
+	YerFace_MutexUnlock(myDetectionMutex);
+	SDL_WaitThread(detectorThread, NULL);
 	SDL_DestroyMutex(myCmpMutex);
-	SDL_DestroyMutex(myClassificationMutex);
+	SDL_DestroyMutex(myDetectionMutex);
 	delete metrics;
 	delete metricsLandmarks;
-	delete metricsClassifier;
+	delete metricsDetector;
 	delete logger;
 }
 
@@ -142,23 +142,23 @@ FaceTracker::~FaceTracker() noexcept(false) {
 void FaceTracker::processCurrentFrame(void) {
 	MetricsTick tick = metrics->startClock();
 
-	ClassificationFrame classificationFrame = frameServer->getClassificationFrame();
+	DetectionFrame detectionFrame = frameServer->getDetectionFrame();
 
-	static bool didClassifierRun = false;
-	while(!didClassifierRun) {
-		YerFace_MutexLock(myClassificationMutex);
-		if(newestClassificationBox.run) {
-			YerFace_MutexUnlock(myClassificationMutex);
-			didClassifierRun = true;
+	static bool didDetectorRun = false;
+	while(!didDetectorRun) {
+		YerFace_MutexLock(myDetectionMutex);
+		if(newestDetectionBox.run) {
+			YerFace_MutexUnlock(myDetectionMutex);
+			didDetectorRun = true;
 			break;
 		}
-		YerFace_MutexUnlock(myClassificationMutex);
+		YerFace_MutexUnlock(myDetectionMutex);
 		SDL_Delay(10);
 	}
 
 	assignFaceRect();
 
-	doIdentifyFeatures(classificationFrame);
+	doIdentifyFeatures(detectionFrame);
 
 	doCalculateFacialTransformation();
 
@@ -178,31 +178,31 @@ void FaceTracker::advanceWorkingToCompleted(void) {
 }
 
 void FaceTracker::assignFaceRect(void) {
-	YerFace_MutexLock(myClassificationMutex);
+	YerFace_MutexLock(myDetectionMutex);
 	working.faceRect.set = false;
-	if(newestClassificationBox.set) {
-		working.faceRect.rect = newestClassificationBox.boxNormalSize;
+	if(newestDetectionBox.set) {
+		working.faceRect.rect = newestDetectionBox.boxNormalSize;
 		working.faceRect.set = true;
 	} else {
 		logger->warn("Lost face completely! Will keep searching...");
 	}
-	YerFace_MutexUnlock(myClassificationMutex);
+	YerFace_MutexUnlock(myDetectionMutex);
 }
 
-void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
+void FaceTracker::doIdentifyFeatures(DetectionFrame detectionFrame) {
 	working.facialFeatures.set = false;
 	if(!working.faceRect.set) {
 		return;
 	}
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
-	dlib::rectangle dlibClassificationBox = dlib::rectangle(
-		working.faceRect.rect.x * classificationFrame.scaleFactor,
-		working.faceRect.rect.y * classificationFrame.scaleFactor,
-		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
-		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
+	dlib::cv_image<dlib::bgr_pixel> dlibDetectionFrame = cv_image<bgr_pixel>(detectionFrame.frame);
+	dlib::rectangle dlibDetectionBox = dlib::rectangle(
+		working.faceRect.rect.x * detectionFrame.scaleFactor,
+		working.faceRect.rect.y * detectionFrame.scaleFactor,
+		(working.faceRect.rect.width + working.faceRect.rect.x) * detectionFrame.scaleFactor,
+		(working.faceRect.rect.height + working.faceRect.rect.y) * detectionFrame.scaleFactor);
 
 	MetricsTick tick = metricsLandmarks->startClock();
-	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
+	full_object_detection result = shapePredictor(dlibDetectionFrame, dlibDetectionBox);
 	metricsLandmarks->endClock(tick);
 
 	working.facialFeatures.featuresExposed.features.clear();
@@ -214,7 +214,7 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 	Point2d partPoint;
 	for(unsigned long featureIndex = 0; featureIndex < result.num_parts(); featureIndex++) {
 		part = result.part(featureIndex);
-		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, classificationFrame.scaleFactor)) {
+		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, detectionFrame.scaleFactor)) {
 			return;
 		}
 
@@ -259,12 +259,12 @@ void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
 	//Stommion needs a little extra help.
 	part = result.part(IDX_MOUTHIN_CENTER_TOP);
 	Point2d mouthTop;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, classificationFrame.scaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, detectionFrame.scaleFactor)) {
 		return;
 	}
 	part = result.part(IDX_MOUTHIN_CENTER_BOTTOM);
 	Point2d mouthBottom;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, classificationFrame.scaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, detectionFrame.scaleFactor)) {
 		return;
 	}
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
@@ -494,13 +494,13 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType
 	return facialPlane;
 }
 
-bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor) {
+bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor) {
 	if(*src == OBJECT_PART_NOT_PRESENT) {
 		return false;
 	}
 	*dst = Point2d(src->x(), src->y());
-	dst->x /= classificationScaleFactor;
-	dst->y /= classificationScaleFactor;
+	dst->x /= detectionScaleFactor;
+	dst->y /= detectionScaleFactor;
 	return true;
 }
 
@@ -597,33 +597,33 @@ FacialPose FaceTracker::getCompletedFacialPose(void) {
 	return val;
 }
 
-int FaceTracker::runClassificationLoop(void *ptr) {
+int FaceTracker::runDetectionLoop(void *ptr) {
 	FaceTracker *self = (FaceTracker *)ptr;
-	self->logger->verbose("Face Tracker Classification Thread alive!");
+	self->logger->verbose("Face Tracker Detection Thread alive!");
 
-	FrameNumber lastClassificationFrameNumber = -1;
+	FrameNumber lastDetectionFrameNumber = -1;
 
 	while(true) {
-		ClassificationFrame classificationFrame = self->frameServer->getClassificationFrame();
+		DetectionFrame detectionFrame = self->frameServer->getDetectionFrame();
 
-		if(classificationFrame.set && classificationFrame.timestamps.set &&
-		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {
-			MetricsTick tick = self->metricsClassifier->startClock();
-			self->doClassifyFace(classificationFrame);
-			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
-			self->metricsClassifier->endClock(tick);
+		if(detectionFrame.set && detectionFrame.timestamps.set &&
+		  detectionFrame.timestamps.frameNumber != lastDetectionFrameNumber) {
+			MetricsTick tick = self->metricsDetector->startClock();
+			self->doDetectFace(detectionFrame);
+			lastDetectionFrameNumber = detectionFrame.timestamps.frameNumber;
+			self->metricsDetector->endClock(tick);
 		}
 
-		YerFace_MutexLock(self->myClassificationMutex);
-		if(!self->classifierRunning) {
-			YerFace_MutexUnlock(self->myClassificationMutex);
+		YerFace_MutexLock(self->myDetectionMutex);
+		if(!self->detectorRunning) {
+			YerFace_MutexUnlock(self->myDetectionMutex);
 			break;
 		}
-		YerFace_MutexUnlock(self->myClassificationMutex);
+		YerFace_MutexUnlock(self->myDetectionMutex);
 		SDL_Delay(0);
 	}
 
-	self->logger->verbose("Face Tracker Classification Thread quitting...");
+	self->logger->verbose("Face Tracker Detection Thread quitting...");
 	return 0;
 }
 
