@@ -42,14 +42,6 @@ public:
 	unordered_map<string, bool> checkpoints[FRAME_STATUS_MAX + 1];
 };
 
-// class ClassificationFrame {
-// public:
-// 	FrameTimestamps timestamps;
-// 	Mat frame;
-// 	double scaleFactor;
-// 	bool set;
-// };
-
 class FrameStatusChangeEventCallback {
 public:
 	WorkingFrameStatus newStatus;

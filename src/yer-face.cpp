@@ -19,6 +19,7 @@
 // #include "SphinxDriver.hpp"
 // #include "EventLogger.hpp"
 #include "ImageSequence.hpp"
+#include "PreviewHUD.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -77,6 +78,7 @@ Metrics *metrics = NULL;
 // SphinxDriver *sphinxDriver = NULL;
 // EventLogger *eventLogger = NULL;
 ImageSequence *imageSequence = NULL;
+PreviewHUD *previewHUD = NULL;
 
 //VARIABLES PROTECTED BY frameSizeMutex
 Size frameSize;
@@ -108,6 +110,7 @@ static int runCaptureLoop(void *ptr);
 void parseConfigFile(void);
 void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
 void handleFrameServerDrainedEvent(void *userdata);
+void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
 
 int main(int argc, const char** argv) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
@@ -231,17 +234,18 @@ int main(int argc, const char** argv) {
 
 	//Instantiate our classes.
 	status = new Status(lowLatency);
+	metrics = new Metrics(config, "YerFace", true);
 	frameServer = new FrameServer(config, status, lowLatency);
+	previewHUD = new PreviewHUD(config, status, frameServer);
 	ffmpegDriver = new FFmpegDriver(status, frameServer, lowLatency, from, until, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	faceClassifier = new FaceClassifier(config, status, frameServer);
+	// faceClassifier = new FaceClassifier(config, status, frameServer);
 	// faceTracker = new FaceTracker(config, sdlDriver, frameServer, lowLatency);
 	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
-	metrics = new Metrics(config, "YerFace", true);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
@@ -250,6 +254,9 @@ int main(int argc, const char** argv) {
 	if(previewImgSeq.length() > 0) {
 		imageSequence = new ImageSequence(config, frameServer, previewImgSeq);
 	}
+
+	//Register preview renderers.
+	previewHUD->registerPreviewHUDRenderer(renderPreviewHUD);
 
 	// outputDriver->setEventLogger(eventLogger);
 
@@ -265,8 +272,6 @@ int main(int argc, const char** argv) {
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEWING;
-	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEWING, "main.PreviewRendered");
 	if(!headless) {
 		frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
 		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
@@ -302,63 +307,32 @@ int main(int argc, const char** argv) {
 
 		//Preview frame display.
 		if(!headless) {
-			FrameNumber previewDisplayFrameNumber = -1;
-			std::list<FrameNumber> garbageFrames;
+			std::list<FrameNumber> previewFrames;
 			YerFace_MutexLock(previewDisplayMutex);
 			//If there are preview frames waiting to be displayed, handle them.
-			if(previewDisplayFrameNumbers.size() > 0) {
-				//If there are multiples, skip the older ones.
-				while(previewDisplayFrameNumbers.size() > 1) {
-					garbageFrames.push_front(previewDisplayFrameNumbers.back());
-					previewDisplayFrameNumbers.pop_back();
-				}
-				//Only display the latest one.
-				previewDisplayFrameNumber = previewDisplayFrameNumbers.back();
+			while(previewDisplayFrameNumbers.size() > 0) {
+				previewFrames.push_front(previewDisplayFrameNumbers.back());
 				previewDisplayFrameNumbers.pop_back();
 			}
 			YerFace_MutexUnlock(previewDisplayMutex);
 
 			//Note that we can't call frameServer->setWorkingFrameStatusCheckpoint() inside the above loop, because we would deadlock.
-			while(garbageFrames.size() > 0) {
-				frameServer->setWorkingFrameStatusCheckpoint(garbageFrames.front(), FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
-				garbageFrames.pop_front();
-			}
+			while(previewFrames.size() > 0) {
+				FrameNumber previewFrameNumber = previewFrames.back();
+				previewFrames.pop_back();
 
-			//If we have a new frame to display, display it.
-			if(previewDisplayFrameNumber > 0) {
-				WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewDisplayFrameNumber);
-				if(sdlWindowRenderer.window != NULL) {
+				//Display the last preview frame to the screen.
+				if(previewFrames.size() == 0 && sdlWindowRenderer.window != NULL) {
+					WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewFrameNumber);
 					YerFace_MutexLock(previewFrame->previewFrameMutex);
 					Mat previewFrameCopy = previewFrame->previewFrame.clone();
 					YerFace_MutexUnlock(previewFrame->previewFrameMutex);
+					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
 					sdlDriver->doRenderPreviewFrame(previewFrameCopy);
+				} else {
+					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
 				}
-				frameServer->setWorkingFrameStatusCheckpoint(previewDisplayFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
 			}
-		}
-
-		//Render main HUD on preview frames.
-		std::list<FrameNumber> renderFrames;
-		renderFrames.clear();
-		YerFace_MutexLock(previewRenderMutex);
-		while(previewRenderFrameNumbers.size() > 0) {
-			renderFrames.push_front(previewRenderFrameNumbers.back());
-			previewRenderFrameNumbers.pop_back();
-		}
-		YerFace_MutexUnlock(previewRenderMutex);
-		while(renderFrames.size() > 0) {
-			FrameNumber previewFrameNumber = renderFrames.back();
-			WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewFrameNumber);
-			YerFace_MutexLock(previewFrame->previewFrameMutex);
-
-			faceClassifier->renderPreviewHUD(previewFrameNumber, sdlDriver->getPreviewDebugDensity());
-
-			putText(previewFrame->previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-			putText(previewFrame->previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-
-			YerFace_MutexUnlock(previewFrame->previewFrameMutex);
-			frameServer->setWorkingFrameStatusCheckpoint(renderFrames.back(), FRAME_STATUS_PREVIEWING, "main.PreviewRendered");
-			renderFrames.pop_back();
 		}
 
 		//SDL bookkeeping.
@@ -376,12 +350,6 @@ int main(int argc, const char** argv) {
 	SDL_WaitThread(workerThread, NULL);
 
 	//Cleanup.
-	SDL_DestroyMutex(frameSizeMutex);
-	SDL_DestroyMutex(previewRenderMutex);
-	SDL_DestroyMutex(previewDisplayMutex);
-	SDL_DestroyMutex(frameServerDrainedMutex);
-	SDL_DestroyMutex(frameMetricsMutex);
-
 	if(imageSequence != NULL) {
 		delete imageSequence;
 	}
@@ -390,15 +358,23 @@ int main(int argc, const char** argv) {
 	// 	delete sphinxDriver;
 	// }
 	// delete outputDriver;
-	delete metrics;
 	// delete faceMapper;
 	// delete faceTracker;
-	delete faceClassifier;
+	// delete faceClassifier;
+	delete previewHUD;
 	delete frameServer;
 	delete ffmpegDriver;
 	delete sdlDriver;
-	delete logger;
+	delete metrics;
 	delete status;
+	delete logger;
+
+	SDL_DestroyMutex(frameSizeMutex);
+	SDL_DestroyMutex(previewRenderMutex);
+	SDL_DestroyMutex(previewDisplayMutex);
+	SDL_DestroyMutex(frameServerDrainedMutex);
+	SDL_DestroyMutex(frameMetricsMutex);
+
 	return 0;
 }
 
@@ -455,7 +431,7 @@ int runCaptureLoop(void *ptr) {
 
 	bool myDrained = false;
 	do {
-		SDL_Delay(10);
+		SDL_Delay(100);
 		YerFace_MutexLock(frameServerDrainedMutex);
 		myDrained = frameServerDrained;
 		YerFace_MutexUnlock(frameServerDrainedMutex);
@@ -515,4 +491,9 @@ void handleFrameServerDrainedEvent(void *userdata) {
 	YerFace_MutexLock(frameServerDrainedMutex);
 	frameServerDrained = true;
 	YerFace_MutexUnlock(frameServerDrainedMutex);
+}
+
+void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
+	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }

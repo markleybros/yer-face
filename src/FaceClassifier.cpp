@@ -94,7 +94,7 @@ FaceClassifier::FaceClassifier(json config, Status *myStatus, FrameServer *myFra
 		} else {
 			worker->frontalFaceDetector = get_frontal_face_detector();
 		}
-		if((worker->thread = SDL_CreateThread(workerLoop, "ImageSeq", (void *)worker)) == NULL) {
+		if((worker->thread = SDL_CreateThread(workerLoop, "FaceClassifier", (void *)worker)) == NULL) {
 			throw runtime_error("Failed starting thread!");
 		}
 		workers.push_back(worker);
@@ -272,7 +272,6 @@ int FaceClassifier::workerLoop(void *ptr) {
 		FrameNumber workingFrameNumber = -1;
 		//If there are preview frames waiting to be displayed, handle them.
 		if(self->workingFrameNumbers.size() > 0) {
-			//Only display the latest one.
 			workingFrameNumber = self->workingFrameNumbers.front();
 			self->workingFrameNumbers.pop_front();
 		}

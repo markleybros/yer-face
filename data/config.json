@@ -141,6 +141,10 @@
     "ImageSequence": {
       "numWorkersPerCPU": 0.25,
       "numWorkers": 0
+    },
+    "PreviewHUD": {
+      "numWorkersPerCPU": 0.5,
+      "numWorkers": 0
     }
   }
 }

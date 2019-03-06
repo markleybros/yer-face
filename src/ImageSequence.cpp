@@ -68,7 +68,7 @@ ImageSequence::ImageSequence(json config, FrameServer *myFrameServer, string myO
 		ImageSequenceWorker *worker = new ImageSequenceWorker();
 		worker->num = i;
 		worker->self = this;
-		if((worker->thread = SDL_CreateThread(frameWriterLoop, "ImageSeq", (void *)worker)) == NULL) {
+		if((worker->thread = SDL_CreateThread(frameWriterLoop, "ImageSequence", (void *)worker)) == NULL) {
 			throw runtime_error("Failed starting thread!");
 		}
 		workers.push_back(worker);
