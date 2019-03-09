@@ -129,8 +129,11 @@ FaceDetector::~FaceDetector() noexcept(false) {
 	}
 	SDL_WaitThread(myAssignmentThread, NULL);
 
-	if(assignmentFrameNumbers.size() > 0 || detectionTasks.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+	if(assignmentFrameNumbers.size() > 0) {
+		logger->error("Assignment Frames are still pending! Woe is me!");
+	}
+	if(detectionTasks.size() > 0) {
+		logger->error("Detection Tasks are still pending! Woe is me!");
 	}
 
 	SDL_DestroyCond(myCond);
@@ -317,6 +320,7 @@ int FaceDetector::workerLoop(void *ptr) {
 			// self->logger->verbose("Thread #%d left CondWait!", worker->num);
 		}
 	}
+	self->detectionTasks.clear();
 	YerFace_MutexUnlock(self->myMutex);
 
 	self->logger->verbose("Thread #%d Done.", worker->num);
