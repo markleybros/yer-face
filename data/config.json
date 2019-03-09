@@ -2,9 +2,8 @@
   "YerFace": {
     "FaceDetector": {
       "numWorkersPerCPU": 0.0,
-      "numWorkers": 2,
+      "numWorkers": 1,
       "resultGoodForSeconds": 0.5,
-      "antiBunchingFactor": 0.6,
       "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
     },
     "FaceTracker": {

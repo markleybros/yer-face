@@ -309,6 +309,7 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	YerFace_MutexLock(videoContext.demuxerMutex);
 	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
+	// logger->verbose("getNextVideoFrame() current readyVideoFrameBuffer.size() is %lu", readyVideoFrameBuffer.size());
 	if(readyVideoFrameBuffer.size() > 0) {
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
@@ -373,18 +374,25 @@ void FFmpegDriver::logAVErr(String msg, int err) {
 
 VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
+	VideoFrameBacking *myBacking = NULL;
+	unsigned int availableBackings = 0;
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		if(!backing->inUse) {
-			backing->inUse = true;
-			YerFace_MutexUnlock(videoFrameBufferMutex);
-			return backing;
+			availableBackings++;
+			if(myBacking == NULL) {
+				backing->inUse = true;
+				myBacking = backing;
+			}
 		}
 	}
-	logger->warn("Out of spare frames in the video frame buffer! Allocating a new one.");
-	VideoFrameBacking *newBacking = allocateNewVideoFrameBacking();
-	newBacking->inUse = true;
+	// logger->verbose("getNextAvailableVideoFrameBacking() total backings: %lu, available backings: %u", allocatedVideoFrameBackings.size(), availableBackings);
+	if(myBacking == NULL) {
+		logger->warn("Out of spare frames in the video frame buffer! Allocating a new one.");
+		myBacking = allocateNewVideoFrameBacking();
+		myBacking->inUse = true;
+	}
 	YerFace_MutexUnlock(videoFrameBufferMutex);
-	return newBacking;
+	return myBacking;
 }
 
 VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
@@ -449,6 +457,17 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
 
 			YerFace_MutexLock(videoFrameBufferMutex);
+			if(lowLatency) {
+				int dropCount = 0;
+				while(readyVideoFrameBuffer.size() > 0) {
+					releaseVideoFrame(readyVideoFrameBuffer.back());
+					readyVideoFrameBuffer.pop_back();
+					dropCount++;
+				}
+				if(dropCount) {
+					logger->warn("Dropped %d frame(s)!", dropCount);
+				}
+			}
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
 
@@ -631,6 +650,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 	AVPacket packet;
 	av_init_packet(&packet);
 
+	bool blockedWarning = false;
 	YerFace_MutexLock(context->demuxerMutex);
 	while(context->demuxerRunning) {
 		if(status->getIsPaused() && status->getIsRunning()) {
@@ -638,6 +658,19 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 			SDL_Delay(100);
 			YerFace_MutexLock(context->demuxerMutex);
 			continue;
+		}
+		
+		if(getIsAllocatedVideoFrameBackingsFull()) {
+			if(!blockedWarning) {
+				//logger->debug("%s Demuxer Loop is BLOCKED because our internal frame buffer is full. If this happens a lot, consider some tuning.", type == AVMEDIA_TYPE_VIDEO ? "Video" : "Audio");
+				blockedWarning = true;
+			}
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(1); //FIXME - CPU Starvation?
+			YerFace_MutexLock(context->demuxerMutex);
+			continue;
+		} else {
+			blockedWarning = false;
 		}
 		
 		if(type == AVMEDIA_TYPE_VIDEO) {
@@ -842,6 +875,19 @@ bool FFmpegDriver::handleScanning(MediaContext *context, double *timestamp) {
 		*timestamp = *timestamp - from;
 	}
 	return true;
+}
+
+bool FFmpegDriver::getIsAllocatedVideoFrameBackingsFull(void) {
+	bool isFull = true;
+	YerFace_MutexLock(videoFrameBufferMutex);
+	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
+		if(!backing->inUse) {
+			isFull = false;
+			break;
+		}
+	}
+	YerFace_MutexUnlock(videoFrameBufferMutex);
+	return isFull;
 }
 
 }; //namespace YerFace

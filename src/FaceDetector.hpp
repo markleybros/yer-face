@@ -69,7 +69,6 @@ private:
 
 	string faceDetectionModelFileName;
 	double resultGoodForSeconds;
-	double antiBunchingFactor;
 	double numWorkersPerCPU;
 	int numWorkers;
 

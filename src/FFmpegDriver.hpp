@@ -136,6 +136,7 @@ private:
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 	bool handleScanning(MediaContext *context, double *timestamp);
+	bool getIsAllocatedVideoFrameBackingsFull(void);
 
 	Status *status;
 	FrameServer *frameServer;

@@ -48,10 +48,6 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	if(resultGoodForSeconds < 0.0) {
 		throw invalid_argument("resultGoodForSeconds cannot be less than zero.");
 	}
-	antiBunchingFactor = config["YerFace"]["FaceDetector"]["antiBunchingFactor"];
-	if(antiBunchingFactor <= 0.0 || antiBunchingFactor >= 1.0) {
-		throw invalid_argument("antiBunchingFactor should be between 0.0 and 1.0, but not exactly equal to either.");
-	}
 	faceDetectionModelFileName = config["YerFace"]["FaceDetector"]["dlibFaceDetector"];
 
 	if(faceDetectionModelFileName.length() > 0) {
@@ -212,7 +208,7 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 		detection.set = true;
 	}
 
-	logger->verbose("==== WORKER #%d FINISHED DETECTION FOR FRAME #%lld", worker->num, detection.timestamps.frameNumber);
+	// logger->verbose("==== WORKER #%d FINISHED DETECTION FOR FRAME #%lld", worker->num, detection.timestamps.frameNumber);
 
 	bool resultUsed = false;
 	YerFace_MutexLock(detectionsMutex);
@@ -253,7 +249,7 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 		case FRAME_STATUS_PROCESSING:
 			YerFace_MutexLock(self->myAssignmentMutex);
 			self->assignmentFrameNumbers.push_back(frameNumber);
-			self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
 			SDL_CondSignal(self->myAssignmentCond);
 			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
@@ -296,12 +292,12 @@ int FaceDetector::workerLoop(void *ptr) {
 			//Do not squat on myMutex while doing time-consuming work.
 			YerFace_MutexUnlock(self->myMutex);
 
-			self->logger->verbose("Thread #%d handling frame #%lld", worker->num, task.myFrameNumber);
+			// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, task.myFrameNumber);
 			MetricsTick tick = self->metrics->startClock();
 
-			self->logger->verbose("Thread #%d, Frame #%lld - RUNNING Detection", worker->num, task.myFrameNumber);
+			// self->logger->verbose("Thread #%d, Frame #%lld - RUNNING Detection", worker->num, task.myFrameNumber);
 			self->doDetectFace(worker, task);
-			self->logger->verbose("Thread #%d, Frame #%lld - FINISHED Detection", worker->num, task.myFrameNumber);
+			// self->logger->verbose("Thread #%d, Frame #%lld - FINISHED Detection", worker->num, task.myFrameNumber);
 
 			self->metrics->endClock(tick);
 
@@ -335,7 +331,6 @@ int FaceDetector::assignmentLoop(void *ptr) {
 	FrameNumber myFrameNumber = -1;
 	FrameNumber lastDetectionRequested = -1;
 	FrameNumber lastFrameBlockedWarning = -1;
-	double lastDetectionRequestedTimestamp = -100.0;
 	MetricsTick tick;
 	while(!self->frameServerDrained) {
 		if(self->status->getIsPaused() && self->status->getIsRunning()) {
@@ -362,28 +357,21 @@ int FaceDetector::assignmentLoop(void *ptr) {
 			WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
 			FrameTimestamps myFrameTimestamps = workingFrame->frameTimestamps;
 
-			bool runDetectionOnThisFrame = true;
 			bool frameAssigned = false;
 			YerFace_MutexLock(self->detectionsMutex);
 			if(self->latestDetection.set) {
 				double latestDetectionUsableUntil = self->latestDetection.timestamps.startTimestamp + self->resultGoodForSeconds;
-				// double latestDetectionFreshUntil = self->latestDetection.timestamps.startTimestamp + (self->resultGoodForSeconds * self->antiBunchingFactor);
 				if(myFrameTimestamps.startTimestamp <= latestDetectionUsableUntil) {
 					self->detections[myFrameNumber] = self->latestDetection;
 					frameAssigned = true;
-					self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #%lld (LD Frame #%lld)", myFrameNumber, self->latestDetection.timestamps.frameNumber);
-					double lastRequestedFreshUntil = lastDetectionRequestedTimestamp + (self->resultGoodForSeconds * self->antiBunchingFactor);
-					if(myFrameTimestamps.startTimestamp < lastRequestedFreshUntil) {
-						runDetectionOnThisFrame = false;
-					}
+					// self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #%lld (LD Frame #%lld)", myFrameNumber, self->latestDetection.timestamps.frameNumber);
 				}
 			}
 			YerFace_MutexUnlock(self->detectionsMutex);
 
-			if(runDetectionOnThisFrame && myFrameNumber != lastDetectionRequested) {
-				self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #%lld", myFrameNumber);
+			if(myFrameNumber != lastDetectionRequested) {
+				// self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #%lld", myFrameNumber);
 				lastDetectionRequested = myFrameNumber;
-				lastDetectionRequestedTimestamp = myFrameTimestamps.startTimestamp;
 				FaceDetectionTask task;
 				task.myFrameNumber = myFrameNumber;
 				task.myFrameTimestamps = myFrameTimestamps;
