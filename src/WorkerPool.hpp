@@ -1,0 +1,59 @@
+#pragma once
+
+#include "Logger.hpp"
+#include "Status.hpp"
+#include "FrameServer.hpp"
+#include "Utilities.hpp"
+
+#include "SDL.h"
+
+using namespace std;
+
+namespace YerFace {
+
+class WorkerPoolWorker {
+public:
+	int num;
+	SDL_Thread *thread;
+	void *ptr, *self;
+};
+
+typedef function<void(WorkerPoolWorker *worker, void *ptr)> WorkerPoolWorkerInitializer;
+typedef function<bool(WorkerPoolWorker *worker)> WorkerPoolWorkerHandler;
+
+class WorkerPoolParameters {
+public:
+	string name;
+	double numWorkersPerCPU;
+	int numWorkers;
+
+	WorkerPoolWorkerInitializer initializer;
+	void *initializerPtr;
+
+	WorkerPoolWorkerHandler handler;
+};
+
+class WorkerPool {
+public:
+	WorkerPool(json config, Status *myStatus, FrameServer *myFrameServer, WorkerPoolParameters myParameters);
+	~WorkerPool() noexcept(false);
+	void sendWorkerSignal(void);
+private:
+	static void handleFrameServerDrainedEvent(void *userdata);
+	static int outerWorkerLoop(void *ptr);
+
+	Status *status;
+	FrameServer *frameServer;
+
+	WorkerPoolParameters parameters;
+
+	Logger *logger;
+	SDL_mutex *myMutex;
+	SDL_cond *myCond;
+
+	bool frameServerDrained;
+
+	std::list<WorkerPoolWorker *> workers;
+};
+
+}; //namespace YerFace
