@@ -67,12 +67,12 @@ void Metrics::endClock(MetricsTick tick) {
 		}
 	}
 	averageTimeSeconds = averageTimeSeconds / (double)numEntries;
-	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms>", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0);
+	snprintf(timesString, METRICS_STRING_LENGTH, "Times: <Avg %.02fms, Worst %.02fms> (%lu samples)", averageTimeSeconds * 1000.0, worstTimeSeconds * 1000.0, numEntries);
 	string fpsPrefix;
 	if(metricIsFrames) {
 		fpsPrefix = "Frames/Sec:";
 	} else {
-		fpsPrefix = "Completions/Sec:";
+		fpsPrefix = "Tasks/Sec:";
 	}
 	if(numEntries > 1) {
 		fps = 1.0 / ((now - entries.back().startTime) / numEntries);

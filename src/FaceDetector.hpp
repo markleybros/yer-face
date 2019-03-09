@@ -27,6 +27,14 @@ template <typename SUBNET> using rcon5  = dlib::relu<dlib::affine<con5<45,SUBNET
 
 using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<dlib::input_rgb_image_pyramid<dlib::pyramid_down<6>>>>>>>>;
 
+class FaceDetectionTask {
+public:
+	FrameNumber myFrameNumber;
+	FrameTimestamps myFrameTimestamps;
+	double myDetectionScaleFactor;
+	Mat detectionFrame;
+};
+
 class FaceDetectorWorker {
 public:
 	int num;
@@ -51,39 +59,46 @@ public:
 	FaceDetector(json config, Status *myStatus, FrameServer *myFrameServer);
 	~FaceDetector() noexcept(false);
 	FacialDetectionBox getFacialDetection(FrameNumber frameNumber);
-	void renderPreviewHUD(FrameNumber frameNumber, int density);
+	void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
 private:
-	void doDetectFace(FaceDetectorWorker *worker, WorkingFrame *frame);
+	void doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask task);
 	static void handleFrameServerDrainedEvent(void *userdata);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
 	static int workerLoop(void *ptr);
+	static int assignmentLoop(void *ptr);
 
 	string faceDetectionModelFileName;
 	double resultGoodForSeconds;
+	double antiBunchingFactor;
 	double numWorkersPerCPU;
+	int numWorkers;
 
 	bool usingDNNFaceDetection;
 
-	int numWorkers;
 
 	Status *status;
 	FrameServer *frameServer;
 	bool frameServerDrained;
 
-	Metrics *metrics;
+	Metrics *metrics, *assignmentMetrics;
 
 	string outputPrefix;
 
 	Logger *logger;
 	SDL_mutex *myMutex;
 	SDL_cond *myCond;
-	list<FrameNumber> workingFrameNumbers;
+	list<FrameNumber> assignmentFrameNumbers;
+	list<FaceDetectionTask> detectionTasks;
 
 	SDL_mutex *detectionsMutex;
 	unordered_map<FrameNumber, FacialDetectionBox> detections;
 	FacialDetectionBox latestDetection;
 
 	std::list<FaceDetectorWorker *> workers;
+
+	SDL_mutex *myAssignmentMutex;
+	SDL_cond *myAssignmentCond;
+	SDL_Thread *myAssignmentThread;
 };
 
 }; //namespace YerFace

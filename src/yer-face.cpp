@@ -243,7 +243,7 @@ int main(int argc, const char** argv) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
-	// faceDetector = new FaceDetector(config, status, frameServer);
+	faceDetector = new FaceDetector(config, status, frameServer);
 	// faceTracker = new FaceTracker(config, sdlDriver, frameServer, lowLatency);
 	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
@@ -360,7 +360,7 @@ int main(int argc, const char** argv) {
 	// delete outputDriver;
 	// delete faceMapper;
 	// delete faceTracker;
-	// delete faceDetector;
+	delete faceDetector;
 	delete previewHUD;
 	delete frameServer;
 	delete ffmpegDriver;
@@ -494,6 +494,7 @@ void handleFrameServerDrainedEvent(void *userdata) {
 }
 
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
+	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }
