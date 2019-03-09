@@ -34,6 +34,11 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 		throw invalid_argument("numWorkersPerCPU is nonsense.");
 	}
 
+	status->setPreviewDebugDensity(config["YerFace"]["PreviewHUD"]["initialPreviewDisplayDensity"]);
+	previewRatio = config["YerFace"]["PreviewHUD"]["previewRatio"];
+	previewWidthPercentage = config["YerFace"]["PreviewHUD"]["previewWidthPercentage"];
+	previewCenterHeightPercentage = config["YerFace"]["PreviewHUD"]["previewCenterHeightPercentage"];
+
 	//Hook into the frame lifecycle.
 
 	//We need to know when the frame server has drained.
@@ -107,6 +112,24 @@ void PreviewHUD::registerPreviewHUDRenderer(PreviewHUDRenderer renderer) {
 	YerFace_MutexLock(myMutex);
 	renderers.push_back(renderer);
 	YerFace_MutexUnlock(myMutex);
+}
+
+void PreviewHUD::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter) {
+	previewRect->width = frameSize.width * previewWidthPercentage;
+	previewRect->height = previewRect->width * previewRatio;
+	PreviewPositionInFrame previewPosition = status->getPreviewPositionInFrame();
+	if(previewPosition == BottomRight || previewPosition == TopRight) {
+		previewRect->x = frameSize.width - previewRect->width;
+	} else {
+		previewRect->x = 0;
+	}
+	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
+		previewRect->y = frameSize.height - previewRect->height;
+	} else {
+		previewRect->y = 0;
+	}
+	*previewCenter = Utilities::centerRect(*previewRect);
+	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
 }
 
 void PreviewHUD::handleFrameServerDrainedEvent(void *userdata) {

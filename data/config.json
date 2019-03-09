@@ -132,11 +132,6 @@
       "eventTimestampAdjustment": 0.003
     },
     "SDLDriver": {
-      "PreviewHUD": {
-        "previewRatio": 1.25,
-        "previewWidthPercentage": 0.2,
-        "previewCenterHeightPercentage": 0.2
-      }
     },
     "ImageSequence": {
       "numWorkersPerCPU": 0.25,
@@ -144,7 +139,11 @@
     },
     "PreviewHUD": {
       "numWorkersPerCPU": 0.5,
-      "numWorkers": 0
+      "numWorkers": 0,
+      "initialPreviewDisplayDensity": 2,
+      "previewRatio": 1.25,
+      "previewWidthPercentage": 0.2,
+      "previewCenterHeightPercentage": 0.2
     }
   }
 }

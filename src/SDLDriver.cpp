@@ -23,9 +23,6 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	previewRatio = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewRatio"];
-	previewWidthPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewWidthPercentage"];
-	previewCenterHeightPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
@@ -243,24 +240,6 @@ void SDLDriver::doHandleEvents(void) {
 				break;
 		}
 	}
-}
-
-void SDLDriver::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter) {
-	previewRect->width = frameSize.width * previewWidthPercentage;
-	previewRect->height = previewRect->width * previewRatio;
-	PreviewPositionInFrame previewPosition = status->getPreviewPositionInFrame();
-	if(previewPosition == BottomRight || previewPosition == TopRight) {
-		previewRect->x = frameSize.width - previewRect->width;
-	} else {
-		previewRect->x = 0;
-	}
-	if(previewPosition == BottomLeft || previewPosition == BottomRight) {
-		previewRect->y = frameSize.height - previewRect->height;
-	} else {
-		previewRect->y = 0;
-	}
-	*previewCenter = Utilities::centerRect(*previewRect);
-	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
 }
 
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {

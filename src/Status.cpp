@@ -17,7 +17,7 @@ Status::Status(bool myLowLatency) {
 	setIsRunning(true);
 	setIsPaused(false);
 	setPreviewPositionInFrame(BottomRight);
-	setPreviewDebugDensity(2);
+	previewDebugDensity = 0;
 }
 
 Status::~Status() {

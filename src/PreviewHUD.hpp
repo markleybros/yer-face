@@ -27,6 +27,7 @@ public:
 	PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer);
 	~PreviewHUD() noexcept(false);
 	void registerPreviewHUDRenderer(PreviewHUDRenderer renderer);
+	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 private:
 	static void handleFrameServerDrainedEvent(void *userdata);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
@@ -40,11 +41,12 @@ private:
 	bool frameServerDrained;
 
 	Metrics *metrics;
-
 	Logger *logger;
 	SDL_mutex *myMutex;
 	SDL_cond *myCond;
 	list<FrameNumber> pendingFrameNumbers;
+
+	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 
 	std::list<PreviewHUDWorker *> workers;
 

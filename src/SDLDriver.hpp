@@ -45,7 +45,6 @@ public:
 	void doRenderPreviewFrame(Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
-	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
 	void stopAudioDriverNow(void);
@@ -59,8 +58,6 @@ private:
 	bool audioPreview;
 
 	Logger *logger;
-
-	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
