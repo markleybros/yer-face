@@ -105,7 +105,7 @@ void WorkerPool::handleFrameServerDrainedEvent(void *userdata) {
 int WorkerPool::outerWorkerLoop(void *ptr) {
 	WorkerPoolWorker *worker = (WorkerPoolWorker *)ptr;
 	WorkerPool *self = (WorkerPool *)worker->self;
-	self->logger->verbose("PreviewHUD Worker Thread #%d Alive!", worker->num);
+	self->logger->verbose("Worker Thread #%d Alive!", worker->num);
 
 	YerFace_MutexLock(self->myMutex);
 	while(!self->frameServerDrained) {

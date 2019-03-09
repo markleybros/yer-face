@@ -3,7 +3,9 @@
 #include "Logger.hpp"
 #include "Utilities.hpp"
 #include "FrameServer.hpp"
+#include "Status.hpp"
 #include "Metrics.hpp"
+#include "WorkerPool.hpp"
 
 #include <list>
 
@@ -22,29 +24,25 @@ public:
 
 class ImageSequence {
 public:
-	ImageSequence(json config, FrameServer *myFrameServer, string myOutputPrefix);
+	ImageSequence(json config, Status *myStatus, FrameServer *myFrameServer, string myOutputPrefix);
 	~ImageSequence() noexcept(false);
 private:
-	static void handleFrameServerDrainedEvent(void *userdata);
+	static void workerInitializer(WorkerPoolWorker *worker, void *ptr);
+	static bool workerHandler(WorkerPoolWorker *worker);
 	static void handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
 	static int frameWriterLoop(void *ptr);
 
-	double numWorkersPerCPU;
-	int numWorkers;
-
+	Status *status;
 	FrameServer *frameServer;
-	bool frameServerDrained;
 
+	Logger *logger;
 	Metrics *metrics;
+	WorkerPool *workerPool;
 
 	string outputPrefix;
 
-	Logger *logger;
 	SDL_mutex *myMutex;
-	SDL_cond *myCond;
 	list<FrameNumber> outputFrameNumbers;
-
-	std::list<ImageSequenceWorker *> workers;
 };
 
 }; //namespace YerFace

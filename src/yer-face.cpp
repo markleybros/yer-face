@@ -252,7 +252,7 @@ int main(int argc, const char** argv) {
 	// }
 	// eventLogger = new EventLogger(config, inEvents, outputDriver, frameServer, from);
 	if(previewImgSeq.length() > 0) {
-		imageSequence = new ImageSequence(config, frameServer, previewImgSeq);
+		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
 	}
 
 	//Register preview renderers.
