@@ -17,12 +17,6 @@ namespace YerFace {
 SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
-	if((previewPositionInFrameMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
-	if((previewDebugDensityMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	if((audioFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
@@ -33,8 +27,6 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	previewWidthPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewWidthPercentage"];
 	previewCenterHeightPercentage = config["YerFace"]["SDLDriver"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
-	setPreviewPositionInFrame(BottomRight);
-	setPreviewDebugDensity(2);
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
@@ -123,10 +115,6 @@ SDLDriver::~SDLDriver() {
 	if(previewWindow.renderer != NULL) {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
-	SDL_DestroyMutex(previewPositionInFrameMutex);
-	previewPositionInFrameMutex = NULL;
-	SDL_DestroyMutex(previewDebugDensityMutex);
-	previewDebugDensityMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
 	audioFramesMutex = NULL;
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
@@ -229,19 +217,19 @@ void SDLDriver::doHandleEvents(void) {
 						status->toggleIsPaused();
 						break;
 					case SDLK_LEFT:
-						movePreviewPositionInFrame(MoveLeft);
+						status->movePreviewPositionInFrame(MoveLeft);
 						break;
 					case SDLK_UP:
-						movePreviewPositionInFrame(MoveUp);
+						status->movePreviewPositionInFrame(MoveUp);
 						break;
 					case SDLK_RIGHT:
-						movePreviewPositionInFrame(MoveRight);
+						status->movePreviewPositionInFrame(MoveRight);
 						break;
 					case SDLK_DOWN:
-						movePreviewPositionInFrame(MoveDown);
+						status->movePreviewPositionInFrame(MoveDown);
 						break;
 					case SDLK_d:
-						incrementPreviewDebugDensity();
+						status->incrementPreviewDebugDensity();
 						break;
 					case SDLK_RETURN:
 						logger->verbose("Received Basis Flag keyboard event. Rebroadcasting...");
@@ -257,80 +245,10 @@ void SDLDriver::doHandleEvents(void) {
 	}
 }
 
-void SDLDriver::setPreviewPositionInFrame(PreviewPositionInFrame newPosition) {
-	YerFace_MutexLock(previewPositionInFrameMutex);
-	previewPositionInFrame = newPosition;
-	YerFace_MutexUnlock(previewPositionInFrameMutex);
-}
-
-PreviewPositionInFrame SDLDriver::movePreviewPositionInFrame(PreviewPositionInFrameDirection moveDirection) {
-	YerFace_MutexLock(previewPositionInFrameMutex);
-	switch(moveDirection) {
-		case MoveLeft:
-			previewPositionInFrame = BottomLeft;
-			break;
-		case MoveUp:
-			previewPositionInFrame = TopRight;
-			break;
-		case MoveRight:
-			if(previewPositionInFrame == BottomLeft) {
-				previewPositionInFrame = BottomRight;
-			}
-			break;
-		case MoveDown:
-			if(previewPositionInFrame == TopRight) {
-				previewPositionInFrame = BottomRight;
-			}
-			break;
-	}
-	PreviewPositionInFrame status = previewPositionInFrame;
-	YerFace_MutexUnlock(previewPositionInFrameMutex);
-	return status;
-}
-
-PreviewPositionInFrame SDLDriver::getPreviewPositionInFrame(void) {
-	YerFace_MutexLock(previewPositionInFrameMutex);
-	PreviewPositionInFrame status = previewPositionInFrame;
-	YerFace_MutexUnlock(previewPositionInFrameMutex);
-	return status;
-}
-
-void SDLDriver::setPreviewDebugDensity(int newDensity) {
-	YerFace_MutexLock(previewDebugDensityMutex);
-	if(newDensity < 0) {
-		previewDebugDensity = 0;
-	} else if(newDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
-		previewDebugDensity = YERFACE_PREVIEW_DEBUG_DENSITY_MAX;
-	} else {
-		previewDebugDensity = newDensity;
-	}
-	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
-	YerFace_MutexUnlock(previewDebugDensityMutex);
-}
-
-int SDLDriver::incrementPreviewDebugDensity(void) {
-	YerFace_MutexLock(previewDebugDensityMutex);
-	previewDebugDensity++;
-	if(previewDebugDensity > YERFACE_PREVIEW_DEBUG_DENSITY_MAX) {
-		previewDebugDensity = 0;
-	}
-	int status = previewDebugDensity;
-	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
-	YerFace_MutexUnlock(previewDebugDensityMutex);
-	return status;
-}
-
-int SDLDriver::getPreviewDebugDensity(void) {
-	YerFace_MutexLock(previewDebugDensityMutex);
-	int status = previewDebugDensity;
-	YerFace_MutexUnlock(previewDebugDensityMutex);
-	return status;
-}
-
 void SDLDriver::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter) {
 	previewRect->width = frameSize.width * previewWidthPercentage;
 	previewRect->height = previewRect->width * previewRatio;
-	PreviewPositionInFrame previewPosition = getPreviewPositionInFrame();
+	PreviewPositionInFrame previewPosition = status->getPreviewPositionInFrame();
 	if(previewPosition == BottomRight || previewPosition == TopRight) {
 		previewRect->x = frameSize.width - previewRect->width;
 	} else {

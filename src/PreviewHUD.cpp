@@ -167,7 +167,7 @@ int PreviewHUD::workerLoop(void *ptr) {
 			// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, frameNumber);
 			MetricsTick tick = self->metrics->startClock();
 
-			int density = 2; //FIXME
+			int density = self->status->getPreviewDebugDensity();
 
 			WorkingFrame *previewFrame = self->frameServer->getWorkingFrame(frameNumber);
 			YerFace_MutexLock(previewFrame->previewFrameMutex);

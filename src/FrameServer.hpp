@@ -66,14 +66,6 @@ public:
 	void insertNewFrame(VideoFrame *videoFrame);
 	WorkingFrame *getWorkingFrame(FrameNumber frameNumber);
 	void setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, WorkingFrameStatus status, string checkpointKey);
-	// DetectionFrame getDetectionFrame(void);
-	// Mat getWorkingPreviewFrame(void);
-	// Mat getCompletedPreviewFrame(void);
-	// void resetCompletedPreviewFrame(void);
-	// Size getWorkingFrameSize(void);
-	// FrameTimestamps getWorkingFrameTimestamps(void);
-	// FrameTimestamps getCompletedFrameTimestamps(void);
-	// bool getCompletedFrameSet(void);
 
 private:
 	bool isDrained(void);
