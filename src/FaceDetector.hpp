@@ -92,6 +92,7 @@ private:
 	SDL_mutex *detectionsMutex;
 	unordered_map<FrameNumber, FacialDetectionBox> detections;
 	FacialDetectionBox latestDetection;
+	bool latestDetectionLostWarning;
 
 	std::list<FaceDetectorWorker *> workers;
 

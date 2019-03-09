@@ -57,6 +57,7 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	}
 	latestDetection.run = false;
 	latestDetection.set = false;
+	latestDetectionLostWarning = false;
 
 	//Hook into the frame lifecycle.
 
@@ -215,9 +216,17 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 
 	bool resultUsed = false;
 	YerFace_MutexLock(detectionsMutex);
-	if(detection.set && (!latestDetection.set || latestDetection.timestamps.startTimestamp < detection.timestamps.startTimestamp)) {
+	if(!latestDetection.run || latestDetection.timestamps.startTimestamp < detection.timestamps.startTimestamp) {
 		latestDetection = detection;
 		resultUsed = true;
+		if(!latestDetection.set) {
+			if(!latestDetectionLostWarning) {
+				logger->warn("Lost face completely! Will keep searching...");
+				latestDetectionLostWarning = true;
+			}
+		} else {
+			latestDetectionLostWarning = false;
+		}
 	}
 	YerFace_MutexUnlock(detectionsMutex);
 
@@ -363,7 +372,7 @@ int FaceDetector::assignmentLoop(void *ptr) {
 
 			bool frameAssigned = false;
 			YerFace_MutexLock(self->detectionsMutex);
-			if(self->latestDetection.set) {
+			if(self->latestDetection.run) {
 				double latestDetectionUsableUntil = self->latestDetection.timestamps.startTimestamp + self->resultGoodForSeconds;
 				if(myFrameTimestamps.startTimestamp <= latestDetectionUsableUntil) {
 					self->detections[myFrameNumber] = self->latestDetection;
@@ -387,7 +396,6 @@ int FaceDetector::assignmentLoop(void *ptr) {
 				YerFace_MutexUnlock(self->myMutex);
 			}
 
-			//FIXME - currently this can't handle the case where there is no face in the frame. It will most likely deadlock.
 			if(frameAssigned) {
 				self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PROCESSING, "faceDetector.ran");
 				self->assignmentMetrics->endClock(tick);
