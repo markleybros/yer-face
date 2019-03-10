@@ -19,14 +19,16 @@ namespace YerFace {
 
 class VideoFrame;
 
-#define FRAME_STATUS_MAX 5
+#define FRAME_STATUS_MAX 7
 enum WorkingFrameStatus: unsigned int {
 	FRAME_STATUS_NEW = 0, //Frame has just been inserted via insertNewFrame() but no processing has taken place yet.
-	FRAME_STATUS_PROCESSING = 1, //Frame is being processed by the pipeline, but not ready for previewing.
-	FRAME_STATUS_PREVIEWING = 2, //Frame is being previewed.
-	FRAME_STATUS_LATE_PROCESSING = 3, //Frame is eligible for any late-stage processing (like Sphinx data).
-	FRAME_STATUS_DRAINING = 4, //Last call before this frame is gone. (Frame data output)
-	FRAME_STATUS_GONE = 5 //This frame is about to be freed and purged from the frame store. (No checkpoints can be registered for this status!)
+	FRAME_STATUS_DETECTION = 1, //Frame is being processed by FaceDetector.
+	FRAME_STATUS_LANDMARK = 2, //Frame is being processed by FaceLandmark.
+	FRAME_STATUS_MAPPING = 3, //Frame is being processed by FaceMapper.
+	FRAME_STATUS_PREVIEWING = 4, //Frame is being previewed.
+	FRAME_STATUS_LATE_PROCESSING = 5, //Frame is eligible for any late-stage processing (like Sphinx data).
+	FRAME_STATUS_DRAINING = 6, //Last call before this frame is gone. (Frame data output)
+	FRAME_STATUS_GONE = 7 //This frame is about to be freed and purged from the frame store. (No checkpoints can be registered for this status!)
 };
 
 class WorkingFrame {

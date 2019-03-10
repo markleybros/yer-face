@@ -53,13 +53,13 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-	frameStatusChangeCallback.newStatus = FRAME_STATUS_PROCESSING;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_DETECTION;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PROCESSING without our blessing.
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PROCESSING, "faceDetector.ran");
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_DETECTION without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_DETECTION, "faceDetector.ran");
 
 	WorkerPoolParameters workerPoolParameters;
 	workerPoolParameters.name = "FaceDetector.Detect";
@@ -208,7 +208,7 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			self->detections[frameNumber] = detection;
 			YerFace_MutexUnlock(self->detectionsMutex);
 			break;
-		case FRAME_STATUS_PROCESSING:
+		case FRAME_STATUS_DETECTION:
 			YerFace_MutexLock(self->myAssignmentMutex);
 			self->assignmentFrameNumbers.push_back(frameNumber);
 			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
@@ -319,7 +319,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 		}
 
 		if(frameAssigned) {
-			self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PROCESSING, "faceDetector.ran");
+			self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_DETECTION, "faceDetector.ran");
 			self->assignmentMetrics->endClock(tick);
 			myFrameNumber = -1;
 			didWork = true;
