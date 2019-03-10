@@ -57,7 +57,10 @@ WorkerPool::WorkerPool(json config, Status *myStatus, FrameServer *myFrameServer
 	for(int i = 1; i <= parameters.numWorkers; i++) {
 		WorkerPoolWorker *worker = new WorkerPoolWorker();
 		worker->num = i;
-		parameters.initializer(worker, parameters.initializerPtr);
+		worker->ptr = parameters.usrPtr;
+		if(parameters.initializer != NULL) {
+			parameters.initializer(worker, parameters.usrPtr);
+		}
 		worker->self = (void *)this;
 		if((worker->thread = SDL_CreateThread(outerWorkerLoop, parameters.name.c_str(), (void *)worker)) == NULL) {
 			throw runtime_error("Failed starting thread!");
@@ -77,8 +80,14 @@ WorkerPool::~WorkerPool() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
+	logger->verbose("blocking on workers...");
 	for(auto worker : workers) {
+		logger->verbose("waiting on thread %d", worker->num);
 		SDL_WaitThread(worker->thread, NULL);
+		if(parameters.deinitializer != NULL) {
+			logger->verbose("kicking off deinitializer...");
+			parameters.deinitializer(worker, parameters.usrPtr);
+		}
 		delete worker;
 	}
 
@@ -109,7 +118,7 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 
 	YerFace_MutexLock(self->myMutex);
 	while(!self->frameServerDrained) {
-		self->logger->verbose("Thread #%d Top of Loop", worker->num);
+		// self->logger->verbose("Thread #%d Top of Loop", worker->num);
 
 		if(self->status->getIsPaused() && self->status->getIsRunning()) {
 			YerFace_MutexUnlock(self->myMutex);
@@ -124,7 +133,7 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 
 		//If there is no work available, go to sleep and wait.
 		if(!didWork) {
-			self->logger->verbose("Thread #%d entering CondWait...", worker->num);
+			// self->logger->verbose("Thread #%d entering CondWait...", worker->num);
 			int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
 			if(result < 0) {
 				throw runtime_error("CondWaitTimeout() failed!");
@@ -133,7 +142,7 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 					self->logger->warn("Thread #%d timed out waiting for Condition signal!", worker->num);
 				}
 			}
-			self->logger->verbose("Thread #%d left CondWait!", worker->num);
+			// self->logger->verbose("Thread #%d left CondWait!", worker->num);
 		}
 	}
 	YerFace_MutexUnlock(self->myMutex);

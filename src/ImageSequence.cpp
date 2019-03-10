@@ -43,8 +43,9 @@ ImageSequence::ImageSequence(json config, Status *myStatus, FrameServer *myFrame
 	workerPoolParameters.name = "ImageSequence";
 	workerPoolParameters.numWorkers = config["YerFace"]["ImageSequence"]["numWorkers"];
 	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["ImageSequence"]["numWorkersPerCPU"];
-	workerPoolParameters.initializer = workerInitializer;
-	workerPoolParameters.initializerPtr = (void *)this;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
@@ -65,10 +66,6 @@ ImageSequence::~ImageSequence() noexcept(false) {
 	SDL_DestroyMutex(myMutex);
 	delete logger;
 	delete metrics;
-}
-
-void ImageSequence::workerInitializer(WorkerPoolWorker *worker, void *ptr) {
-	worker->ptr = ptr;
 }
 
 bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {

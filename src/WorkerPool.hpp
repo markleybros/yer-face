@@ -20,6 +20,7 @@ public:
 
 typedef function<void(WorkerPoolWorker *worker, void *ptr)> WorkerPoolWorkerInitializer;
 typedef function<bool(WorkerPoolWorker *worker)> WorkerPoolWorkerHandler;
+typedef function<void(WorkerPoolWorker *worker, void *ptr)> WorkerPoolWorkerDeinitializer;
 
 class WorkerPoolParameters {
 public:
@@ -28,7 +29,8 @@ public:
 	int numWorkers;
 
 	WorkerPoolWorkerInitializer initializer;
-	void *initializerPtr;
+	WorkerPoolWorkerDeinitializer deinitializer;
+	void *usrPtr;
 
 	WorkerPoolWorkerHandler handler;
 };

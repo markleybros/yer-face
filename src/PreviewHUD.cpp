@@ -42,8 +42,9 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 	workerPoolParameters.name = "PreviewHUD";
 	workerPoolParameters.numWorkers = config["YerFace"]["PreviewHUD"]["numWorkers"];
 	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["PreviewHUD"]["numWorkersPerCPU"];
-	workerPoolParameters.initializer = workerInitializer;
-	workerPoolParameters.initializerPtr = (void *)this;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
@@ -88,10 +89,6 @@ void PreviewHUD::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, 
 	}
 	*previewCenter = Utilities::centerRect(*previewRect);
 	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
-}
-
-void PreviewHUD::workerInitializer(WorkerPoolWorker *worker, void *ptr) {
-	worker->ptr = ptr;
 }
 
 bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {

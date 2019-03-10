@@ -25,25 +25,11 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myCond = SDL_CreateCond()) == NULL) {
-		throw runtime_error("Failed creating condition!");
-	}
 	if((myAssignmentMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myAssignmentCond = SDL_CreateCond()) == NULL) {
-		throw runtime_error("Failed creating condition!");
-	}
 	metrics = new Metrics(config, "FaceDetector.Detections");
 	assignmentMetrics = new Metrics(config, "FaceDetector.Assignments");
-	numWorkers = config["YerFace"]["FaceDetector"]["numWorkers"];
-	if(numWorkers < 0.0) {
-		throw invalid_argument("numWorkers is nonsense.");
-	}
-	numWorkersPerCPU = config["YerFace"]["FaceDetector"]["numWorkersPerCPU"];
-	if(numWorkersPerCPU < 0.0) {
-		throw invalid_argument("numWorkersPerCPU is nonsense.");
-	}
 	resultGoodForSeconds = config["YerFace"]["FaceDetector"]["resultGoodForSeconds"];
 	if(resultGoodForSeconds < 0.0) {
 		throw invalid_argument("resultGoodForSeconds cannot be less than zero.");
@@ -61,13 +47,6 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 
 	//Hook into the frame lifecycle.
 
-	//We need to know when the frame server has drained.
-	frameServerDrained = false;
-	FrameServerDrainedEventCallback frameServerDrainedCallback;
-	frameServerDrainedCallback.userdata = (void *)this;
-	frameServerDrainedCallback.callback = handleFrameServerDrainedEvent;
-	frameServer->onFrameServerDrainedEvent(frameServerDrainedCallback);
-
 	//We want to know when any frame has entered PROCESSING.
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
 	frameStatusChangeCallback.userdata = (void *)this;
@@ -82,53 +61,33 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PROCESSING without our blessing.
 	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PROCESSING, "faceDetector.ran");
 
-	//Start worker threads.
-	if(numWorkers == 0) {
-		int numCPUs = SDL_GetCPUCount();
-		numWorkers = (int)ceil((double)numCPUs * (double)numWorkersPerCPU);
-		logger->debug("Calculating NumWorkers: System has %d CPUs, at %.02lf Workers per CPU that's %d NumWorkers.", numCPUs, numWorkersPerCPU, numWorkers);
-	} else {
-		logger->debug("NumWorkers explicitly set to %d.", numWorkers);
-	}
-	if(numWorkers < 1) {
-		throw invalid_argument("NumWorkers can't be zero!");
-	}
-	for(int i = 1; i <= numWorkers; i++) {
-		FaceDetectorWorker *worker = new FaceDetectorWorker();
-		worker->num = i;
-		worker->self = this;
-		if(usingDNNFaceDetection) {
-			deserialize(faceDetectionModelFileName.c_str()) >> worker->faceDetectionModel;
-		} else {
-			worker->frontalFaceDetector = get_frontal_face_detector();
-		}
-		if((worker->thread = SDL_CreateThread(workerLoop, "FaceDetectorWorker", (void *)worker)) == NULL) {
-			throw runtime_error("Failed starting thread!");
-		}
-		workers.push_back(worker);
-	}
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "FaceDetector.Detect";
+	workerPoolParameters.numWorkers = config["YerFace"]["FaceDetector"]["numWorkers"];
+	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["FaceDetector"]["numWorkersPerCPU"];
+	workerPoolParameters.initializer = detectionWorkerInitializer;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = detectionWorkerHandler;
+	detectionWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	if((myAssignmentThread = SDL_CreateThread(assignmentLoop, "FaceDetectorAssignment", (void *)this)) == NULL) {
-		throw runtime_error("Failed starting thread!");
-	}
+	workerPoolParameters.name = "FaceDetector.Assign";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = assignmentWorkerHandler;
+	assignmentWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("FaceDetector object constructed with Face Detection Method: %s, NumWorkers: %d", usingDNNFaceDetection ? "DNN" : "HOG", numWorkers);
+	logger->debug("FaceDetector object constructed with Face Detection Method: %s", usingDNNFaceDetection ? "DNN" : "HOG");
 }
 
 FaceDetector::~FaceDetector() noexcept(false) {
 	logger->debug("FaceDetector object destructing...");
 
-	YerFace_MutexLock(myMutex);
-	if(!frameServerDrained) {
-		logger->error("Frame server has not finished draining! Here be dragons!");
-	}
-	YerFace_MutexUnlock(myMutex);
-
-	for(auto worker : workers) {
-		SDL_WaitThread(worker->thread, NULL);
-		delete worker;
-	}
-	SDL_WaitThread(myAssignmentThread, NULL);
+	delete detectionWorkerPool;
+	delete assignmentWorkerPool;
 
 	if(assignmentFrameNumbers.size() > 0) {
 		logger->error("Assignment Frames are still pending! Woe is me!");
@@ -137,9 +96,7 @@ FaceDetector::~FaceDetector() noexcept(false) {
 		logger->error("Detection Tasks are still pending! Woe is me!");
 	}
 
-	SDL_DestroyCond(myCond);
 	SDL_DestroyMutex(myMutex);
-	SDL_DestroyCond(myAssignmentCond);
 	SDL_DestroyMutex(myAssignmentMutex);
 	SDL_DestroyMutex(detectionsMutex);
 	delete logger;
@@ -230,18 +187,11 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 	}
 	YerFace_MutexUnlock(detectionsMutex);
 
-	if(!resultUsed) {
+	if(resultUsed) {
+		assignmentWorkerPool->sendWorkerSignal();
+	} else {
 		logger->warn("Detection performed, but it was of no use!");
 	}
-}
-
-void FaceDetector::handleFrameServerDrainedEvent(void *userdata) {
-	FaceDetector *self = (FaceDetector *)userdata;
-	// self->logger->verbose("Got notification that FrameServer has drained!");
-	YerFace_MutexLock(self->myMutex);
-	self->frameServerDrained = true;
-	SDL_CondSignal(self->myCond);
-	YerFace_MutexUnlock(self->myMutex);
 }
 
 void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
@@ -262,8 +212,8 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			YerFace_MutexLock(self->myAssignmentMutex);
 			self->assignmentFrameNumbers.push_back(frameNumber);
 			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
-			SDL_CondSignal(self->myAssignmentCond);
 			YerFace_MutexUnlock(self->myAssignmentMutex);
+			self->assignmentWorkerPool->sendWorkerSignal();
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->detectionsMutex);
@@ -273,159 +223,114 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 	}
 }
 
-int FaceDetector::workerLoop(void *ptr) {
-	FaceDetectorWorker *worker = (FaceDetectorWorker *)ptr;
-	FaceDetector *self = worker->self;
-	self->logger->verbose("FaceDetector Worker Thread #%d Alive!", worker->num);
-
-	FaceDetectionTask task;
-	YerFace_MutexLock(self->myMutex);
-	while(!self->frameServerDrained) {
-		// self->logger->verbose("Thread #%d Top of Loop", worker->num);
-
-		if(self->status->getIsPaused() && self->status->getIsRunning()) {
-			YerFace_MutexUnlock(self->myMutex);
-			SDL_Delay(100);
-			YerFace_MutexLock(self->myMutex);
-			continue;
-		}
-
-		//// CHECK FOR WORK ////
-		bool taskSet = false;
-		if(self->detectionTasks.size() > 0) {
-			taskSet = true;
-			//Operate on the back of detectionTasks (not a FIFO queue!) because the most recent detection task is always the most urgent.
-			task = self->detectionTasks.back();
-			self->detectionTasks.clear();
-		}
-
-		//// DO THE WORK ////
-		if(taskSet) {
-			//Do not squat on myMutex while doing time-consuming work.
-			YerFace_MutexUnlock(self->myMutex);
-
-			// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, task.myFrameNumber);
-			MetricsTick tick = self->metrics->startClock();
-
-			// self->logger->verbose("Thread #%d, Frame #%lld - RUNNING Detection", worker->num, task.myFrameNumber);
-			self->doDetectFace(worker, task);
-			// self->logger->verbose("Thread #%d, Frame #%lld - FINISHED Detection", worker->num, task.myFrameNumber);
-
-			self->metrics->endClock(tick);
-
-			//Need to re-lock while spinning.
-			YerFace_MutexLock(self->myMutex);
-		} else {
-			//If there is no work available, go to sleep and wait.
-			// self->logger->verbose("Thread #%d entering CondWait...", worker->num);
-			int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
-			if(result < 0) {
-				throw runtime_error("CondWaitTimeout() failed!");
-			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				if(!self->status->getIsPaused()) {
-					self->logger->warn("Thread #%d timed out waiting for Condition signal!", worker->num);
-				}
-			}
-			// self->logger->verbose("Thread #%d left CondWait!", worker->num);
-		}
+void FaceDetector::detectionWorkerInitializer(WorkerPoolWorker *worker, void *ptr) {
+	FaceDetector *self = (FaceDetector *)ptr;
+	FaceDetectorWorker *innerWorker = new FaceDetectorWorker();
+	innerWorker->self = self;
+	if(self->usingDNNFaceDetection) {
+		deserialize(self->faceDetectionModelFileName.c_str()) >> innerWorker->faceDetectionModel;
+	} else {
+		innerWorker->frontalFaceDetector = get_frontal_face_detector();
 	}
-	self->detectionTasks.clear();
-	YerFace_MutexUnlock(self->myMutex);
-
-	self->logger->verbose("Thread #%d Done.", worker->num);
-	return 0;
+	worker->ptr = (void *)innerWorker;
 }
 
-int FaceDetector::assignmentLoop(void *ptr) {
-	FaceDetector *self = (FaceDetector *)ptr;
-	self->logger->verbose("FaceDetector Assignment Thread Alive!");
+bool FaceDetector::detectionWorkerHandler(WorkerPoolWorker *worker) {
+	FaceDetectorWorker *innerWorker = (FaceDetectorWorker *)worker->ptr;
+	FaceDetector *self = innerWorker->self;
+	bool didWork = false;
+
+	//// CHECK FOR WORK ////
+	bool taskSet = false;
+	FaceDetectionTask task;
+	YerFace_MutexLock(self->myMutex);
+	if(self->detectionTasks.size() > 0) {
+		taskSet = true;
+		//Operate on the back of detectionTasks (not a FIFO queue!) because the most recent detection task is always the most urgent.
+		task = self->detectionTasks.back();
+		self->detectionTasks.clear();
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(taskSet) {
+		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, task.myFrameNumber);
+		MetricsTick tick = self->metrics->startClock();
+
+		// self->logger->verbose("Thread #%d, Frame #%lld - RUNNING Detection", worker->num, task.myFrameNumber);
+		self->doDetectFace(innerWorker, task);
+		// self->logger->verbose("Thread #%d, Frame #%lld - FINISHED Detection", worker->num, task.myFrameNumber);
+
+		self->metrics->endClock(tick);
+		didWork = true;
+	}
+	return didWork;
+}
+
+bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
+	FaceDetector *self = (FaceDetector *)worker->ptr;
+	bool didWork = false;
+
+	static FrameNumber myFrameNumber = -1;
+	static FrameNumber lastDetectionRequested = -1;
+	static FrameNumber lastFrameBlockedWarning = -1;
+	static MetricsTick tick;
 
 	YerFace_MutexLock(self->myAssignmentMutex);
-	FrameNumber myFrameNumber = -1;
-	FrameNumber lastDetectionRequested = -1;
-	FrameNumber lastFrameBlockedWarning = -1;
-	MetricsTick tick;
-	while(!self->frameServerDrained) {
-		if(self->status->getIsPaused() && self->status->getIsRunning()) {
-			YerFace_MutexUnlock(self->myAssignmentMutex);
-			SDL_Delay(100);
-			YerFace_MutexLock(self->myAssignmentMutex);
-			continue;
-		}
-
-		//// CHECK FOR WORK ////
-		if(myFrameNumber < 0 && self->assignmentFrameNumbers.size() > 0) {
-			tick = self->assignmentMetrics->startClock();
-			myFrameNumber = self->assignmentFrameNumbers.front();
-			self->assignmentFrameNumbers.pop_front();
-		}
-
-		//// DO THE WORK ////
-		if(myFrameNumber > 0) {
-			//Do not squat on myMutex while doing time-consuming work.
-			YerFace_MutexUnlock(self->myAssignmentMutex);
-
-			// self->logger->verbose("Assignment Thread handling frame #%lld", myFrameNumber);
-
-			WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
-			FrameTimestamps myFrameTimestamps = workingFrame->frameTimestamps;
-
-			bool frameAssigned = false;
-			YerFace_MutexLock(self->detectionsMutex);
-			if(self->latestDetection.run) {
-				double latestDetectionUsableUntil = self->latestDetection.timestamps.startTimestamp + self->resultGoodForSeconds;
-				if(myFrameTimestamps.startTimestamp <= latestDetectionUsableUntil) {
-					self->detections[myFrameNumber] = self->latestDetection;
-					frameAssigned = true;
-					// self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #%lld (LD Frame #%lld)", myFrameNumber, self->latestDetection.timestamps.frameNumber);
-				}
-			}
-			YerFace_MutexUnlock(self->detectionsMutex);
-
-			if(myFrameNumber != lastDetectionRequested) {
-				// self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #%lld", myFrameNumber);
-				lastDetectionRequested = myFrameNumber;
-				FaceDetectionTask task;
-				task.myFrameNumber = myFrameNumber;
-				task.myFrameTimestamps = myFrameTimestamps;
-				task.myDetectionScaleFactor = workingFrame->detectionScaleFactor;
-				task.detectionFrame = workingFrame->detectionFrame.clone();
-				YerFace_MutexLock(self->myMutex);
-				self->detectionTasks.push_back(task);
-				SDL_CondSignal(self->myCond);
-				YerFace_MutexUnlock(self->myMutex);
-			}
-
-			if(frameAssigned) {
-				self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PROCESSING, "faceDetector.ran");
-				self->assignmentMetrics->endClock(tick);
-				myFrameNumber = -1;
-			} else {
-				if(lastFrameBlockedWarning != myFrameNumber) {
-					self->logger->warn("Uh-oh! We are blocked on a Face Detection Task for frame #%lld. If this happens a lot, consider some tuning.", myFrameNumber);
-					lastFrameBlockedWarning = myFrameNumber;
-				}
-				SDL_Delay(1);
-			}
-
-			//Need to re-lock while spinning.
-			YerFace_MutexLock(self->myAssignmentMutex);
-		} else {
-			//If there is no work available, go to sleep and wait.
-			int result = SDL_CondWaitTimeout(self->myAssignmentCond, self->myAssignmentMutex, 1000);
-			if(result < 0) {
-				throw runtime_error("CondWaitTimeout() failed!");
-			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				if(!self->status->getIsPaused()) {
-					self->logger->warn("Assignment Thread timed out waiting for Condition signal!");
-				}
-			}
-		}
+	//// CHECK FOR WORK ////
+	if(myFrameNumber < 0 && self->assignmentFrameNumbers.size() > 0) {
+		tick = self->assignmentMetrics->startClock();
+		myFrameNumber = self->assignmentFrameNumbers.front();
+		self->assignmentFrameNumbers.pop_front();
 	}
 	YerFace_MutexUnlock(self->myAssignmentMutex);
 
-	self->logger->verbose("Assignment Thread Done.");
-	return 0;
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		// self->logger->verbose("Assignment Thread handling frame #%lld", myFrameNumber);
+
+		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
+		FrameTimestamps myFrameTimestamps = workingFrame->frameTimestamps;
+
+		bool frameAssigned = false;
+		YerFace_MutexLock(self->detectionsMutex);
+		if(self->latestDetection.run) {
+			double latestDetectionUsableUntil = self->latestDetection.timestamps.startTimestamp + self->resultGoodForSeconds;
+			if(myFrameTimestamps.startTimestamp <= latestDetectionUsableUntil) {
+				self->detections[myFrameNumber] = self->latestDetection;
+				frameAssigned = true;
+				// self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #%lld (LD Frame #%lld)", myFrameNumber, self->latestDetection.timestamps.frameNumber);
+			}
+		}
+		YerFace_MutexUnlock(self->detectionsMutex);
+
+		if(myFrameNumber != lastDetectionRequested) {
+			// self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #%lld", myFrameNumber);
+			lastDetectionRequested = myFrameNumber;
+			FaceDetectionTask task;
+			task.myFrameNumber = myFrameNumber;
+			task.myFrameTimestamps = myFrameTimestamps;
+			task.myDetectionScaleFactor = workingFrame->detectionScaleFactor;
+			task.detectionFrame = workingFrame->detectionFrame.clone();
+			YerFace_MutexLock(self->myMutex);
+			self->detectionTasks.push_back(task);
+			YerFace_MutexUnlock(self->myMutex);
+			self->detectionWorkerPool->sendWorkerSignal();
+		}
+
+		if(frameAssigned) {
+			self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PROCESSING, "faceDetector.ran");
+			self->assignmentMetrics->endClock(tick);
+			myFrameNumber = -1;
+			didWork = true;
+		} else {
+			if(lastFrameBlockedWarning != myFrameNumber) {
+				self->logger->warn("Uh-oh! We are blocked on a Face Detection Task for frame #%lld. If this happens a lot, consider some tuning.", myFrameNumber);
+				lastFrameBlockedWarning = myFrameNumber;
+			}
+		}
+	}
+	return didWork;
 }
 
 } //namespace YerFace

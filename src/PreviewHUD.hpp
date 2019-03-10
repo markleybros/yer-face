@@ -21,10 +21,8 @@ public:
 	void registerPreviewHUDRenderer(PreviewHUDRenderer renderer);
 	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 private:
-	static void workerInitializer(WorkerPoolWorker *worker, void *ptr);
 	static bool workerHandler(WorkerPoolWorker *worker);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
-	static int workerLoop(void *ptr);
 
 	Status *status;
 	FrameServer *frameServer;

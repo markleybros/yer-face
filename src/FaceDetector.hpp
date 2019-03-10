@@ -4,6 +4,7 @@
 #include "Utilities.hpp"
 #include "FrameServer.hpp"
 #include "Metrics.hpp"
+#include "WorkerPool.hpp"
 
 #include <list>
 
@@ -37,8 +38,6 @@ public:
 
 class FaceDetectorWorker {
 public:
-	int num;
-	SDL_Thread *thread;
 	FaceDetector *self;
 
 	dlib::frontal_face_detector frontalFaceDetector;
@@ -62,22 +61,18 @@ public:
 	void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
 private:
 	void doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask task);
-	static void handleFrameServerDrainedEvent(void *userdata);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
-	static int workerLoop(void *ptr);
-	static int assignmentLoop(void *ptr);
+	static void detectionWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
+	static bool detectionWorkerHandler(WorkerPoolWorker *worker);
+	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);
 
 	string faceDetectionModelFileName;
 	double resultGoodForSeconds;
-	double numWorkersPerCPU;
-	int numWorkers;
 
 	bool usingDNNFaceDetection;
 
-
 	Status *status;
 	FrameServer *frameServer;
-	bool frameServerDrained;
 
 	Metrics *metrics, *assignmentMetrics;
 
@@ -85,7 +80,6 @@ private:
 
 	Logger *logger;
 	SDL_mutex *myMutex;
-	SDL_cond *myCond;
 	list<FrameNumber> assignmentFrameNumbers;
 	list<FaceDetectionTask> detectionTasks;
 
@@ -94,11 +88,10 @@ private:
 	FacialDetectionBox latestDetection;
 	bool latestDetectionLostWarning;
 
-	std::list<FaceDetectorWorker *> workers;
-
 	SDL_mutex *myAssignmentMutex;
-	SDL_cond *myAssignmentCond;
 	SDL_Thread *myAssignmentThread;
+
+	WorkerPool *detectionWorkerPool, *assignmentWorkerPool;
 };
 
 }; //namespace YerFace
