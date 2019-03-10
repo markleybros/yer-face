@@ -17,6 +17,8 @@ namespace YerFace {
 
 FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector, bool myLowLatency) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
+	previouslyReportedFacialPose.set = false;
+	facialCameraModel.set = false;
 
 	status = myStatus;
 	if(status == NULL) {
@@ -98,7 +100,8 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker");
+	metricsPredictor = new Metrics(config, "FaceTracker.Predictor");
+	metricsAssignment = new Metrics(config, "FaceTracker.Assignment");
 
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -119,14 +122,23 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_TRACKING, "faceTracker.ran");
 
 	WorkerPoolParameters workerPoolParameters;
-	workerPoolParameters.name = "FaceTracker";
+	workerPoolParameters.name = "FaceTracker.Predictor";
 	workerPoolParameters.numWorkers = config["YerFace"]["FaceTracker"]["numWorkers"];
 	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["FaceTracker"]["numWorkersPerCPU"];
-	workerPoolParameters.initializer = workerInitializer;
+	workerPoolParameters.initializer = predictorWorkerInitializer;
 	workerPoolParameters.deinitializer = NULL;
 	workerPoolParameters.usrPtr = (void *)this;
-	workerPoolParameters.handler = workerHandler;
-	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+	workerPoolParameters.handler = predictorWorkerHandler;
+	predictorWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
+	workerPoolParameters.name = "FaceTracker.Assignment";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = assignmentWorkerHandler;
+	assignmentWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
 	logger->debug("FaceTracker object constructed and ready to go! Low Latency Mode: %s", lowLatency ? "Enabled" : "Disabled"); //FIXME - low latency??
 }
@@ -134,10 +146,10 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 FaceTracker::~FaceTracker() noexcept(false) {
 	logger->debug("FaceTracker object destructing...");
 
-	delete workerPool;
+	delete predictorWorkerPool;
 
 	YerFace_MutexLock(myMutex);
-	if(pendingFrameNumbers.size() > 0) {
+	if(pendingPredictionFrameNumbers.size() > 0) {
 		logger->error("Frames are still pending! Woe is me!");
 	}
 	if(outputFrames.size() > 0) {
@@ -146,7 +158,7 @@ FaceTracker::~FaceTracker() noexcept(false) {
 	YerFace_MutexUnlock(myMutex);
 
 	SDL_DestroyMutex(myMutex);
-	delete metrics;
+	delete metricsPredictor;
 	delete logger;
 }
 
@@ -270,15 +282,17 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 	output->facialFeatures.featuresExposed.set = true;
 }
 
-void FaceTracker::doInitializeCameraModel(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
-	// FaceTrackerWorker *innerWorker = (FaceTrackerWorker *)worker->ptr;
+void FaceTracker::doInitializeCameraModel(WorkingFrame *workingFrame) {
 	//Totally fake, idealized camera.
 	Size frameSize = workingFrame->frame.size();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
-	output->facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
-	output->facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
-	output->facialCameraModel.set = true;
+
+	YerFace_MutexLock(myMutex);
+	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
+	facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
+	facialCameraModel.set = true;
+	YerFace_MutexUnlock(myMutex);
 }
 
 // void FaceTracker::doCalculateFacialTransformation(void) {
@@ -504,6 +518,7 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
 	YerFace_MutexLock(myMutex);
 	FaceTrackerOutput output = outputFrames[frameNumber];
+	FacialCameraModel camera = facialCameraModel;
 	YerFace_MutexUnlock(myMutex);
 
 	if(density > 0) {
@@ -519,7 +534,7 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 			
 			Mat tempRotationVector;
 			Rodrigues(output.facialPose.rotationMatrix, tempRotationVector);
-			projectPoints(gizmo3d, tempRotationVector, output.facialPose.translationVector, output.facialCameraModel.cameraMatrix, output.facialCameraModel.distortionCoefficients, gizmo2d);
+			projectPoints(gizmo3d, tempRotationVector, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, gizmo2d);
 			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
 			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
 			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
@@ -553,7 +568,7 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 				}
 			}
 
-			projectPoints(edges3d, output.facialPose.rotationMatrix, output.facialPose.translationVector, output.facialCameraModel.cameraMatrix, output.facialCameraModel.distortionCoefficients, edges2d);
+			projectPoints(edges3d, output.facialPose.rotationMatrix, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, edges2d);
 
 			for(unsigned int i = 0; i + 1 < edges2d.size(); i = i + 2) {
 				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255));
@@ -593,8 +608,6 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 			output.facialFeatures.set = false;
 			output.facialFeatures.featuresExposed.set = false;
 			output.facialPose.set = false;
-			output.previouslyReportedFacialPose.set = false;
-			output.facialCameraModel.set = false;
 			YerFace_MutexLock(self->myMutex);
 			self->outputFrames[frameNumber] = output;
 			YerFace_MutexUnlock(self->myMutex);
@@ -602,9 +615,9 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 		case FRAME_STATUS_TRACKING:
 			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
 			YerFace_MutexLock(self->myMutex);
-			self->pendingFrameNumbers.push_back(frameNumber);
+			self->pendingPredictionFrameNumbers.push_back(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
-			self->workerPool->sendWorkerSignal();
+			self->predictorWorkerPool->sendWorkerSignal();
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->myMutex);
@@ -614,7 +627,7 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 	}
 }
 
-void FaceTracker::workerInitializer(WorkerPoolWorker *worker, void *ptr) {
+void FaceTracker::predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr) {
 	FaceTracker *self = (FaceTracker *)ptr;
 	FaceTrackerWorker *innerWorker = new FaceTrackerWorker();
 	innerWorker->self = self;
@@ -624,7 +637,7 @@ void FaceTracker::workerInitializer(WorkerPoolWorker *worker, void *ptr) {
 	worker->ptr = (void *)innerWorker;
 }
 
-bool FaceTracker::workerHandler(WorkerPoolWorker *worker) {
+bool FaceTracker::predictorWorkerHandler(WorkerPoolWorker *worker) {
 	FaceTrackerWorker *innerWorker = (FaceTrackerWorker *)worker->ptr;
 	FaceTracker *self = innerWorker->self;
 
@@ -633,15 +646,15 @@ bool FaceTracker::workerHandler(WorkerPoolWorker *worker) {
 
 	YerFace_MutexLock(self->myMutex);
 	//// CHECK FOR WORK ////
-	if(self->pendingFrameNumbers.size() > 0) {
-		myFrameNumber = self->pendingFrameNumbers.front();
-		self->pendingFrameNumbers.pop_front();
+	if(self->pendingPredictionFrameNumbers.size() > 0) {
+		myFrameNumber = self->pendingPredictionFrameNumbers.front();
+		self->pendingPredictionFrameNumbers.pop_front();
 	}
 	YerFace_MutexUnlock(self->myMutex);
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		MetricsTick tick = self->metrics->startClock();
+		MetricsTick tick = self->metricsPredictor->startClock();
 
 		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
 
@@ -650,18 +663,62 @@ bool FaceTracker::workerHandler(WorkerPoolWorker *worker) {
 		output.facialFeatures.set = false;
 		output.facialFeatures.featuresExposed.set = false;
 		output.facialPose.set = false;
-		output.previouslyReportedFacialPose.set = false;
-		output.facialCameraModel.set = false;
 		output.frameNumber = myFrameNumber;
+
 		self->doIdentifyFeatures(worker, workingFrame, &output);
-		self->doInitializeCameraModel(worker, workingFrame, &output);
+
+		YerFace_MutexLock(self->myMutex);
+		self->outputFrames[myFrameNumber] = output;
+		self->pendingAssignmentFrameNumbers[myFrameNumber] = myFrameNumber;
+		YerFace_MutexUnlock(self->myMutex);
+		self->assignmentWorkerPool->sendWorkerSignal();
+
+		self->metricsPredictor->endClock(tick);
+		didWork = true;
+	}
+
+	return didWork;
+}
+
+bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
+	FaceTracker *self = (FaceTracker *)worker->ptr;
+
+	bool didWork = false;
+	FrameNumber myFrameNumber = -1;
+
+	YerFace_MutexLock(self->myMutex);
+	//// CHECK FOR WORK ////
+	for(auto pendingFrameNumber : self->pendingAssignmentFrameNumbers) {
+		if(myFrameNumber < 0 || pendingFrameNumber.second < myFrameNumber) {
+			myFrameNumber = pendingFrameNumber.second;
+		}
+	}
+	if(myFrameNumber > 0) {
+		self->pendingAssignmentFrameNumbers.erase(myFrameNumber);
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		MetricsTick tick = self->metricsPredictor->startClock();
+
+		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
+
+		YerFace_MutexLock(self->myMutex);
+		FaceTrackerOutput output = self->outputFrames[myFrameNumber];
+		
+		if(!self->facialCameraModel.set) {
+			self->doInitializeCameraModel(workingFrame);
+		}
+		YerFace_MutexUnlock(self->myMutex);
 
 		YerFace_MutexLock(self->myMutex);
 		self->outputFrames[myFrameNumber] = output;
 		YerFace_MutexUnlock(self->myMutex);
 
 		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_TRACKING, "faceTracker.ran");
-		self->metrics->endClock(tick);
+		self->metricsPredictor->endClock(tick);
+
 		didWork = true;
 	}
 

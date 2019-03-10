@@ -152,8 +152,6 @@ public:
 	FrameNumber frameNumber;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
-	FacialPose previouslyReportedFacialPose;
-	FacialCameraModel facialCameraModel;
 };
 
 class FaceTracker {
@@ -167,14 +165,15 @@ public:
 	// FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
 	void doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
-	void doInitializeCameraModel(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	void doInitializeCameraModel(WorkingFrame *workingFrame);
 	// void doCalculateFacialTransformation(void);
 	// void doPrecalculateFacialPlaneNormal(void);
 	// static int runDetectionLoop(void *ptr);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
-	static void workerInitializer(WorkerPoolWorker *worker, void *ptr);
-	static bool workerHandler(WorkerPoolWorker *worker);
+	static void predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
+	static bool predictorWorkerHandler(WorkerPoolWorker *worker);
+	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
 	Status *status;
@@ -211,16 +210,19 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics;
+	Metrics *metricsPredictor, *metricsAssignment;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
+	FacialPose previouslyReportedFacialPose;
+	FacialCameraModel facialCameraModel;
 
 	SDL_mutex *myMutex;
 
-	std::list<FrameNumber> pendingFrameNumbers;
+	std::list<FrameNumber> pendingPredictionFrameNumbers;
+	unordered_map<FrameNumber, FrameNumber> pendingAssignmentFrameNumbers;
 	unordered_map<FrameNumber, FaceTrackerOutput> outputFrames;
 
-	WorkerPool *workerPool;
+	WorkerPool *predictorWorkerPool, *assignmentWorkerPool;
 };
 
 }; //namespace YerFace
