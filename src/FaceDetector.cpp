@@ -47,7 +47,7 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 
 	//Hook into the frame lifecycle.
 
-	//We want to know when any frame has entered PROCESSING.
+	//We want to know when any frame has entered various statuses.
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
 	frameStatusChangeCallback.userdata = (void *)this;
 	frameStatusChangeCallback.callback = handleFrameStatusChange;

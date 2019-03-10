@@ -10,7 +10,7 @@
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
 #include "FaceDetector.hpp"
-// #include "FaceTracker.hpp"
+#include "FaceTracker.hpp"
 #include "FrameServer.hpp"
 // #include "FaceMapper.hpp"
 #include "Metrics.hpp"
@@ -71,7 +71,7 @@ SDLDriver *sdlDriver = NULL;
 FFmpegDriver *ffmpegDriver = NULL;
 FrameServer *frameServer = NULL;
 FaceDetector *faceDetector = NULL;
-// FaceTracker *faceTracker = NULL;
+FaceTracker *faceTracker = NULL;
 // FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 // OutputDriver *outputDriver = NULL;
@@ -244,7 +244,7 @@ int main(int argc, const char** argv) {
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceDetector = new FaceDetector(config, status, frameServer);
-	// faceTracker = new FaceTracker(config, sdlDriver, frameServer, lowLatency);
+	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector, lowLatency);
 	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
@@ -359,7 +359,7 @@ int main(int argc, const char** argv) {
 	// }
 	// delete outputDriver;
 	// delete faceMapper;
-	// delete faceTracker;
+	delete faceTracker;
 	delete faceDetector;
 	delete previewHUD;
 	delete frameServer;
@@ -495,6 +495,7 @@ void handleFrameServerDrainedEvent(void *userdata) {
 
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
 	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
+	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density);
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }

@@ -28,14 +28,14 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 	previewWidthPercentage = config["YerFace"]["PreviewHUD"]["previewWidthPercentage"];
 	previewCenterHeightPercentage = config["YerFace"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
-	//We want to know when any frame has entered PROCESSING.
+	//We want to know when any frame has entered our status.
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
 	frameStatusChangeCallback.userdata = (void *)this;
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEWING;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PPREVIEWING without our blessing.
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREVIEWING without our blessing.
 	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEWING, "previewHUD.ran");
 
 	WorkerPoolParameters workerPoolParameters;

@@ -17,14 +17,16 @@ using namespace cv;
 
 namespace YerFace {
 
+#define YERFACE_FRAMESERVER_MAX_QUEUEDEPTH 200
+
 class VideoFrame;
 
 #define FRAME_STATUS_MAX 7
 enum WorkingFrameStatus: unsigned int {
 	FRAME_STATUS_NEW = 0, //Frame has just been inserted via insertNewFrame() but no processing has taken place yet.
-	FRAME_STATUS_DETECTION = 1, //Frame is being processed by FaceDetector.
-	FRAME_STATUS_LANDMARK = 2, //Frame is being processed by FaceLandmark.
-	FRAME_STATUS_MAPPING = 3, //Frame is being processed by FaceMapper.
+	FRAME_STATUS_DETECTION = 1, //Primary face rectangle is being identified by FaceDetector
+	FRAME_STATUS_TRACKING = 2, //Face raw landmarks and pose are being recovered by FaceTracker
+	FRAME_STATUS_MAPPING = 3, //Primary markers position is being recovered by FaceMapper and its children.
 	FRAME_STATUS_PREVIEWING = 4, //Frame is being previewed.
 	FRAME_STATUS_LATE_PROCESSING = 5, //Frame is eligible for any late-stage processing (like Sphinx data).
 	FRAME_STATUS_DRAINING = 6, //Last call before this frame is gone. (Frame data output)

@@ -30,7 +30,7 @@ private:
 	Metrics *metrics;
 	Logger *logger;
 	SDL_mutex *myMutex;
-	list<FrameNumber> pendingFrameNumbers;
+	std::list<FrameNumber> pendingFrameNumbers;
 
 	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 

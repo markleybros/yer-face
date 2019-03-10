@@ -11,11 +11,14 @@
 #include "dlib/image_processing.h"
 
 #include "Logger.hpp"
+#include "Status.hpp"
 #include "SDLDriver.hpp"
+#include "FaceDetector.hpp"
 #include "MarkerType.hpp"
 #include "FrameServer.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
+#include "WorkerPool.hpp"
 
 using namespace std;
 using namespace cv;
@@ -86,6 +89,8 @@ enum DlibFeatureIndexes {
 	IDX_MOUTHIN_RIGHT_BOTTOM = 67
 };
 
+class FaceTracker;
+
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
@@ -101,11 +106,11 @@ public:
 	Vec3d planeNormal;
 };
 
-class FacialRect {
-public:
-	Rect2d rect;
-	bool set;
-};
+// class FacialRect {
+// public:
+// 	Rect2d rect;
+// 	bool set;
+// };
 
 class FacialFeatures {
 public:
@@ -127,41 +132,55 @@ public:
 	bool set;
 };
 
-class FaceTrackerWorkingVariables {
+// class FaceTrackerWorkingVariables {
+// public:
+// 	FacialFeaturesInternal facialFeatures;
+// 	FacialPose facialPose;
+// 	FacialPose previouslyReportedFacialPose;
+// };
+
+class FaceTrackerWorker {
 public:
-	FacialRect faceRect;
+	FaceTracker *self;
+
+	dlib::shape_predictor shapePredictor;
+};
+
+class FaceTrackerOutput {
+public:
+	bool set;
+	FrameNumber frameNumber;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
 	FacialPose previouslyReportedFacialPose;
+	FacialCameraModel facialCameraModel;
 };
-
 
 class FaceTracker {
 public:
-	FaceTracker(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, bool myLowLatency);
+	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector, bool myLowLatency);
 	~FaceTracker() noexcept(false);
-	void processCurrentFrame(void);
-	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
-	FacialRect getFacialBoundingBox(void);
-	FacialFeatures getFacialFeatures(void);
-	FacialCameraModel getFacialCameraModel(void);
-	FacialPose getWorkingFacialPose(void);
-	FacialPose getCompletedFacialPose(void);
-	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
+	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	// FacialFeatures getFacialFeatures(void);
+	// FacialCameraModel getFacialCameraModel(void);
+	// FacialPose getFacialPose(void);
+	// FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
 private:
-	void doDetectFace(DetectionFrame detectionFrame);
-	void assignFaceRect(void);
-	void doIdentifyFeatures(DetectionFrame detectionFrame);
-	void doInitializeCameraModel(void);
-	void doCalculateFacialTransformation(void);
-	void doPrecalculateFacialPlaneNormal(void);
+	void doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	void doInitializeCameraModel(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	// void doCalculateFacialTransformation(void);
+	// void doPrecalculateFacialPlaneNormal(void);
+	// static int runDetectionLoop(void *ptr);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
-	static int runDetectionLoop(void *ptr);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+	static void workerInitializer(WorkerPoolWorker *worker, void *ptr);
+	static bool workerHandler(WorkerPoolWorker *worker);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
+	Status *status;
 	SDLDriver *sdlDriver;
 	FrameServer *frameServer;
+	FaceDetector *faceDetector;
 	bool lowLatency;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
@@ -192,21 +211,16 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics, *metricsLandmarks, *metricsDetector;
-
-	FacialCameraModel facialCameraModel;
+	Metrics *metrics;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
 
-	dlib::shape_predictor shapePredictor;
+	SDL_mutex *myMutex;
 
-	FacialDetectionBox newestDetectionBox;
+	std::list<FrameNumber> pendingFrameNumbers;
+	unordered_map<FrameNumber, FaceTrackerOutput> outputFrames;
 
-	FaceTrackerWorkingVariables working, complete;
-
-	SDL_mutex *myCmpMutex, *myDetectionMutex;
-	SDL_Thread *detectorThread;
-	bool detectorRunning;
+	WorkerPool *workerPool;
 };
 
 }; //namespace YerFace

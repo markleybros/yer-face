@@ -7,6 +7,8 @@
       "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
     },
     "FaceTracker": {
+      "numWorkersPerCPU": 0.0,
+      "numWorkers": 2,
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
       "poseSmoothingOverSeconds": 0.5,
       "poseSmoothingExponent": 3,
