@@ -80,12 +80,9 @@ WorkerPool::~WorkerPool() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
-	logger->verbose("blocking on workers...");
 	for(auto worker : workers) {
-		logger->verbose("waiting on thread %d", worker->num);
 		SDL_WaitThread(worker->thread, NULL);
 		if(parameters.deinitializer != NULL) {
-			logger->verbose("kicking off deinitializer...");
 			parameters.deinitializer(worker, parameters.usrPtr);
 		}
 		delete worker;
