@@ -244,7 +244,7 @@ int main(int argc, const char** argv) {
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceDetector = new FaceDetector(config, status, frameServer);
-	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector, lowLatency);
+	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
 	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {

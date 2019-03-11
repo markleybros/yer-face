@@ -156,7 +156,7 @@ public:
 
 class FaceTracker {
 public:
-	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector, bool myLowLatency);
+	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
 	~FaceTracker() noexcept(false);
 	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
 	// FacialFeatures getFacialFeatures(void);
@@ -166,9 +166,8 @@ public:
 private:
 	void doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	void doInitializeCameraModel(WorkingFrame *workingFrame);
-	// void doCalculateFacialTransformation(void);
-	// void doPrecalculateFacialPlaneNormal(void);
-	// static int runDetectionLoop(void *ptr);
+	void doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	void doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
 	static void predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
@@ -180,7 +179,6 @@ private:
 	SDLDriver *sdlDriver;
 	FrameServer *frameServer;
 	FaceDetector *faceDetector;
-	bool lowLatency;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
 	double poseRotationLowRejectionThreshold;
@@ -216,7 +214,7 @@ private:
 	FacialPose previouslyReportedFacialPose;
 	FacialCameraModel facialCameraModel;
 
-	SDL_mutex *myMutex;
+	SDL_mutex *myMutex, *myAssignmentMutex;
 
 	std::list<FrameNumber> pendingPredictionFrameNumbers;
 	unordered_map<FrameNumber, FrameNumber> pendingAssignmentFrameNumbers;

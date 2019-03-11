@@ -15,7 +15,10 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector, bool myLowLatency) {
+// Pose recovery approach largely informed by the following sources:
+//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+//  - https://github.com/severin-lemaignan/gazr/
+FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
 	previouslyReportedFacialPose.set = false;
 	facialCameraModel.set = false;
@@ -36,7 +39,6 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	if(faceDetector == NULL) {
 		throw invalid_argument("faceDetector cannot be NULL");
 	}
-	lowLatency = myLowLatency;
 	poseSmoothingOverSeconds = config["YerFace"]["FaceTracker"]["poseSmoothingOverSeconds"];
 	if(poseSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("poseSmoothingOverSeconds cannot be less than or equal to zero.");
@@ -106,6 +108,9 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((myAssignmentMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
 	//We want to know when any frame has entered various statuses.
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
@@ -140,7 +145,7 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	workerPoolParameters.handler = assignmentWorkerHandler;
 	assignmentWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("FaceTracker object constructed and ready to go! Low Latency Mode: %s", lowLatency ? "Enabled" : "Disabled"); //FIXME - low latency??
+	logger->debug("FaceTracker object constructed and ready to go!");
 }
 
 FaceTracker::~FaceTracker() noexcept(false) {
@@ -157,41 +162,17 @@ FaceTracker::~FaceTracker() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
+	YerFace_MutexLock(myAssignmentMutex);
+	if(pendingAssignmentFrameNumbers.size() > 0) {
+		logger->error("Assignment Frames are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(myAssignmentMutex);
+
 	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myAssignmentMutex);
 	delete metricsPredictor;
 	delete logger;
 }
-
-// Pose recovery approach largely informed by the following sources:
-//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-//  - https://github.com/severin-lemaignan/gazr/
-// void FaceTracker::processCurrentFrame(void) {
-// 	MetricsTick tick = metrics->startClock();
-
-// 	DetectionFrame detectionFrame = frameServer->getDetectionFrame();
-
-// 	static bool didDetectorRun = false;
-// 	while(!didDetectorRun) {
-// 		YerFace_MutexLock(myDetectionMutex);
-// 		if(newestDetectionBox.run) {
-// 			YerFace_MutexUnlock(myDetectionMutex);
-// 			didDetectorRun = true;
-// 			break;
-// 		}
-// 		YerFace_MutexUnlock(myDetectionMutex);
-// 		SDL_Delay(10);
-// 	}
-
-// 	assignFaceRect();
-
-// 	doIdentifyFeatures(detectionFrame);
-
-// 	doCalculateFacialTransformation();
-
-// 	doPrecalculateFacialPlaneNormal();
-
-// 	metrics->endClock(tick);
-// }
 
 void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
 	FaceTrackerWorker *innerWorker = (FaceTrackerWorker *)worker->ptr;
@@ -288,222 +269,166 @@ void FaceTracker::doInitializeCameraModel(WorkingFrame *workingFrame) {
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
 
-	YerFace_MutexLock(myMutex);
+	YerFace_MutexLock(myAssignmentMutex);
 	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
 	facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
 	facialCameraModel.set = true;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myAssignmentMutex);
 }
 
-// void FaceTracker::doCalculateFacialTransformation(void) {
-// 	if(!working.facialFeatures.set) {
-// 		working.previouslyReportedFacialPose.set = false;
-// 		return;
-// 	}
-// 	if(!facialCameraModel.set) {
-// 		doInitializeCameraModel();
-// 	}
+void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
+	if(!output->facialFeatures.set) {
+		previouslyReportedFacialPose.set = false;
+		return;
+	}
 
-// 	FrameTimestamps frameTimestamps = frameServer->getWorkingFrameTimestamps();
-// 	double frameTimestamp = frameTimestamps.startTimestamp;
-// 	FacialPose tempPose;
-// 	tempPose.timestamp = frameTimestamp;
-// 	tempPose.set = false;
-// 	Mat tempRotationVector;
+	FacialCameraModel camera = facialCameraModel;
 
-// 	//// DO FACIAL POSE SOLUTION ////
+	FrameTimestamps frameTimestamps = workingFrame->frameTimestamps;
+	double frameTimestamp = frameTimestamps.startTimestamp;
+	FacialPose tempPose;
+	tempPose.timestamp = frameTimestamp;
+	tempPose.set = false;
+	Mat tempRotationVector;
 
-// 	solvePnP(working.facialFeatures.features3D, working.facialFeatures.features, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
-// 	tempRotationVector.at<double>(0) = tempRotationVector.at<double>(0) * -1.0;
-// 	tempRotationVector.at<double>(1) = tempRotationVector.at<double>(1) * -1.0;
-// 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
+	//// DO FACIAL POSE SOLUTION ////
 
-// 	//// REJECT BAD / OUT OF BOUNDS FACIAL POSES ////
+	solvePnP(output->facialFeatures.features3D, output->facialFeatures.features, camera.cameraMatrix, camera.distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	tempRotationVector.at<double>(0) = tempRotationVector.at<double>(0) * -1.0;
+	tempRotationVector.at<double>(1) = tempRotationVector.at<double>(1) * -1.0;
+	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
 
-// 	bool reportNewPose = true;
-// 	double degreesDifference, distance, scaledRotationThreshold, scaledTranslationThreshold;
-// 	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
-// 	if(working.previouslyReportedFacialPose.set) {
-// 		scaledRotationThreshold = poseRotationHighRejectionThreshold * timeScale;
-// 		scaledTranslationThreshold = poseTranslationHighRejectionThreshold * timeScale;
-// 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
-// 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
-// 		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
-// 			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
-// 			reportNewPose = false;
-// 		}
-// 	}
-// 	if(tempPose.translationVector.at<double>(0) < poseTranslationMinX || tempPose.translationVector.at<double>(0) > poseTranslationMaxX ||
-// 	  tempPose.translationVector.at<double>(1) < poseTranslationMinY || tempPose.translationVector.at<double>(1) > poseTranslationMaxY ||
-// 	  tempPose.translationVector.at<double>(2) < poseTranslationMinZ || tempPose.translationVector.at<double>(2) > poseTranslationMaxZ) {
-// 		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
-// 		reportNewPose = false;
-// 	}
-// 	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	//// REJECT BAD / OUT OF BOUNDS FACIAL POSES ////
 
-// 	if(fabs(angles[0]) > poseRotationPlusMinusX || fabs(angles[1]) > poseRotationPlusMinusY || fabs(angles[2]) > poseRotationPlusMinusZ) {
-// 		logger->warn("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
-// 		reportNewPose = false;
-// 	}
-// 	if(!reportNewPose) {
-// 		if(working.previouslyReportedFacialPose.set) {
-// 			if(tempPose.timestamp - working.previouslyReportedFacialPose.timestamp >= poseRejectionResetAfterSeconds) {
-// 				logger->warn("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - working.previouslyReportedFacialPose.timestamp);
-// 				working.previouslyReportedFacialPose.set = false;
-// 			}
-// 			working.facialPose = working.previouslyReportedFacialPose;
-// 		} else {
-// 			working.facialPose.set = false;
-// 		}
-// 		return;
-// 	}
+	bool reportNewPose = true;
+	double degreesDifference, distance, scaledRotationThreshold, scaledTranslationThreshold;
+	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
+	if(previouslyReportedFacialPose.set) {
+		scaledRotationThreshold = poseRotationHighRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationHighRejectionThreshold * timeScale;
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(previouslyReportedFacialPose.translationVector));
+		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
+			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
+			reportNewPose = false;
+		}
+	}
+	if(tempPose.translationVector.at<double>(0) < poseTranslationMinX || tempPose.translationVector.at<double>(0) > poseTranslationMaxX ||
+	  tempPose.translationVector.at<double>(1) < poseTranslationMinY || tempPose.translationVector.at<double>(1) > poseTranslationMaxY ||
+	  tempPose.translationVector.at<double>(2) < poseTranslationMinZ || tempPose.translationVector.at<double>(2) > poseTranslationMaxZ) {
+		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+		reportNewPose = false;
+	}
+	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 
-// 	//// DO FACIAL POSE SMOOTHING ////
+	if(fabs(angles[0]) > poseRotationPlusMinusX || fabs(angles[1]) > poseRotationPlusMinusY || fabs(angles[2]) > poseRotationPlusMinusZ) {
+		logger->warn("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
+		reportNewPose = false;
+	}
+	if(!reportNewPose) {
+		if(previouslyReportedFacialPose.set) {
+			if(tempPose.timestamp - previouslyReportedFacialPose.timestamp >= poseRejectionResetAfterSeconds) {
+				logger->warn("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - previouslyReportedFacialPose.timestamp);
+				previouslyReportedFacialPose.set = false;
+			}
+			output->facialPose = previouslyReportedFacialPose;
+		} else {
+			output->facialPose.set = false;
+		}
+		return;
+	}
 
-// 	facialPoseSmoothingBuffer.push_back(tempPose);
-// 	while(facialPoseSmoothingBuffer.front().timestamp <= (frameTimestamp - poseSmoothingOverSeconds)) {
-// 		facialPoseSmoothingBuffer.pop_front();
-// 	}
+	//// DO FACIAL POSE SMOOTHING ////
 
-// 	tempPose.translationVector = (Mat_<double>(3,1) << 0.0, 0.0, 0.0);
-// 	tempPose.rotationMatrix = (Mat_<double>(3,3) <<
-// 			0.0, 0.0, 0.0,
-// 			0.0, 0.0, 0.0,
-// 			0.0, 0.0, 0.0);
+	facialPoseSmoothingBuffer.push_back(tempPose);
+	while(facialPoseSmoothingBuffer.front().timestamp <= (frameTimestamp - poseSmoothingOverSeconds)) {
+		facialPoseSmoothingBuffer.pop_front();
+	}
 
-// 	double combinedWeights = 0.0;
-// 	for(FacialPose pose : facialPoseSmoothingBuffer) {
-// 		double progress = (pose.timestamp - (frameTimestamp - poseSmoothingOverSeconds)) / poseSmoothingOverSeconds;
-// 		double weight = std::pow(progress, (double)poseSmoothingExponent) - combinedWeights;
-// 		combinedWeights += weight;
-// 		for(int j = 0; j < 3; j++) {
-// 			tempPose.translationVector.at<double>(j) += pose.translationVector.at<double>(j) * weight;
-// 		}
-// 		for(int j = 0; j < 9; j++) {
-// 			tempPose.rotationMatrix.at<double>(j) += pose.rotationMatrix.at<double>(j) * weight;
-// 		}
-// 	}
+	tempPose.translationVector = (Mat_<double>(3,1) << 0.0, 0.0, 0.0);
+	tempPose.rotationMatrix = (Mat_<double>(3,3) <<
+			0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0,
+			0.0, 0.0, 0.0);
 
-// 	tempPose.set = true;
-// 	angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
-// 	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+	double combinedWeights = 0.0;
+	for(FacialPose pose : facialPoseSmoothingBuffer) {
+		double progress = (pose.timestamp - (frameTimestamp - poseSmoothingOverSeconds)) / poseSmoothingOverSeconds;
+		double weight = std::pow(progress, (double)poseSmoothingExponent) - combinedWeights;
+		combinedWeights += weight;
+		for(int j = 0; j < 3; j++) {
+			tempPose.translationVector.at<double>(j) += pose.translationVector.at<double>(j) * weight;
+		}
+		for(int j = 0; j < 9; j++) {
+			tempPose.rotationMatrix.at<double>(j) += pose.rotationMatrix.at<double>(j) * weight;
+		}
+	}
 
-// 	//// REJECT NOISY SOLUTIONS ////
+	tempPose.set = true;
+	angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
+	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
-// 	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
-// 	tempPose.translationVectorInternal = tempPose.translationVector.clone();
-// 	if(working.previouslyReportedFacialPose.set) {
-// 		int i;
-// 		double delta;
+	//// REJECT NOISY SOLUTIONS ////
 
-// 		// Do the de-noising thing first for the externally-facing matrices
-// 		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrix);
-// 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
-// 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
+	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
+	tempPose.translationVectorInternal = tempPose.translationVector.clone();
+	if(previouslyReportedFacialPose.set) {
+		int i;
+		double delta;
 
-// 		for(i = 0; i < 3; i++) {
-// 			delta = angles[i] - prevAngles[i];
-// 			if(fabs(delta) <= scaledRotationThreshold) {
-// 				angles[i] = prevAngles[i];
-// 			}
-// 		}
-// 		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
+		// Do the de-noising thing first for the externally-facing matrices
+		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrix);
+		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
+		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 
-// 		for(i = 0; i < 3; i++) {
-// 			delta = tempPose.translationVector.at<double>(i) - working.previouslyReportedFacialPose.translationVector.at<double>(i);
-// 			if(fabs(delta) <= scaledTranslationThreshold) {
-// 				tempPose.translationVector.at<double>(i) = working.previouslyReportedFacialPose.translationVector.at<double>(i);
-// 			}
-// 		}
+		for(i = 0; i < 3; i++) {
+			delta = angles[i] - prevAngles[i];
+			if(fabs(delta) <= scaledRotationThreshold) {
+				angles[i] = prevAngles[i];
+			}
+		}
+		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
 
-// 		// Do the de-noising thing again, but for the internally-facing matrices
-// 		prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrixInternal);
-// 		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
-// 		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
+		for(i = 0; i < 3; i++) {
+			delta = tempPose.translationVector.at<double>(i) - previouslyReportedFacialPose.translationVector.at<double>(i);
+			if(fabs(delta) <= scaledTranslationThreshold) {
+				tempPose.translationVector.at<double>(i) = previouslyReportedFacialPose.translationVector.at<double>(i);
+			}
+		}
 
-// 		for(i = 0; i < 3; i++) {
-// 			delta = angles[i] - prevAngles[i];
-// 			if(fabs(delta) <= scaledRotationThreshold) {
-// 				angles[i] = prevAngles[i];
-// 			}
-// 		}
-// 		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
+		// Do the de-noising thing again, but for the internally-facing matrices
+		prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrixInternal);
+		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
+		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
 
-// 		for(i = 0; i < 3; i++) {
-// 			delta = tempPose.translationVectorInternal.at<double>(i) - working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-// 			if(fabs(delta) <= scaledTranslationThreshold) {
-// 				tempPose.translationVectorInternal.at<double>(i) = working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-// 			}
-// 		}
-// 	}
+		for(i = 0; i < 3; i++) {
+			delta = angles[i] - prevAngles[i];
+			if(fabs(delta) <= scaledRotationThreshold) {
+				angles[i] = prevAngles[i];
+			}
+		}
+		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
 
-// 	working.facialPose = tempPose;
-// 	working.previouslyReportedFacialPose = working.facialPose;
-// }
+		for(i = 0; i < 3; i++) {
+			delta = tempPose.translationVectorInternal.at<double>(i) - previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
+			if(fabs(delta) <= scaledTranslationThreshold) {
+				tempPose.translationVectorInternal.at<double>(i) = previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
+			}
+		}
+	}
 
-// void FaceTracker::doPrecalculateFacialPlaneNormal(void) {
-// 	if(!working.facialPose.set) {
-// 		return;
-// 	}
-// 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
-// 	planeNormalMat = working.facialPose.rotationMatrix * planeNormalMat;
-// 	working.facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
-// }
+	output->facialPose = tempPose;
+	previouslyReportedFacialPose = output->facialPose;
+}
 
-// FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType) {
-// 	if(!working.facialPose.set) {
-// 		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
-// 	}
-
-// 	double depth = 0;
-// 	switch(markerType.type) {
-// 		default:
-// 			throw runtime_error("Unsupported MarkerType!");
-// 		case EyelidLeftTop:
-// 		case EyelidLeftBottom:
-// 		case EyelidRightTop:
-// 		case EyelidRightBottom:
-// 			depth = depthSliceG;
-// 			break;
-// 		case EyebrowLeftInner:
-// 		case EyebrowRightInner:
-// 			depth = depthSliceE;
-// 			break;
-// 		case EyebrowLeftMiddle:
-// 		case EyebrowRightMiddle:
-// 			depth = depthSliceF;
-// 			break;
-// 		case EyebrowLeftOuter:
-// 		case EyebrowRightOuter:
-// 			depth = depthSliceH;
-// 			break;
-// 		case LipsLeftCorner:
-// 		case LipsRightCorner:
-// 			depth = depthSliceD;
-// 			break;
-// 		case LipsLeftTop:
-// 		case LipsRightTop:
-// 			depth = depthSliceC;
-// 			break;
-// 		case LipsLeftBottom:
-// 		case LipsRightBottom:
-// 			depth = depthSliceB;
-// 			break;
-// 		case Jaw:
-// 			depth = depthSliceA;
-// 			break;
-// 	}
-
-// 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
-// 	translationOffset = working.facialPose.rotationMatrix * translationOffset;
-
-// 	FacialPlane facialPlane;
-// 	Mat translationVector = working.facialPose.translationVector + translationOffset;
-// 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
-// 	facialPlane.planeNormal = working.facialPose.facialPlaneNormal;
-
-// 	return facialPlane;
-// }
+void FaceTracker::doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
+	if(!output->facialPose.set) {
+		return;
+	}
+	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
+	planeNormalMat = output->facialPose.rotationMatrix * planeNormalMat;
+	output->facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+}
 
 bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor) {
 	if(*src == OBJECT_PART_NOT_PRESENT) {
@@ -516,10 +441,11 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 }
 
 void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
-	YerFace_MutexLock(myMutex);
 	FaceTrackerOutput output = outputFrames[frameNumber];
+
+	YerFace_MutexLock(myAssignmentMutex);
 	FacialCameraModel camera = facialCameraModel;
-	YerFace_MutexUnlock(myMutex);
+	YerFace_MutexUnlock(myAssignmentMutex);
 
 	if(density > 0) {
 		if(output.facialPose.set) {
@@ -597,6 +523,61 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 // 	return val;
 // }
 
+// FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType) {
+// 	if(!working.facialPose.set) {
+// 		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
+// 	}
+
+// 	double depth = 0;
+// 	switch(markerType.type) {
+// 		default:
+// 			throw runtime_error("Unsupported MarkerType!");
+// 		case EyelidLeftTop:
+// 		case EyelidLeftBottom:
+// 		case EyelidRightTop:
+// 		case EyelidRightBottom:
+// 			depth = depthSliceG;
+// 			break;
+// 		case EyebrowLeftInner:
+// 		case EyebrowRightInner:
+// 			depth = depthSliceE;
+// 			break;
+// 		case EyebrowLeftMiddle:
+// 		case EyebrowRightMiddle:
+// 			depth = depthSliceF;
+// 			break;
+// 		case EyebrowLeftOuter:
+// 		case EyebrowRightOuter:
+// 			depth = depthSliceH;
+// 			break;
+// 		case LipsLeftCorner:
+// 		case LipsRightCorner:
+// 			depth = depthSliceD;
+// 			break;
+// 		case LipsLeftTop:
+// 		case LipsRightTop:
+// 			depth = depthSliceC;
+// 			break;
+// 		case LipsLeftBottom:
+// 		case LipsRightBottom:
+// 			depth = depthSliceB;
+// 			break;
+// 		case Jaw:
+// 			depth = depthSliceA;
+// 			break;
+// 	}
+
+// 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
+// 	translationOffset = working.facialPose.rotationMatrix * translationOffset;
+
+// 	FacialPlane facialPlane;
+// 	Mat translationVector = working.facialPose.translationVector + translationOffset;
+// 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
+// 	facialPlane.planeNormal = working.facialPose.facialPlaneNormal;
+
+// 	return facialPlane;
+// }
+
 void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
 	FaceTracker *self = (FaceTracker *)userdata;
 	FaceTrackerOutput output;
@@ -632,8 +613,6 @@ void FaceTracker::predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr
 	FaceTrackerWorker *innerWorker = new FaceTrackerWorker();
 	innerWorker->self = self;
 	deserialize(self->featureDetectionModelFileName.c_str()) >> innerWorker->shapePredictor;
-
-
 	worker->ptr = (void *)innerWorker;
 }
 
@@ -669,8 +648,11 @@ bool FaceTracker::predictorWorkerHandler(WorkerPoolWorker *worker) {
 
 		YerFace_MutexLock(self->myMutex);
 		self->outputFrames[myFrameNumber] = output;
-		self->pendingAssignmentFrameNumbers[myFrameNumber] = myFrameNumber;
 		YerFace_MutexUnlock(self->myMutex);
+
+		YerFace_MutexLock(self->myAssignmentMutex);
+		self->pendingAssignmentFrameNumbers[myFrameNumber] = myFrameNumber;
+		YerFace_MutexUnlock(self->myAssignmentMutex);
 		self->assignmentWorkerPool->sendWorkerSignal();
 
 		self->metricsPredictor->endClock(tick);
@@ -686,7 +668,7 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 	bool didWork = false;
 	FrameNumber myFrameNumber = -1;
 
-	YerFace_MutexLock(self->myMutex);
+	YerFace_MutexLock(self->myAssignmentMutex);
 	//// CHECK FOR WORK ////
 	for(auto pendingFrameNumber : self->pendingAssignmentFrameNumbers) {
 		if(myFrameNumber < 0 || pendingFrameNumber.second < myFrameNumber) {
@@ -696,28 +678,32 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 	if(myFrameNumber > 0) {
 		self->pendingAssignmentFrameNumbers.erase(myFrameNumber);
 	}
+	YerFace_MutexUnlock(self->myAssignmentMutex);
+
+	YerFace_MutexLock(self->myMutex);
+	FaceTrackerOutput output = self->outputFrames[myFrameNumber];
 	YerFace_MutexUnlock(self->myMutex);
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		MetricsTick tick = self->metricsPredictor->startClock();
+		MetricsTick tick = self->metricsAssignment->startClock();
 
 		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
-
-		YerFace_MutexLock(self->myMutex);
-		FaceTrackerOutput output = self->outputFrames[myFrameNumber];
 		
+		YerFace_MutexLock(self->myAssignmentMutex);
 		if(!self->facialCameraModel.set) {
 			self->doInitializeCameraModel(workingFrame);
 		}
-		YerFace_MutexUnlock(self->myMutex);
+		self->doCalculateFacialTransformation(worker, workingFrame, &output);
+		self->doPrecalculateFacialPlaneNormal(worker, workingFrame, &output);
+		YerFace_MutexUnlock(self->myAssignmentMutex);
 
 		YerFace_MutexLock(self->myMutex);
 		self->outputFrames[myFrameNumber] = output;
 		YerFace_MutexUnlock(self->myMutex);
 
 		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_TRACKING, "faceTracker.ran");
-		self->metricsPredictor->endClock(tick);
+		self->metricsAssignment->endClock(tick);
 
 		didWork = true;
 	}

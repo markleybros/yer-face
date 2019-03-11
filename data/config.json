@@ -142,7 +142,7 @@
     "PreviewHUD": {
       "numWorkersPerCPU": 0.5,
       "numWorkers": 0,
-      "initialPreviewDisplayDensity": 2,
+      "initialPreviewDisplayDensity": 4,
       "previewRatio": 1.25,
       "previewWidthPercentage": 0.2,
       "previewCenterHeightPercentage": 0.2
