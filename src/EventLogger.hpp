@@ -21,7 +21,7 @@ public:
 
 class EventLogger {
 public:
-	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer, double myFrom);
+	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer);
 	~EventLogger();
 	void registerEventType(EventType eventType);
 	void logEvent(string eventName, json payload, bool propagate = false, json sourcePacket = json::object());
@@ -32,7 +32,6 @@ private:
 	string eventFilename;
 	OutputDriver *outputDriver;
 	FrameServer *frameServer;
-	double from;
 
 	Logger *logger;
 

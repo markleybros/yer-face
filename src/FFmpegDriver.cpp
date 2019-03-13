@@ -21,10 +21,9 @@ MediaContext::MediaContext(void) {
 	videoStreamIndex = -1;
 	audioStream = NULL;
 	demuxerDraining = false;
-	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
 	status = myStatus;
@@ -36,8 +35,6 @@ FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool my
 		throw invalid_argument("frameServer cannot be NULL");
 	}
 	lowLatency = myLowLatency;
-	from = myFrom;
-	until = myUntil;
 
 	swsContext = NULL;
 	videoStreamInitialTimestampSet = false;
@@ -430,10 +427,6 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			context->frameNumber++;
 
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
-			if(!handleScanning(context, &timestamp)) {
-				av_frame_unref(context->frame);
-				continue;
-			}
 
 			VideoFrame videoFrame;
 			videoFrame.timestamp.startTimestamp = timestamp;
@@ -477,10 +470,6 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 		while(avcodec_receive_frame(context->audioDecoderContext, context->frame) == 0) {
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_AUDIO);
-			if(!handleScanning(context, &timestamp)) {
-				av_frame_unref(context->frame);
-				continue;
-			}
 
 			YerFace_MutexLock(audioStreamMutex);
 			newestAudioFrameTimestamp = timestamp;
@@ -560,10 +549,6 @@ void FFmpegDriver::initializeDemuxerThread(MediaContext *context, enum AVMediaTy
 
 	if((context->demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
-	}
-
-	if(from != -1.0 && from > 0.0) {
-		context->scanning = true;
 	}
 }
 
@@ -854,21 +839,6 @@ void FFmpegDriver::recursivelyListAllAVOptions(void *obj, string depth) {
 		void *childobj = &childobjclass;
 		recursivelyListAllAVOptions(childobj, "  " + depth);
 	}
-}
-
-bool FFmpegDriver::handleScanning(MediaContext *context, double *timestamp) {
-	if((from != -1.0 && *timestamp < from) || (until != -1.0 && *timestamp > until)) {
-		if(until != -1.0 && *timestamp > until) {
-			context->demuxerDraining = true;
-		}
-		logger->verbose("Throwing away a frame at (unadjusted) timestamp %.04lf to handle scanning. (From and Until)", *timestamp);
-		return false;
-	}
-	context->scanning = false;
-	if(from != -1.0) {
-		*timestamp = *timestamp - from;
-	}
-	return true;
 }
 
 bool FFmpegDriver::getIsAllocatedVideoFrameBackingsFull(void) {

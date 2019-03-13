@@ -5,7 +5,7 @@ using namespace std;
 
 namespace YerFace {
 
-EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer, double myFrom) {
+EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
 	eventTimestampAdjustment = config["YerFace"]["EventLogger"]["eventTimestampAdjustment"];
 	eventFilename = myEventFile;
 	outputDriver = myOutputDriver;
@@ -16,7 +16,6 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	if(frameServer == NULL) {
 		throw invalid_argument("frameServer cannot be NULL");
 	}
-	from = myFrom;
 	logger = new Logger("EventLogger");
 
 	events = json::object();
@@ -101,10 +100,6 @@ void EventLogger::processNextPacket(void) {
 		double frameStart = workingFrameTimestamps.startTimestamp - eventTimestampAdjustment;
 		double frameEnd = workingFrameTimestamps.estimatedEndTimestamp - eventTimestampAdjustment;
 		double packetTime = nextPacket["meta"]["startTime"];
-		if(from != -1.0 && from > 0.0) {
-			packetTime = packetTime - from;
-			nextPacket["meta"]["startTime"] = packetTime;
-		}
 		if(packetTime < frameEnd) {
 			if(packetTime >= 0.0 && packetTime < frameStart) {
 				logger->warn("==== EVENT REPLAY PACKET LATE! Processing anyway... ====");
