@@ -159,10 +159,10 @@ public:
 	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
 	~FaceTracker() noexcept(false);
 	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
-	// FacialFeatures getFacialFeatures(void);
-	// FacialCameraModel getFacialCameraModel(void);
-	// FacialPose getFacialPose(void);
-	// FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
+	FacialFeatures getFacialFeatures(FrameNumber frameNumber);
+	FacialCameraModel getFacialCameraModel(void);
+	FacialPose getFacialPose(FrameNumber frameNumber);
+	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(FrameNumber frameNumber, MarkerType markerType);
 private:
 	void doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	void doInitializeCameraModel(WorkingFrame *workingFrame);

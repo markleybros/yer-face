@@ -12,7 +12,7 @@
 #include "FaceDetector.hpp"
 #include "FaceTracker.hpp"
 #include "FrameServer.hpp"
-// #include "FaceMapper.hpp"
+#include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 // #include "OutputDriver.hpp"
@@ -72,7 +72,7 @@ FFmpegDriver *ffmpegDriver = NULL;
 FrameServer *frameServer = NULL;
 FaceDetector *faceDetector = NULL;
 FaceTracker *faceTracker = NULL;
-// FaceMapper *faceMapper = NULL;
+FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 // OutputDriver *outputDriver = NULL;
 // SphinxDriver *sphinxDriver = NULL;
@@ -245,7 +245,7 @@ int main(int argc, const char** argv) {
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
 	faceDetector = new FaceDetector(config, status, frameServer);
 	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
-	// faceMapper = new FaceMapper(config, sdlDriver, frameServer, faceTracker);
+	faceMapper = new FaceMapper(config, status, frameServer, faceTracker, previewHUD);
 	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
@@ -358,7 +358,7 @@ int main(int argc, const char** argv) {
 	// 	delete sphinxDriver;
 	// }
 	// delete outputDriver;
-	// delete faceMapper;
+	delete faceMapper;
 	delete faceTracker;
 	delete faceDetector;
 	delete previewHUD;
@@ -496,6 +496,7 @@ void handleFrameServerDrainedEvent(void *userdata) {
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
 	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
 	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density);
+	faceMapper->renderPreviewHUD(previewFrame, frameNumber, density);
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }

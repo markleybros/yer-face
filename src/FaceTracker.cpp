@@ -508,75 +508,89 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 // 	return val;
 // }
 
-// FacialFeatures FaceTracker::getFacialFeatures(void) {
-// 	FacialFeatures val = working.facialFeatures.featuresExposed;
-// 	return val;
-// }
+FacialFeatures FaceTracker::getFacialFeatures(FrameNumber frameNumber) {
+	FacialFeatures val;
+	YerFace_MutexLock(myMutex);
+	val = outputFrames[frameNumber].facialFeatures.featuresExposed;
+	YerFace_MutexUnlock(myMutex);
+	return val;
+}
 
-// FacialCameraModel FaceTracker::getFacialCameraModel(void) {
-// 	FacialCameraModel val = facialCameraModel;
-// 	return val;
-// }
+FacialCameraModel FaceTracker::getFacialCameraModel(void) {
+	FacialCameraModel val;
+	YerFace_MutexLock(myAssignmentMutex);
+	val = facialCameraModel;
+	YerFace_MutexUnlock(myAssignmentMutex);
+	return val;
+}
 
-// FacialPose FaceTracker::getFacialPose(void) {
-// 	FacialPose val = working.facialPose;
-// 	return val;
-// }
+FacialPose FaceTracker::getFacialPose(FrameNumber frameNumber) {
+	FacialPose val;
+	YerFace_MutexLock(myMutex);
+	val = outputFrames[frameNumber].facialPose;
+	YerFace_MutexUnlock(myMutex);
+	return val;
+}
 
-// FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType) {
-// 	if(!working.facialPose.set) {
-// 		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
-// 	}
+FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumber frameNumber, MarkerType markerType) {
+	FacialPose facialPose;
+	YerFace_MutexLock(myMutex);
+	facialPose = outputFrames[frameNumber].facialPose;
+	YerFace_MutexUnlock(myMutex);
 
-// 	double depth = 0;
-// 	switch(markerType.type) {
-// 		default:
-// 			throw runtime_error("Unsupported MarkerType!");
-// 		case EyelidLeftTop:
-// 		case EyelidLeftBottom:
-// 		case EyelidRightTop:
-// 		case EyelidRightBottom:
-// 			depth = depthSliceG;
-// 			break;
-// 		case EyebrowLeftInner:
-// 		case EyebrowRightInner:
-// 			depth = depthSliceE;
-// 			break;
-// 		case EyebrowLeftMiddle:
-// 		case EyebrowRightMiddle:
-// 			depth = depthSliceF;
-// 			break;
-// 		case EyebrowLeftOuter:
-// 		case EyebrowRightOuter:
-// 			depth = depthSliceH;
-// 			break;
-// 		case LipsLeftCorner:
-// 		case LipsRightCorner:
-// 			depth = depthSliceD;
-// 			break;
-// 		case LipsLeftTop:
-// 		case LipsRightTop:
-// 			depth = depthSliceC;
-// 			break;
-// 		case LipsLeftBottom:
-// 		case LipsRightBottom:
-// 			depth = depthSliceB;
-// 			break;
-// 		case Jaw:
-// 			depth = depthSliceA;
-// 			break;
-// 	}
+	if(!facialPose.set) {
+		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
+	}
 
-// 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
-// 	translationOffset = working.facialPose.rotationMatrix * translationOffset;
+	double depth = 0;
+	switch(markerType.type) {
+		default:
+			throw runtime_error("Unsupported MarkerType!");
+		case EyelidLeftTop:
+		case EyelidLeftBottom:
+		case EyelidRightTop:
+		case EyelidRightBottom:
+			depth = depthSliceG;
+			break;
+		case EyebrowLeftInner:
+		case EyebrowRightInner:
+			depth = depthSliceE;
+			break;
+		case EyebrowLeftMiddle:
+		case EyebrowRightMiddle:
+			depth = depthSliceF;
+			break;
+		case EyebrowLeftOuter:
+		case EyebrowRightOuter:
+			depth = depthSliceH;
+			break;
+		case LipsLeftCorner:
+		case LipsRightCorner:
+			depth = depthSliceD;
+			break;
+		case LipsLeftTop:
+		case LipsRightTop:
+			depth = depthSliceC;
+			break;
+		case LipsLeftBottom:
+		case LipsRightBottom:
+			depth = depthSliceB;
+			break;
+		case Jaw:
+			depth = depthSliceA;
+			break;
+	}
 
-// 	FacialPlane facialPlane;
-// 	Mat translationVector = working.facialPose.translationVector + translationOffset;
-// 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
-// 	facialPlane.planeNormal = working.facialPose.facialPlaneNormal;
+	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
+	translationOffset = facialPose.rotationMatrix * translationOffset;
 
-// 	return facialPlane;
-// }
+	FacialPlane facialPlane;
+	Mat translationVector = facialPose.translationVector + translationOffset;
+	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
+	facialPlane.planeNormal = facialPose.facialPlaneNormal;
+
+	return facialPlane;
+}
 
 void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
 	FaceTracker *self = (FaceTracker *)userdata;

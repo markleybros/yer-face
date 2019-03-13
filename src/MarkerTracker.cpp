@@ -52,15 +52,15 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 		throw invalid_argument("markerRejectionResetAfterSeconds cannot be less than or equal to zero");
 	}
 
-	sdlDriver = faceMapper->getSDLDriver();
 	frameServer = faceMapper->getFrameServer();
 	faceTracker = faceMapper->getFaceTracker();
 
-	working.markerPoint.set = false;
-	working.previouslyReportedMarkerPoint.set = false;
-	complete.markerPoint.set = false;
+	previouslyReportedMarkerPoint.set = false;
+	previouslyReportedMarkerPoint.timestamp.startTimestamp = -1.0;
+	previouslyReportedMarkerPoint.timestamp.estimatedEndTimestamp = -1.0;
+	previouslyReportedMarkerPoint.timestamp.frameNumber = -1;
 
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
+	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
@@ -79,7 +79,7 @@ MarkerTracker::~MarkerTracker() noexcept(false) {
 		}
 	}
 	YerFace_MutexUnlock(myStaticMutex);
-	SDL_DestroyMutex(myCmpMutex);
+	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
 
@@ -87,24 +87,25 @@ MarkerType MarkerTracker::getMarkerType(void) {
 	return markerType;
 }
 
-void MarkerTracker::processCurrentFrame(void) {
-	assignMarkerPoint();
+void MarkerTracker::processFrame(FrameNumber frameNumber) {
+	MarkerPoint markerPoint;
+	markerPoint.set = false;
 
-	calculate3dMarkerPoint();
+	assignMarkerPoint(frameNumber, &markerPoint);
 
-	performMarkerPointValidationAndSmoothing();
+	calculate3dMarkerPoint(frameNumber, &markerPoint);
+
+	WorkingFrame *workingFrame = frameServer->getWorkingFrame(frameNumber);
+
+	YerFace_MutexLock(myMutex);
+	performMarkerPointValidationAndSmoothing(workingFrame, frameNumber, &markerPoint);
+
+	markerPoints[frameNumber] = markerPoint;
+	YerFace_MutexUnlock(myMutex);
 }
 
-void MarkerTracker::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myCmpMutex);
-	complete = working;
-	YerFace_MutexUnlock(myCmpMutex);
-	working.markerPoint.set = false;
-}
-
-void MarkerTracker::assignMarkerPoint(void) {
-	working.markerPoint.set = false;
-	FacialFeatures facialFeatures = faceTracker->getFacialFeatures();
+void MarkerTracker::assignMarkerPoint(FrameNumber frameNumber, MarkerPoint *markerPoint) {
+	FacialFeatures facialFeatures = faceTracker->getFacialFeatures(frameNumber);
 	if(!facialFeatures.set) {
 		return;
 	}
@@ -112,143 +113,143 @@ void MarkerTracker::assignMarkerPoint(void) {
 		default:
 			throw logic_error("Unsupported marker type!");
 		case EyelidLeftTop:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_LEFTEYE_UPPERLID_RIGHT],
 				facialFeatures.features[IDX_LEFTEYE_UPPERLID_LEFT]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyelidLeftBottom:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_LEFTEYE_LOWERLID_RIGHT],
 				facialFeatures.features[IDX_LEFTEYE_LOWERLID_LEFT]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyelidRightTop:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_RIGHTEYE_UPPERLID_RIGHT],
 				facialFeatures.features[IDX_RIGHTEYE_UPPERLID_LEFT]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyelidRightBottom:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_RIGHTEYE_LOWERLID_RIGHT],
 				facialFeatures.features[IDX_RIGHTEYE_LOWERLID_LEFT]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowLeftInner:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_LEFTEYEBROW_NEARINNER],
 				facialFeatures.features[IDX_LEFTEYEBROW_FARINNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowLeftMiddle:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_LEFTEYEBROW_MIDDLE],
 				facialFeatures.features[IDX_LEFTEYEBROW_MIDDLE],
 				facialFeatures.features[IDX_LEFTEYEBROW_NEAROUTER],
 				facialFeatures.features[IDX_LEFTEYEBROW_NEARINNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowLeftOuter:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_LEFTEYEBROW_NEAROUTER],
 				facialFeatures.features[IDX_LEFTEYEBROW_FAROUTER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowRightInner:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_RIGHTEYEBROW_NEARINNER],
 				facialFeatures.features[IDX_RIGHTEYEBROW_FARINNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowRightMiddle:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_RIGHTEYEBROW_MIDDLE],
 				facialFeatures.features[IDX_RIGHTEYEBROW_MIDDLE],
 				facialFeatures.features[IDX_RIGHTEYEBROW_NEAROUTER],
 				facialFeatures.features[IDX_RIGHTEYEBROW_NEARINNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case EyebrowRightOuter:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_RIGHTEYEBROW_NEAROUTER],
 				facialFeatures.features[IDX_RIGHTEYEBROW_FAROUTER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsLeftCorner:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_LEFT_CORNER],
 				facialFeatures.features[IDX_MOUTHIN_LEFT_CORNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsLeftTop:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_LEFT_NEAROUTER_TOP],
 				facialFeatures.features[IDX_MOUTHOUT_LEFT_FAROUTER_TOP]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsLeftBottom:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_LEFT_NEAROUTER_BOTTOM],
 				facialFeatures.features[IDX_MOUTHOUT_LEFT_FAROUTER_BOTTOM]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsRightCorner:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_RIGHT_CORNER],
 				facialFeatures.features[IDX_MOUTHIN_RIGHT_CORNER]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsRightTop:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_RIGHT_NEAROUTER_TOP],
 				facialFeatures.features[IDX_MOUTHOUT_RIGHT_FAROUTER_TOP]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case LipsRightBottom:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_MOUTHOUT_RIGHT_NEAROUTER_BOTTOM],
 				facialFeatures.features[IDX_MOUTHOUT_RIGHT_FAROUTER_BOTTOM]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 		case Jaw:
-			working.markerPoint.point = Utilities::averagePoint({
+			markerPoint->point = Utilities::averagePoint({
 				facialFeatures.features[IDX_JAWLINE_7],
 				facialFeatures.features[IDX_JAWLINE_8],
 				facialFeatures.features[IDX_JAWLINE_9]
 			});
-			working.markerPoint.set = true;
+			markerPoint->set = true;
 			break;
 	}
 }
 
-void MarkerTracker::calculate3dMarkerPoint(void) {
-	if(!working.markerPoint.set) {
+void MarkerTracker::calculate3dMarkerPoint(FrameNumber frameNumber, MarkerPoint *markerPoint) {
+	if(!markerPoint->set) {
 		return;
 	}
-	FacialPose facialPose = faceTracker->getWorkingFacialPose();
+	FacialPose facialPose = faceTracker->getFacialPose(frameNumber);
 	FacialCameraModel cameraModel = faceTracker->getFacialCameraModel();
 	if(!facialPose.set || !cameraModel.set) {
 		return;
 	}
-	FacialPlane facialPlane = faceTracker->getCalculatedFacialPlaneForWorkingFacialPose(markerType);
-	Mat homogeneousPoint = (Mat_<double>(3,1) << working.markerPoint.point.x, working.markerPoint.point.y, 1.0);
+	FacialPlane facialPlane = faceTracker->getCalculatedFacialPlaneForWorkingFacialPose(frameNumber, markerType);
+	Mat homogeneousPoint = (Mat_<double>(3,1) << markerPoint->point.x, markerPoint->point.y, 1.0);
 	Mat worldPoint = cameraModel.cameraMatrix.inv() * homogeneousPoint;
 	Point3d intersection;
 	Point3d rayOrigin = Point3d(0,0,0);
@@ -260,51 +261,58 @@ void MarkerTracker::calculate3dMarkerPoint(void) {
 	Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
 	markerMat = markerMat - facialPose.translationVectorInternal;
 	markerMat = facialPose.rotationMatrixInternal.inv() * markerMat;
-	working.markerPoint.point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
-	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", working.markerPoint.point3d.x, working.markerPoint.point3d.y, working.markerPoint.point3d.z);
+	markerPoint->point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
+	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", markerPoint->point3d.x, markerPoint->point3d.y, markerPoint->point3d.z);
 }
 
-void MarkerTracker::performMarkerPointValidationAndSmoothing(void) {
-	if(!working.markerPoint.set) {
+void MarkerTracker::performMarkerPointValidationAndSmoothing(WorkingFrame *workingFrame, FrameNumber frameNumber, MarkerPoint *markerPoint) {
+	if(!markerPoint->set) {
 		return;
 	}
 
-	FrameTimestamps frameTimestamps = frameServer->getWorkingFrameTimestamps();
+	FrameTimestamps frameTimestamps = workingFrame->frameTimestamps;
 	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
 	double frameTimestamp = frameTimestamps.startTimestamp;
-	working.markerPoint.timestamp = frameTimestamp;
+	markerPoint->timestamp = frameTimestamps;
+
+	YerFace_MutexLock(myMutex);
 
 	//// REJECT BAD MARKER POINTS ////
 
 	double distance;
-	if(working.previouslyReportedMarkerPoint.set) {
-		distance = Utilities::lineDistance(working.markerPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
+	if(previouslyReportedMarkerPoint.set) {
+		if(previouslyReportedMarkerPoint.timestamp.frameNumber >= frameTimestamps.frameNumber) {
+			logger->error("MarkerTracker is being fed frames out of order! This will wreak havoc with smoothing code.");
+		}
+
+		distance = Utilities::lineDistance(markerPoint->point3d, previouslyReportedMarkerPoint.point3d);
 		if(distance > (pointMotionHighRejectionThreshold * timeScale)) {
 			logger->warn("Dropping marker position due to high motion (%.02lf)!", distance);
-			if(working.markerPoint.timestamp - working.previouslyReportedMarkerPoint.timestamp >= markerRejectionResetAfterSeconds) {
-				logger->warn("Marker position has come back bad consistantly for %.02lf seconds! Unsetting the marker completely.", working.markerPoint.timestamp - working.previouslyReportedMarkerPoint.timestamp);
-				working.previouslyReportedMarkerPoint.set = false;
+			if(markerPoint->timestamp.startTimestamp - previouslyReportedMarkerPoint.timestamp.startTimestamp >= markerRejectionResetAfterSeconds) {
+				logger->warn("Marker position has come back bad consistantly for %.02lf seconds! Unsetting the marker completely.", markerPoint->timestamp.startTimestamp - previouslyReportedMarkerPoint.timestamp.startTimestamp);
+				previouslyReportedMarkerPoint.set = false;
 			}
-			working.markerPoint = working.previouslyReportedMarkerPoint;
+			*markerPoint = previouslyReportedMarkerPoint;
+			YerFace_MutexUnlock(myMutex);
 			return;
 		}
 	}
 
 	//// PERFORM MARKER POINT SMOOTHING ////
 
-	markerPointSmoothingBuffer.push_back(working.markerPoint);
-	while(markerPointSmoothingBuffer.front().timestamp <= (frameTimestamp - pointSmoothingOverSeconds)) {
+	markerPointSmoothingBuffer.push_back(*markerPoint);
+	while(markerPointSmoothingBuffer.front().timestamp.startTimestamp <= (frameTimestamp - pointSmoothingOverSeconds)) {
 		markerPointSmoothingBuffer.pop_front();
 	}
 
-	MarkerPoint tempPoint = working.markerPoint;
+	MarkerPoint tempPoint = *markerPoint;
 	tempPoint.point3d.x = 0;
 	tempPoint.point3d.y = 0;
 	tempPoint.point3d.z = 0;
 
 	double combinedWeights = 0.0;
 	for(MarkerPoint point : markerPointSmoothingBuffer) {
-		double progress = (point.timestamp - (frameTimestamp - pointSmoothingOverSeconds)) / pointSmoothingOverSeconds;
+		double progress = (point.timestamp.startTimestamp - (frameTimestamp - pointSmoothingOverSeconds)) / pointSmoothingOverSeconds;
 		double weight = std::pow(progress, (double)pointSmoothingExponent) - combinedWeights;
 		combinedWeights += weight;
 		tempPoint.point3d.x += point.point3d.x * weight;
@@ -315,23 +323,24 @@ void MarkerTracker::performMarkerPointValidationAndSmoothing(void) {
 	//// REJECT NOISY UPDATES ////
 
 	bool reportNewPoint = true;
-	if(working.previouslyReportedMarkerPoint.set) {
-		distance = Utilities::lineDistance(tempPoint.point3d, working.previouslyReportedMarkerPoint.point3d);
+	if(previouslyReportedMarkerPoint.set) {
+		distance = Utilities::lineDistance(tempPoint.point3d, previouslyReportedMarkerPoint.point3d);
 		if(distance < (pointMotionLowRejectionThreshold * timeScale)) {
 			reportNewPoint = false;
 		}
 	}
 
 	if(reportNewPoint) {
-		working.markerPoint = tempPoint;
-		working.previouslyReportedMarkerPoint = working.markerPoint;
+		*markerPoint = tempPoint;
+		previouslyReportedMarkerPoint = *markerPoint;
 	} else {
-		working.markerPoint = working.previouslyReportedMarkerPoint;
+		*markerPoint = previouslyReportedMarkerPoint;
 	}
+
+	YerFace_MutexUnlock(myMutex);
 }
 
-void MarkerTracker::renderPreviewHUD(void) {
-	YerFace_MutexLock(myCmpMutex);
+void MarkerTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
 	Scalar color = Scalar(0, 0, 255);
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
@@ -358,18 +367,32 @@ void MarkerTracker::renderPreviewHUD(void) {
 			color[1] = 127;
 		}
 	}
-	Mat frame = frameServer->getCompletedPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
-	if(density > 0 && complete.markerPoint.set) {
-		Utilities::drawX(frame, complete.markerPoint.point, color, 10, 2);
+	YerFace_MutexLock(myMutex);
+	if(density > 0 && markerPoints[frameNumber].set) {
+		Utilities::drawX(frame, markerPoints[frameNumber].point, color, 10, 2);
 	}
-	YerFace_MutexUnlock(myCmpMutex);
+	YerFace_MutexUnlock(myMutex);
 }
 
-MarkerPoint MarkerTracker::getCompletedMarkerPoint(void) {
-	YerFace_MutexLock(myCmpMutex);
-	MarkerPoint val = complete.markerPoint;
-	YerFace_MutexUnlock(myCmpMutex);
+void MarkerTracker::frameStatusNew(FrameNumber frameNumber) {
+	MarkerPoint markerPoint;
+	markerPoint.set = false;
+	YerFace_MutexLock(myMutex);
+	markerPoints[frameNumber] = markerPoint;
+	YerFace_MutexUnlock(myMutex);
+}
+
+void MarkerTracker::frameStatusGone(FrameNumber frameNumber) {
+	YerFace_MutexLock(myMutex);
+	markerPoints.erase(frameNumber);
+	YerFace_MutexUnlock(myMutex);
+}
+
+MarkerPoint MarkerTracker::getMarkerPoint(FrameNumber frameNumber) {
+	MarkerPoint val;
+	YerFace_MutexLock(myMutex);
+	val = markerPoints[frameNumber];
+	YerFace_MutexUnlock(myMutex);
 	return val;
 }
 

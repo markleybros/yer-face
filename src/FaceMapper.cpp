@@ -11,10 +11,10 @@ using namespace cv;
 
 namespace YerFace {
 
-FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceTracker *myFaceTracker) {
-	sdlDriver = mySDLDriver;
-	if(sdlDriver == NULL) {
-		throw invalid_argument("sdlDriver cannot be NULL");
+FaceMapper::FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, PreviewHUD *myPreviewHUD) {
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
 	}
 	frameServer = myFrameServer;
 	if(frameServer == NULL) {
@@ -23,6 +23,10 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrame
 	faceTracker = myFaceTracker;
 	if(faceTracker == NULL) {
 		throw invalid_argument("faceTracker cannot be NULL");
+	}
+	previewHUD = myPreviewHUD;
+	if(previewHUD == NULL) {
+		throw invalid_argument("previewHUD cannot be NULL");
 	}
 
 	logger = new Logger("FaceMapper");
@@ -51,10 +55,6 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrame
 	markerLipsLeftBottom = new MarkerTracker(config, LipsLeftBottom, this);
 	markerLipsRightBottom = new MarkerTracker(config, LipsRightBottom, this);
 	
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
-
 	trackers = {
 		markerEyelidLeftTop,
 		markerEyelidLeftBottom,
@@ -75,50 +75,71 @@ FaceMapper::FaceMapper(json config, SDLDriver *mySDLDriver, FrameServer *myFrame
 		markerLipsRightBottom
 	};
 
+	pendingFrames.clear();
+
+	if((myMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+
+	//Hook into the frame lifecycle.
+
+	//We want to know when any frame has entered various statuses.
+	FrameStatusChangeEventCallback frameStatusChangeCallback;
+	frameStatusChangeCallback.userdata = (void *)this;
+	frameStatusChangeCallback.callback = handleFrameStatusChange;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_MAPPING;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_MAPPING without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_MAPPING, "faceMapper.ran");
+
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "FaceMapper";
+	workerPoolParameters.numWorkers = 1; //FaceMapper (and MarkerTracker) cannot handle out-of-order frame processing.
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = workerHandler;
+	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
 	logger->debug("FaceMapper object constructed and ready to go!");
 }
 
-FaceMapper::~FaceMapper() {
+FaceMapper::~FaceMapper() noexcept(false) {
 	logger->debug("FaceMapper object destructing...");
+
+	delete workerPool;
+
+	YerFace_MutexLock(myMutex);
+	if(pendingFrames.size() > 0) {
+		logger->error("Frames are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(myMutex);
+
 	for(MarkerTracker *markerTracker : trackers) {
 		if(markerTracker != NULL) {
 			delete markerTracker;
 		}
 	}
-	SDL_DestroyMutex(myCmpMutex);
+	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
 }
 
-void FaceMapper::processCurrentFrame(void) {
-
-	MetricsTick tick = metrics->startClock();
-
-	for(MarkerTracker *tracker : trackers) {
-		tracker->processCurrentFrame();
-	}
-
-	metrics->endClock(tick);
-}
-
-void FaceMapper::advanceWorkingToCompleted(void) {
+void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
 	for(MarkerTracker *markerTracker : trackers) {
-		markerTracker->advanceWorkingToCompleted();
-	}
-}
-
-void FaceMapper::renderPreviewHUD() {
-	YerFace_MutexLock(myCmpMutex);
-	Mat frame = frameServer->getCompletedPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
-	for(MarkerTracker *markerTracker : trackers) {
-		markerTracker->renderPreviewHUD();
+		markerTracker->renderPreviewHUD(frame, frameNumber, density);
 	}
 	if(density > 0) {
 		int gridIncrement = 15; //FIXME - magic numbers
 		Rect2d previewRect;
 		Point2d previewCenter;
-		sdlDriver->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
+		previewHUD->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(10, 10, 10), FILLED);
 		if(density > 4) {
@@ -130,7 +151,7 @@ void FaceMapper::renderPreviewHUD() {
 			}
 		}
 		for(MarkerTracker *markerTracker : trackers) {
-			MarkerPoint markerPoint = markerTracker->getCompletedMarkerPoint();
+			MarkerPoint markerPoint = markerTracker->getMarkerPoint(frameNumber);
 			if(markerPoint.set) {
 				Point2d previewPoint = Point2d(
 						(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
@@ -139,11 +160,6 @@ void FaceMapper::renderPreviewHUD() {
 			}
 		}
 	}
-	YerFace_MutexUnlock(myCmpMutex);
-}
-
-SDLDriver *FaceMapper::getSDLDriver(void) {
-	return sdlDriver;
 }
 
 FrameServer *FaceMapper::getFrameServer(void) {
@@ -152,6 +168,81 @@ FrameServer *FaceMapper::getFrameServer(void) {
 
 FaceTracker *FaceMapper::getFaceTracker(void) {
 	return faceTracker;
+}
+
+void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+	FaceMapper *self = (FaceMapper *)userdata;
+	FaceMapperPendingFrame newFrame;
+	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
+	switch(newStatus) {
+		default:
+			throw logic_error("Handler passed unsupported frame status change event!");
+		case FRAME_STATUS_NEW:
+			newFrame.frameNumber = frameNumber;
+			newFrame.hasEnteredMapping = false;
+			newFrame.hasCompletedMapping = false;
+			YerFace_MutexLock(self->myMutex);
+			self->pendingFrames[frameNumber] = newFrame;
+			YerFace_MutexUnlock(self->myMutex);
+			for(MarkerTracker *markerTracker : self->trackers) {
+				markerTracker->frameStatusNew(frameNumber);
+			}
+			break;
+		case FRAME_STATUS_MAPPING:
+			// self->logger->verbose("handleFrameStatusChange() Frame #%lld entered MAPPING.", frameNumber);
+			YerFace_MutexLock(self->myMutex);
+			self->pendingFrames[frameNumber].hasEnteredMapping = true;
+			YerFace_MutexUnlock(self->myMutex);
+			self->workerPool->sendWorkerSignal();
+			break;
+		case FRAME_STATUS_GONE:
+			YerFace_MutexLock(self->myMutex);
+			self->pendingFrames.erase(frameNumber);
+			YerFace_MutexUnlock(self->myMutex);
+			for(MarkerTracker *markerTracker : self->trackers) {
+				markerTracker->frameStatusGone(frameNumber);
+			}
+			break;
+	}
+}
+
+bool FaceMapper::workerHandler(WorkerPoolWorker *worker) {
+	FaceMapper *self = (FaceMapper *)worker->ptr;
+	bool didWork = false;
+
+
+	YerFace_MutexLock(self->myMutex);
+	//// CHECK FOR WORK ////
+	FrameNumber myFrameNumber = -1;
+	FrameNumber lowestPendingFrameNumber = -1;
+	for(auto pendingFramePair : self->pendingFrames) {
+		FaceMapperPendingFrame *pendingFrame = &pendingFramePair.second;
+		if((lowestPendingFrameNumber < 0 || pendingFrame->frameNumber < lowestPendingFrameNumber) && !pendingFrame->hasCompletedMapping) {
+			lowestPendingFrameNumber = pendingFrame->frameNumber;
+		}
+	}
+	if(lowestPendingFrameNumber > 0 && self->pendingFrames[lowestPendingFrameNumber].hasEnteredMapping) {
+		myFrameNumber = lowestPendingFrameNumber;
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, myFrameNumber);
+
+		MetricsTick tick = self->metrics->startClock();
+		for(MarkerTracker *tracker : self->trackers) {
+			tracker->processFrame(myFrameNumber);
+		}
+		self->metrics->endClock(tick);
+
+		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_MAPPING, "faceMapper.ran");
+		YerFace_MutexLock(self->myMutex);
+		self->pendingFrames[myFrameNumber].hasCompletedMapping = true;
+		YerFace_MutexUnlock(self->myMutex);
+		didWork = true;
+	}
+	return didWork;
 }
 
 }; //namespace YerFace
