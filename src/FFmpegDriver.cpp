@@ -40,7 +40,6 @@ FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool my
 	until = myUntil;
 
 	swsContext = NULL;
-	readyVideoFrameBufferEmptyWarning = false;
 	videoStreamInitialTimestampSet = false;
 	audioStreamInitialTimestampSet = false;
 	newestVideoFrameTimestamp = -1.0;
@@ -332,12 +331,7 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 		}
 
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
-
-		//FIXME - this is actually quite bad... need to get more insight into this situation.
-		// if(!readyVideoFrameBufferEmptyWarning) {
-			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
-			// readyVideoFrameBufferEmptyWarning = true;
-		// }
+		logger->warn("waitForNextVideoFrame() Caller is trapped in an expensive polling loop! If this happens a lot, please consider some tuning.");
 		SDL_Delay(10);
 		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
@@ -662,11 +656,11 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 		
 		if(getIsAllocatedVideoFrameBackingsFull()) {
 			if(!blockedWarning) {
-				//logger->debug("%s Demuxer Loop is BLOCKED because our internal frame buffer is full. If this happens a lot, consider some tuning.", type == AVMEDIA_TYPE_VIDEO ? "Video" : "Audio");
+				logger->warn("%s Demuxer Loop is BLOCKED because our internal frame buffer is full. If this happens a lot, consider some tuning.", type == AVMEDIA_TYPE_VIDEO ? "Video" : "Audio");
 				blockedWarning = true;
 			}
 			YerFace_MutexUnlock(context->demuxerMutex);
-			SDL_Delay(1); //FIXME - CPU Starvation?
+			SDL_Delay(10);
 			YerFace_MutexLock(context->demuxerMutex);
 			continue;
 		} else {
@@ -696,7 +690,7 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 
 		if(context->demuxerRunning) {
 			YerFace_MutexUnlock(context->demuxerMutex);
-			SDL_Delay(0); //FIXME - CPU Starvation?
+			SDL_Delay(0); //All we want to do here is relinquish our execution thread. We still want to get it back asap.
 			YerFace_MutexLock(context->demuxerMutex);
 		}
 	}

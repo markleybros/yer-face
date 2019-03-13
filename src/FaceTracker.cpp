@@ -181,8 +181,13 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 		return;
 	}
 
-	Mat searchFrame = workingFrame->frame; // FIXME - should we use a smaller frame?
-	double searchFrameScaleFactor = 1.0; //workingFrame->detectionScaleFactor;
+	// FIXME - Currently we're using the full sized frame as input to the Shape Predictor.
+	// This seems fine, and the performance is quite reasonable. However, workingFrame->detectionFrame
+	// is usually smaller, and Shape Predictor definitely runs faster on it, albiet at a
+	// noticeable reduction in quality. Ideally we should expose this choice to the user,
+	// although I'm not sure yet how.
+	Mat searchFrame = workingFrame->frame;
+	double searchFrameScaleFactor = 1.0; //workingFrame->detectionScaleFactor (see above)
 	Rect2d searchRect = facialDetection.boxNormalSize;
 
 	dlib::cv_image<dlib::bgr_pixel> dlibSearchFrame = cv_image<bgr_pixel>(searchFrame);
@@ -502,11 +507,6 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 		}
 	}
 }
-
-// FacialRect FaceTracker::getFacialBoundingBox(void) {
-// 	FacialRect val = working.faceRect;
-// 	return val;
-// }
 
 FacialFeatures FaceTracker::getFacialFeatures(FrameNumber frameNumber) {
 	FacialFeatures val;

@@ -106,12 +106,6 @@ public:
 	Vec3d planeNormal;
 };
 
-// class FacialRect {
-// public:
-// 	Rect2d rect;
-// 	bool set;
-// };
-
 class FacialFeatures {
 public:
 	std::vector<Point2d> features;
@@ -131,13 +125,6 @@ public:
 	Mat cameraMatrix, distortionCoefficients;
 	bool set;
 };
-
-// class FaceTrackerWorkingVariables {
-// public:
-// 	FacialFeaturesInternal facialFeatures;
-// 	FacialPose facialPose;
-// 	FacialPose previouslyReportedFacialPose;
-// };
 
 class FaceTrackerWorker {
 public:

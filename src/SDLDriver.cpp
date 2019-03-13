@@ -284,7 +284,7 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	int frameDiscards = 0, frameFills = 0;
 	// self->logger->verbose("Audio Callback Fired");
 	FrameTimestamps frameTimestamps;
-	// FIXME
+	// FIXME - this is super bad.
 	// try {
 	// 	frameTimestamps = self->frameServer->getCompletedFrameTimestamps();
 	// } catch(exception &e) {
