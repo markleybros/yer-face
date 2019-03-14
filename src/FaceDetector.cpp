@@ -194,7 +194,8 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 	}
 }
 
-void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceDetector *self = (FaceDetector *)userdata;
 	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
 	FacialDetectionBox detection;

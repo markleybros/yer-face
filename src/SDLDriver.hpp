@@ -47,6 +47,7 @@ public:
 	void onBasisFlagEvent(function<void(void)> callback);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	void stopAudioDriverNow(void);
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
@@ -70,6 +71,9 @@ private:
 
 	SDL_mutex *onBasisFlagCallbacksMutex;
 	std::vector<function<void(void)>> onBasisFlagCallbacks;
+
+	SDL_mutex *frameTimestampsNowMutex;
+	FrameTimestamps frameTimestampsNow;
 };
 
 }; //namespace YerFace

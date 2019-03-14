@@ -50,7 +50,7 @@ class FrameStatusChangeEventCallback {
 public:
 	WorkingFrameStatus newStatus;
 	void *userdata;
-	function<void(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber)> callback;
+	function<void(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps)> callback;
 };
 
 class FrameServerDrainedEventCallback {
@@ -74,7 +74,7 @@ public:
 private:
 	bool isDrained(void);
 	void destroyFrame(FrameNumber frameNumber);
-	void setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus newStatus);
+	void setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameStatus newStatus);
 	void checkStatusValue(WorkingFrameStatus status);
 	static int frameHerderLoop(void *ptr);
 

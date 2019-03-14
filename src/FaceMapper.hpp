@@ -31,7 +31,7 @@ public:
 	FrameServer *getFrameServer(void);
 	FaceTracker *getFaceTracker(void);
 private:
-	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static bool workerHandler(WorkerPoolWorker *worker);
 
 	Status *status;

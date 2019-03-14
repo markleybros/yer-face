@@ -22,7 +22,7 @@ public:
 	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 private:
 	static bool workerHandler(WorkerPoolWorker *worker);
-	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 
 	Status *status;
 	FrameServer *frameServer;

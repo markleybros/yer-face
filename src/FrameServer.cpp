@@ -155,7 +155,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	frameStore[workingFrame->frameTimestamps.frameNumber] = workingFrame;
 	// logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
 
-	setFrameStatus(workingFrame->frameTimestamps.frameNumber, FRAME_STATUS_NEW);
+	setFrameStatus(workingFrame->frameTimestamps, FRAME_STATUS_NEW);
 
 	metrics->endClock(tick);
 
@@ -228,13 +228,13 @@ void FrameServer::destroyFrame(FrameNumber frameNumber) {
 	frameStore.erase(frameNumber);
 }
 
-void FrameServer::setFrameStatus(FrameNumber frameNumber, WorkingFrameStatus newStatus) {
+void FrameServer::setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameStatus newStatus) {
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
-	frameStore[frameNumber]->status = newStatus;
+	frameStore[frameTimestamps.frameNumber]->status = newStatus;
 	// logger->verbose("Setting Frame #%lld Status to %d ...", frameNumber, newStatus);
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
-		callback.callback(callback.userdata, newStatus, frameNumber);
+		callback.callback(callback.userdata, newStatus, frameTimestamps);
 	}
 	YerFace_MutexUnlock(myMutex);
 }
@@ -284,7 +284,7 @@ int FrameServer::frameHerderLoop(void *ptr) {
 			//Advance this frame to the next status.
 			if(checkpointsPassed) {
 				didWork = true;
-				self->setFrameStatus(frameNumber, (WorkingFrameStatus)(status + 1));
+				self->setFrameStatus(workingFrame->frameTimestamps, (WorkingFrameStatus)(status + 1));
 			}
 		}
 

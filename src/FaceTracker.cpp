@@ -592,7 +592,8 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumbe
 	return facialPlane;
 }
 
-void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceTracker *self = (FaceTracker *)userdata;
 	FaceTrackerOutput output;
 	switch(newStatus) {

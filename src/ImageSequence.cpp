@@ -113,7 +113,8 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 	return didWork;
 }
 
-void ImageSequence::handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void ImageSequence::handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	ImageSequence *self = (ImageSequence *)userdata;
 	// self->logger->verbose("Got notification that Frame #%lld has transitioned to LATE_PROCESSING.", frameNumber);
 	//It is not safe or recommended to perform ANY work during a FrameStatusChangeEventCallback.

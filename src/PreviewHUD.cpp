@@ -134,7 +134,8 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 	return didWork;
 }
 
-void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	PreviewHUD *self = (PreviewHUD *)userdata;
 	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
 	switch(newStatus) {

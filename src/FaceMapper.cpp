@@ -170,7 +170,8 @@ FaceTracker *FaceMapper::getFaceTracker(void) {
 	return faceTracker;
 }
 
-void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceMapper *self = (FaceMapper *)userdata;
 	FaceMapperPendingFrame newFrame;
 	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);

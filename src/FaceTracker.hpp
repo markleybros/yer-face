@@ -156,7 +156,7 @@ private:
 	void doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	void doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
-	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static void predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
 	static bool predictorWorkerHandler(WorkerPoolWorker *worker);
 	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);

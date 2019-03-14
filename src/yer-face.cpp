@@ -106,7 +106,7 @@ SDL_mutex *frameMetricsMutex;
 
 static int runCaptureLoop(void *ptr);
 void parseConfigFile(void);
-void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 void handleFrameServerDrainedEvent(void *userdata);
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
 
@@ -438,7 +438,8 @@ void parseConfigFile(void) {
 	config = json::parse(ssBuffer.str());
 }
 
-void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber) {
+void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");

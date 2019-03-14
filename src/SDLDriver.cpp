@@ -23,7 +23,12 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((frameTimestampsNowMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
+	frameTimestampsNow.startTimestamp = 0.0;
+	frameTimestampsNow.estimatedEndTimestamp = 0.0;
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTexture = NULL;
@@ -95,6 +100,12 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		audioFrameCallback.sampleRate = audioDevice.obtained.freq;
 		audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
 		ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
+
+		FrameStatusChangeEventCallback frameStatusChangeCallback;
+		frameStatusChangeCallback.userdata = (void *)this;
+		frameStatusChangeCallback.callback = handleFrameStatusChange;
+		frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	}
 
 	logger->debug("SDLDriver object constructed and ready to go!");
@@ -112,6 +123,8 @@ SDLDriver::~SDLDriver() {
 	if(previewWindow.renderer != NULL) {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
+	SDL_DestroyMutex(frameTimestampsNowMutex);
+	frameTimestampsNowMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
 	audioFramesMutex = NULL;
 	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
@@ -279,25 +292,23 @@ SDLAudioFrame *SDLDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
 
 void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	SDLDriver *self = (SDLDriver *)userdata;
+
+	YerFace_MutexLock(self->frameTimestampsNowMutex);
+	FrameTimestamps frameTimestamps = self->frameTimestampsNow;
+	YerFace_MutexUnlock(self->frameTimestampsNowMutex);
+
 	YerFace_MutexLock(self->audioFramesMutex);
 	int streamPos = 0;
 	int frameDiscards = 0, frameFills = 0;
 	// self->logger->verbose("Audio Callback Fired");
-	FrameTimestamps frameTimestamps;
-	// FIXME - this is super bad.
-	// try {
-	// 	frameTimestamps = self->frameServer->getCompletedFrameTimestamps();
-	// } catch(exception &e) {
-		frameTimestamps.startTimestamp = 0.0;
-		frameTimestamps.estimatedEndTimestamp = 0.0;
-	// }
+
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
 		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 
 		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - YERFACE_AUDIO_LATE_GRACE;
 		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
-			self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, YERFACE_AUDIO_LATE_GRACE);
+			// self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, YERFACE_AUDIO_LATE_GRACE);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 			frameDiscards++;
@@ -351,6 +362,19 @@ void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int
 void SDLDriver::stopAudioDriverNow(void) {
 	if(audioDevice.opened) {
 		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
+	}
+}
+
+void SDLDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	SDLDriver *self = (SDLDriver *)userdata;
+	switch(newStatus) {
+		default:
+			throw logic_error("Handler passed unsupported frame status change event!");
+		case FRAME_STATUS_LATE_PROCESSING:
+			YerFace_MutexLock(self->frameTimestampsNowMutex);
+			self->frameTimestampsNow = frameTimestamps;
+			YerFace_MutexUnlock(self->frameTimestampsNowMutex);
+			break;
 	}
 }
 

@@ -19,7 +19,7 @@ public:
 	~ImageSequence() noexcept(false);
 private:
 	static bool workerHandler(WorkerPoolWorker *worker);
-	static void handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameNumber frameNumber);
+	static void handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 
 	Status *status;
 	FrameServer *frameServer;
