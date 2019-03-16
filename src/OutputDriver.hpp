@@ -7,6 +7,8 @@
 #include "SDLDriver.hpp"
 #include "EventLogger.hpp"
 #include "Utilities.hpp"
+#include "Status.hpp"
+#include "WorkerPool.hpp"
 
 #define ASIO_STANDALONE
 #include <websocketpp/config/asio_no_tls.hpp>
@@ -24,32 +26,36 @@ class EventLogger;
 class OutputFrameContainer {
 public:
 	bool isReady(void);
+	bool frameIsDraining;
+	bool outputProcessed;
+	FrameTimestamps frameTimestamps;
 	json waitingOn;
 	json frame;
 };
 
 class OutputDriver {
 public:
-	OutputDriver(json config, String myOutputFilename, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
-	~OutputDriver();
+	OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	~OutputDriver() noexcept(false);
 	void setEventLogger(EventLogger *myEventLogger);
-	void handleCompletedFrame(void);
-	void drainPipelineDataNow(void);
 	void registerLateFrameData(string key);
-	void updateLateFrameData(FrameNumber frameNumber, string key, json value);
-	void insertCompletedFrameData(string key, json value);
+	// void updateLateFrameData(FrameNumber frameNumber, string key, json value);
+	// void insertCompletedFrameData(string key, json value);
 private:
-	void handleNewBasisEvent(void);
-	bool handleReplayBasisEvent(json sourcePacket);
+	// void handleNewBasisEvent(bool generatedByUserInput);
+	// bool handleReplayBasisEvent(json sourcePacket);
 	static int launchWebSocketServer(void* data);
-	static int writeOutputBufferToFile(void *data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
+	void handleOutputFrame(OutputFrameContainer *outputFrame);
 	void serverSetQuitPollTimer(void);
 	void outputNewFrame(json frame, bool replay = false);
+	static bool workerHandler(WorkerPoolWorker *worker);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 
 	String outputFilename;
+	Status *status;
 	FrameServer *frameServer;
 	FaceTracker *faceTracker;
 	SDLDriver *sdlDriver;
@@ -66,21 +72,15 @@ private:
 
 	SDL_Thread *serverThread;
 
-	SDL_mutex *writerMutex;
-	SDL_cond *writerCond;
-	SDL_Thread *writerThread;
-	bool writerThreadRunning;
-
 	SDL_mutex *streamFlagsMutex;
 	bool autoBasisTransmitted, basisFlagged;
 	json lastBasisFrame;
 
-	list<OutputFrameContainer> outputBuf;
-	SDL_mutex *outputBufMutex;
-
 	list<string> lateFrameWaitOn;
 
-	json extraFrameData;
+	WorkerPool *workerPool;
+	SDL_mutex *workerMutex;
+	unordered_map<FrameNumber, OutputFrameContainer> pendingFrames;
 };
 
 }; //namespace YerFace

@@ -15,9 +15,9 @@
 #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
-// #include "OutputDriver.hpp"
+#include "OutputDriver.hpp"
 // #include "SphinxDriver.hpp"
-// #include "EventLogger.hpp"
+#include "EventLogger.hpp"
 #include "ImageSequence.hpp"
 #include "PreviewHUD.hpp"
 
@@ -72,9 +72,9 @@ FaceDetector *faceDetector = NULL;
 FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
-// OutputDriver *outputDriver = NULL;
+OutputDriver *outputDriver = NULL;
 // SphinxDriver *sphinxDriver = NULL;
-// EventLogger *eventLogger = NULL;
+EventLogger *eventLogger = NULL;
 ImageSequence *imageSequence = NULL;
 PreviewHUD *previewHUD = NULL;
 
@@ -225,19 +225,20 @@ int main(int argc, const char** argv) {
 	faceDetector = new FaceDetector(config, status, frameServer);
 	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
 	faceMapper = new FaceMapper(config, status, frameServer, faceTracker, previewHUD);
-	// outputDriver = new OutputDriver(config, outData, frameServer, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, outData, status, frameServer, faceTracker, sdlDriver);
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
 	// }
-	// eventLogger = new EventLogger(config, inEvents, outputDriver, frameServer);
+	eventLogger = new EventLogger(config, inEvents, outputDriver, frameServer);
 	if(previewImgSeq.length() > 0) {
 		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
 	}
 
+	outputDriver->setEventLogger(eventLogger);
+
 	//Register preview renderers.
 	previewHUD->registerPreviewHUDRenderer(renderPreviewHUD);
 
-	// outputDriver->setEventLogger(eventLogger);
 
 	//Hook into the frame lifecycle.
 	FrameServerDrainedEventCallback frameServerDrainedCallback;
@@ -332,11 +333,11 @@ int main(int argc, const char** argv) {
 	if(imageSequence != NULL) {
 		delete imageSequence;
 	}
-	// delete eventLogger;
+	delete eventLogger;
 	// if(sphinxDriver != NULL) {
 	// 	delete sphinxDriver;
 	// }
-	// delete outputDriver;
+	delete outputDriver;
 	delete faceMapper;
 	delete faceTracker;
 	delete faceDetector;
@@ -384,24 +385,9 @@ int runCaptureLoop(void *ptr) {
 			frameServer->insertNewFrame(&videoFrame);
 			ffmpegDriver->releaseVideoFrame(videoFrame);
 
-			// eventLogger->startNewFrame();
-
-			// faceTracker->processCurrentFrame();
-			// faceMapper->processCurrentFrame();
-
 			while(status->getIsPaused() && status->getIsRunning()) {
 				SDL_Delay(100);
 			}
-
-			// frameServer->advanceWorkingFrameToCompleted();
-			// faceTracker->advanceWorkingToCompleted();
-			// faceMapper->advanceWorkingToCompleted();
-			// if(sphinxDriver != NULL) {
-			// 	sphinxDriver->advanceWorkingToCompleted();
-			// }
-
-			// eventLogger->handleCompletedFrame();
-			// outputDriver->handleCompletedFrame();
 		}
 		SDL_Delay(0); //FIXME - CPU Starvation?
 	}
@@ -418,11 +404,6 @@ int runCaptureLoop(void *ptr) {
 
 	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
-
-	// if(sphinxDriver != NULL) {
-	// 	sphinxDriver->drainPipelineDataNow();
-	// }
-	// outputDriver->drainPipelineDataNow();
 
 	return 0;
 }

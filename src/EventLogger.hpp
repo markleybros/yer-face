@@ -24,27 +24,24 @@ public:
 	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer);
 	~EventLogger();
 	void registerEventType(EventType eventType);
-	void logEvent(string eventName, json payload, bool propagate = false, json sourcePacket = json::object());
-	void startNewFrame(void);
-	void handleCompletedFrame(void);
+	void logEvent(string eventName, json payload, FrameTimestamps frameTimestamps, bool propagate = false, json sourcePacket = json::object());
 private:
-	void processNextPacket(void);
+	void processNextPacket(FrameTimestamps frameTimestamps);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	string eventFilename;
 	OutputDriver *outputDriver;
 	FrameServer *frameServer;
 
 	Logger *logger;
 
-	FrameTimestamps workingFrameTimestamps;
-
 	double eventTimestampAdjustment;
-	bool eventReplay, eventReplayHold;
 	ifstream eventFilestream;
-	json nextPacket;
 
+	SDL_mutex *myMutex;
 	list<EventType> registeredEventTypes;
-
-	json events;
+	unordered_map<FrameNumber, json> frameEvents;
+	bool eventReplay, eventReplayHold;
+	json nextPacket;
 };
 
 }; //namespace YerFace
