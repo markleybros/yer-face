@@ -6,7 +6,6 @@ using namespace std;
 namespace YerFace {
 
 EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
-	eventTimestampAdjustment = config["YerFace"]["EventLogger"]["eventTimestampAdjustment"];
 	eventFilename = myEventFile;
 	status = myStatus;
 	if(status == NULL) {
@@ -135,25 +134,35 @@ void EventLogger::logEvent(string eventName, json payload, FrameTimestamps frame
 
 void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 	if(nextPacket.size()) {
-		double frameStart = frameTimestamps.startTimestamp - eventTimestampAdjustment;
-		double frameEnd = frameTimestamps.estimatedEndTimestamp - eventTimestampAdjustment;
+		double frameDurationHalf = (frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / 2.0;
+		double frameStart = frameTimestamps.startTimestamp;
+		double frameEnd = frameTimestamps.estimatedEndTimestamp - frameDurationHalf;
 		double packetTime = nextPacket["meta"]["startTime"];
+		// if(nextPacket.find("events") != nextPacket.end()) {
+		// 	logger->verbose("==== EVENT REPLAY ATTEMPT: [packetTime: %lf, currentFrameNumber: %ld, currentFrameStart: %lf, currentFrameEnd: %lf]; Candidate Packet Events: %s", packetTime, frameTimestamps.frameNumber, frameStart, frameEnd, nextPacket["events"].dump(-1, ' ', true).c_str());
+		// }
 		if(packetTime < frameEnd) {
-			if(packetTime >= 0.0 && packetTime < frameStart) {
-				logger->warn("==== EVENT REPLAY PACKET LATE! Processing anyway... [packetTime: %lf, currentFrameStart: %lf, currentFrameEnd: %lf] ====", packetTime, frameStart, frameEnd);
+			if(packetTime >= 0.0 && packetTime < (frameStart - frameDurationHalf)) {
+				logger->warn("==== EVENT REPLAY PACKET VERY LATE! Processing anyway... [packetTime: %lf, currentFrameStart: %lf, currentFrameEnd: %lf] ====", packetTime, frameStart, frameEnd);
 			}
-			json event;
-			try {
-				event = nextPacket.at("events");
-			} catch(nlohmann::detail::out_of_range &e) {
+
+			// Based on timestamps, we've decided that this source event packet maps to "now" in the actual
+			// input. Since we depend on ["meta"]["frameNumber"] downstream to tell us what frame to affect,
+			// we should remap now.
+			nextPacket["meta"]["frameNumber"] = frameTimestamps.frameNumber;
+
+			if(nextPacket.find("events") == nextPacket.end()) {
+				nextPacket = json::object();
 				return;
 			}
+			json event = nextPacket["events"];
 
 			for(json::iterator iter = event.begin(); iter != event.end(); ++iter) {
 				logEvent(iter.key(), iter.value(), frameTimestamps, true, nextPacket);
 			}
 			nextPacket = json::object();
 		} else {
+			// logger->verbose("==== EVENT REPLAY HOLDING...");
 			eventReplayHold = true;
 		}
 	}

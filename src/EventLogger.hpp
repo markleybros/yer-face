@@ -44,7 +44,6 @@ private:
 
 	Logger *logger;
 
-	double eventTimestampAdjustment;
 	ifstream eventFilestream;
 
 	WorkerPool *replayWorkerPool;

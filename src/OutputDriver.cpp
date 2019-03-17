@@ -435,7 +435,9 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			newOutputFrame.outputProcessed = false;
 			newOutputFrame.frameIsDraining = false;
 			newOutputFrame.frameTimestamps = frameTimestamps;
+			newOutputFrame.waitingOn = json::object();
 			for(string waitOn : self->lateFrameWaitOn) {
+				// self->logger->verbose("WAITING ON: %s", waitOn.c_str());
 				newOutputFrame.waitingOn[waitOn] = true;
 			}
 			newOutputFrame.frame = json::object();

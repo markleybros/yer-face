@@ -131,7 +131,6 @@
       }
     },
     "EventLogger": {
-      "eventTimestampAdjustment": 0.003
     },
     "SDLDriver": {
     },
