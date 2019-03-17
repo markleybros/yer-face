@@ -53,6 +53,12 @@ public:
 	bool set; //Is the box valid?
 };
 
+class FaceDetectorAssignmentTask {
+public:
+	FrameNumber frameNumber;
+	bool readyForAssignment;
+};
+
 class FaceDetector {
 public:
 	FaceDetector(json config, Status *myStatus, FrameServer *myFrameServer);
@@ -80,7 +86,7 @@ private:
 
 	Logger *logger;
 	SDL_mutex *myMutex;
-	list<FrameNumber> assignmentFrameNumbers;
+	unordered_map<FrameNumber, FaceDetectorAssignmentTask> assignmentFrameNumbers;
 	list<FaceDetectionTask> detectionTasks;
 
 	SDL_mutex *detectionsMutex;

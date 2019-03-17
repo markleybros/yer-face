@@ -229,7 +229,7 @@ int main(int argc, const char** argv) {
 	// if(ffmpegDriver->getIsAudioInputPresent()) {
 	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
 	// }
-	eventLogger = new EventLogger(config, inEvents, outputDriver, frameServer);
+	eventLogger = new EventLogger(config, inEvents, status, outputDriver, frameServer);
 	if(previewImgSeq.length() > 0) {
 		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
 	}

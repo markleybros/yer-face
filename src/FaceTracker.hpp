@@ -141,6 +141,12 @@ public:
 	FacialPose facialPose;
 };
 
+class FaceTrackerAssignmentTask {
+public:
+	FrameNumber frameNumber;
+	bool readyForAssignment;
+};
+
 class FaceTracker {
 public:
 	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
@@ -204,7 +210,7 @@ private:
 	SDL_mutex *myMutex, *myAssignmentMutex;
 
 	std::list<FrameNumber> pendingPredictionFrameNumbers;
-	unordered_map<FrameNumber, FrameNumber> pendingAssignmentFrameNumbers;
+	unordered_map<FrameNumber, FaceTrackerAssignmentTask> pendingAssignmentFrameNumbers;
 	unordered_map<FrameNumber, FaceTrackerOutput> outputFrames;
 
 	WorkerPool *predictorWorkerPool, *assignmentWorkerPool;

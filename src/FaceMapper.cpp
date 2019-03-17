@@ -210,7 +210,7 @@ void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 bool FaceMapper::workerHandler(WorkerPoolWorker *worker) {
 	FaceMapper *self = (FaceMapper *)worker->ptr;
 	bool didWork = false;
-
+	static FrameNumber lastFrameNumber = -1;
 
 	YerFace_MutexLock(self->myMutex);
 	//// CHECK FOR WORK ////
@@ -230,6 +230,10 @@ bool FaceMapper::workerHandler(WorkerPoolWorker *worker) {
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
 		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, myFrameNumber);
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("FaceMapper handling frames out of order!");
+		}
+		lastFrameNumber = myFrameNumber;
 
 		MetricsTick tick = self->metrics->startClock();
 		for(MarkerTracker *tracker : self->trackers) {

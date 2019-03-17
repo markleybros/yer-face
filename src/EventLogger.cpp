@@ -5,9 +5,13 @@ using namespace std;
 
 namespace YerFace {
 
-EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
+EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
 	eventTimestampAdjustment = config["YerFace"]["EventLogger"]["eventTimestampAdjustment"];
 	eventFilename = myEventFile;
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
 	outputDriver = myOutputDriver;
 	if(outputDriver == NULL) {
 		throw invalid_argument("outputDriver cannot be NULL");
@@ -23,6 +27,9 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	}
 
 	eventReplay = false;
+	replayWorkerPool = NULL;
+	frameEvents.clear();
+	pendingReplayFrames.clear();
 	if(eventFilename.length() > 0) {
 		eventFilestream.open(eventFilename, ifstream::in | ifstream::binary);
 		if(eventFilestream.fail()) {
@@ -30,6 +37,19 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 		}
 		nextPacket = json::object();
 		eventReplay = true;
+
+		//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREPROCESS without our blessing.
+		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREPROCESS, "eventLogger.ran");
+
+		WorkerPoolParameters workerPoolParameters;
+		workerPoolParameters.name = "EventLogger.Replay";
+		workerPoolParameters.numWorkers = 1;
+		workerPoolParameters.numWorkersPerCPU = 0.0;
+		workerPoolParameters.initializer = NULL;
+		workerPoolParameters.deinitializer = NULL;
+		workerPoolParameters.usrPtr = (void *)this;
+		workerPoolParameters.handler = replayWorkerHandler;
+		replayWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 	}
 
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
@@ -37,7 +57,9 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-	frameStatusChangeCallback.newStatus = FRAME_STATUS_DRAINING;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREPROCESS;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
@@ -45,8 +67,22 @@ EventLogger::EventLogger(json config, string myEventFile, OutputDriver *myOutput
 	logger->debug("EventLogger object constructed and ready to go!");
 }
 
-EventLogger::~EventLogger() {
+EventLogger::~EventLogger() noexcept(false) {
 	logger->debug("EventLogger object destructing...");
+
+	if(replayWorkerPool) {
+		delete replayWorkerPool;
+	}
+
+	YerFace_MutexLock(myMutex);
+	if(pendingReplayFrames.size() > 0) {
+		logger->error("Frames are still pending for replay! Woe is me!");
+	}
+	if(frameEvents.size() > 0) {
+		logger->error("Frame events are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(myMutex);
+
 	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
@@ -92,7 +128,7 @@ void EventLogger::logEvent(string eventName, json payload, FrameTimestamps frame
 		insertEventInCompletedFrameData = event.replayCallback(eventName, payload, sourcePacket);
 	}
 	if(insertEventInCompletedFrameData) {
-		frameEvents[frameTimestamps.frameNumber] = payload;
+		frameEvents[frameTimestamps.frameNumber][eventName] = payload;
 	}
 	YerFace_MutexUnlock(myMutex);
 }
@@ -104,7 +140,7 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 		double packetTime = nextPacket["meta"]["startTime"];
 		if(packetTime < frameEnd) {
 			if(packetTime >= 0.0 && packetTime < frameStart) {
-				logger->warn("==== EVENT REPLAY PACKET LATE! Processing anyway... ====");
+				logger->warn("==== EVENT REPLAY PACKET LATE! Processing anyway... [packetTime: %lf, currentFrameStart: %lf, currentFrameEnd: %lf] ====", packetTime, frameStart, frameEnd);
 			}
 			json event;
 			try {
@@ -126,35 +162,101 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 void EventLogger::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	EventLogger *self = (EventLogger *)userdata;
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
+	EventLoggerReplayTask replay;
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
 		case FRAME_STATUS_NEW:
 			YerFace_MutexLock(self->myMutex);
 			self->frameEvents[frameNumber] = json::object();
+			YerFace_MutexUnlock(self->myMutex);
 			if(self->eventReplay) {
-				self->eventReplayHold = false;
-
-				self->processNextPacket(frameTimestamps);
-
-				string line;
-				while(!self->eventReplayHold && getline(self->eventFilestream, line)) {
-					self->nextPacket = json::parse(line);
-					self->processNextPacket(frameTimestamps);
-				}
+				replay.frameTimestamps = frameTimestamps;
+				replay.readyForReplay = false;
+				YerFace_MutexLock(self->myMutex);
+				self->pendingReplayFrames[frameNumber] = replay;
+				YerFace_MutexUnlock(self->myMutex);
+			}
+			break;
+		case FRAME_STATUS_PREPROCESS:
+			if(self->eventReplay) {
+				YerFace_MutexLock(self->myMutex);
+				self->pendingReplayFrames[frameNumber].readyForReplay = true;
+				YerFace_MutexUnlock(self->myMutex);
+				self->replayWorkerPool->sendWorkerSignal();
+			}
+			break;
+		case FRAME_STATUS_LATE_PROCESSING:
+			YerFace_MutexLock(self->myMutex);
+			if(self->frameEvents[frameNumber].size() > 0) {
+				self->outputDriver->insertFrameData("events", self->frameEvents[frameNumber], frameNumber);
 			}
 			YerFace_MutexUnlock(self->myMutex);
 			break;
-		case FRAME_STATUS_DRAINING:
+		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->myMutex);
-			// self->outputDriver->insertCompletedFrameData("events", self->frameEvents[frameNumber]); //FIXME - event lifecycle
 			self->frameEvents.erase(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
 			break;
-		case FRAME_STATUS_GONE:
-			//FIXME
-			break;
 	}
+}
+
+bool EventLogger::replayWorkerHandler(WorkerPoolWorker *worker) {
+	EventLogger *self = (EventLogger *)worker->ptr;
+
+	static FrameNumber lastFrameNumber = -1;
+	bool didWork = false;
+	FrameNumber myFrameNumber = -1;
+	FrameTimestamps frameTimestamps;
+
+	YerFace_MutexLock(self->myMutex);
+	//// CHECK FOR WORK ////
+	for(auto pendingFrameNumber : self->pendingReplayFrames) {
+		if(myFrameNumber < 0 || pendingFrameNumber.first < myFrameNumber) {
+			myFrameNumber = pendingFrameNumber.first;
+		}
+	}
+	if(myFrameNumber > 0 && !self->pendingReplayFrames[myFrameNumber].readyForReplay) {
+		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		myFrameNumber = -1;
+	}
+	if(myFrameNumber > 0) {
+		frameTimestamps = self->pendingReplayFrames[myFrameNumber].frameTimestamps;
+		self->pendingReplayFrames.erase(myFrameNumber);
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("EventLogger handling frames out of order!");
+		}
+		lastFrameNumber = myFrameNumber;
+
+		self->eventReplayHold = false;
+
+		// self->logger->verbose("EVENT REPLAY: Playing up to frame %lu at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+
+		YerFace_MutexLock(self->myMutex);
+		self->processNextPacket(frameTimestamps);
+		string line;
+		while(!self->eventReplayHold && getline(self->eventFilestream, line)) {
+			self->nextPacket = json::parse(line);
+			self->processNextPacket(frameTimestamps);
+		}
+		// if(self->eventReplayHold) {
+		// 	self->logger->verbose("HOLDING...");
+		// }
+		YerFace_MutexUnlock(self->myMutex);
+
+		// self->logger->verbose("DONE EVENT REPLAY: Finished frame %lu at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+
+		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PREPROCESS, "eventLogger.ran");
+
+		didWork = true;
+	}
+
+	return didWork;
 }
 
 } //namespace YerFace

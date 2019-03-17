@@ -446,7 +446,13 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *
 }
 
 void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::renderPreviewHUD() passed invalid frame number");
+	}
 	FaceTrackerOutput output = outputFrames[frameNumber];
+	YerFace_MutexUnlock(myMutex);
 
 	YerFace_MutexLock(myAssignmentMutex);
 	FacialCameraModel camera = facialCameraModel;
@@ -511,6 +517,10 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 FacialFeatures FaceTracker::getFacialFeatures(FrameNumber frameNumber) {
 	FacialFeatures val;
 	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getFacialFeatures() passed invalid frame number");
+	}
 	val = outputFrames[frameNumber].facialFeatures.featuresExposed;
 	YerFace_MutexUnlock(myMutex);
 	return val;
@@ -527,6 +537,10 @@ FacialCameraModel FaceTracker::getFacialCameraModel(void) {
 FacialPose FaceTracker::getFacialPose(FrameNumber frameNumber) {
 	FacialPose val;
 	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getFacialPose() passed invalid frame number");
+	}
 	val = outputFrames[frameNumber].facialPose;
 	YerFace_MutexUnlock(myMutex);
 	return val;
@@ -535,6 +549,10 @@ FacialPose FaceTracker::getFacialPose(FrameNumber frameNumber) {
 FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumber frameNumber, MarkerType markerType) {
 	FacialPose facialPose;
 	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() passed invalid frame number");
+	}
 	facialPose = outputFrames[frameNumber].facialPose;
 	YerFace_MutexUnlock(myMutex);
 
@@ -596,6 +614,7 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceTracker *self = (FaceTracker *)userdata;
 	FaceTrackerOutput output;
+	FaceTrackerAssignmentTask assignment;
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
@@ -607,6 +626,11 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 			YerFace_MutexLock(self->myMutex);
 			self->outputFrames[frameNumber] = output;
 			YerFace_MutexUnlock(self->myMutex);
+			assignment.frameNumber = frameNumber;
+			assignment.readyForAssignment = false;
+			YerFace_MutexLock(self->myAssignmentMutex);
+			self->pendingAssignmentFrameNumbers[frameNumber] = assignment;
+			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
 		case FRAME_STATUS_TRACKING:
 			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
@@ -666,7 +690,7 @@ bool FaceTracker::predictorWorkerHandler(WorkerPoolWorker *worker) {
 		YerFace_MutexUnlock(self->myMutex);
 
 		YerFace_MutexLock(self->myAssignmentMutex);
-		self->pendingAssignmentFrameNumbers[myFrameNumber] = myFrameNumber;
+		self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment = true;
 		YerFace_MutexUnlock(self->myAssignmentMutex);
 		self->assignmentWorkerPool->sendWorkerSignal();
 
@@ -682,13 +706,18 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 
 	bool didWork = false;
 	FrameNumber myFrameNumber = -1;
+	static FrameNumber lastFrameNumber = -1;
 
 	YerFace_MutexLock(self->myAssignmentMutex);
 	//// CHECK FOR WORK ////
-	for(auto pendingFrameNumber : self->pendingAssignmentFrameNumbers) {
-		if(myFrameNumber < 0 || pendingFrameNumber.second < myFrameNumber) {
-			myFrameNumber = pendingFrameNumber.second;
+	for(auto pendingAssignmentPair : self->pendingAssignmentFrameNumbers) {
+		if(myFrameNumber < 0 || pendingAssignmentPair.first < myFrameNumber) {
+			myFrameNumber = pendingAssignmentPair.first;
 		}
+	}
+	if(myFrameNumber > 0 && !self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment) {
+		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		myFrameNumber = -1;
 	}
 	if(myFrameNumber > 0) {
 		self->pendingAssignmentFrameNumbers.erase(myFrameNumber);
@@ -696,11 +725,20 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 	YerFace_MutexUnlock(self->myAssignmentMutex);
 
 	YerFace_MutexLock(self->myMutex);
-	FaceTrackerOutput output = self->outputFrames[myFrameNumber];
+	FaceTrackerOutput output;
+	if(myFrameNumber > 0) {
+		output = self->outputFrames[myFrameNumber];
+	}
 	YerFace_MutexUnlock(self->myMutex);
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
+		// self->logger->verbose("Face Tracker Assignment Thread handling frame #%lld", myFrameNumber);
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("FaceTracker handling frames out of order!");
+		}
+		lastFrameNumber = myFrameNumber;
+
 		MetricsTick tick = self->metricsAssignment->startClock();
 
 		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);

@@ -199,6 +199,7 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 	FaceDetector *self = (FaceDetector *)userdata;
 	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
 	FacialDetectionBox detection;
+	FaceDetectorAssignmentTask assignment;
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
@@ -208,10 +209,15 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			YerFace_MutexLock(self->detectionsMutex);
 			self->detections[frameNumber] = detection;
 			YerFace_MutexUnlock(self->detectionsMutex);
+			assignment.frameNumber = frameNumber;
+			assignment.readyForAssignment = false;
+			YerFace_MutexLock(self->myAssignmentMutex);
+			self->assignmentFrameNumbers[frameNumber] = assignment;
+			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
 		case FRAME_STATUS_DETECTION:
 			YerFace_MutexLock(self->myAssignmentMutex);
-			self->assignmentFrameNumbers.push_back(frameNumber);
+			self->assignmentFrameNumbers[frameNumber].readyForAssignment = true;
 			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
 			YerFace_MutexUnlock(self->myAssignmentMutex);
 			self->assignmentWorkerPool->sendWorkerSignal();
@@ -272,6 +278,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 	FaceDetector *self = (FaceDetector *)worker->ptr;
 	bool didWork = false;
 
+	static FrameNumber lastFrameNumber = -1;
 	static FrameNumber myFrameNumber = -1;
 	static FrameNumber lastDetectionRequested = -1;
 	static FrameNumber lastFrameBlockedWarning = -1;
@@ -279,16 +286,29 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 
 	YerFace_MutexLock(self->myAssignmentMutex);
 	//// CHECK FOR WORK ////
-	if(myFrameNumber < 0 && self->assignmentFrameNumbers.size() > 0) {
-		tick = self->assignmentMetrics->startClock();
-		myFrameNumber = self->assignmentFrameNumbers.front();
-		self->assignmentFrameNumbers.pop_front();
+	if(myFrameNumber < 0) {
+		for(auto pendingAssignmentPair : self->assignmentFrameNumbers) {
+			if(myFrameNumber < 0 || pendingAssignmentPair.first < myFrameNumber) {
+				myFrameNumber = pendingAssignmentPair.first;
+			}
+		}
+		if(myFrameNumber > 0 && !self->assignmentFrameNumbers[myFrameNumber].readyForAssignment) {
+			// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+			myFrameNumber = -1;
+		}
+		if(myFrameNumber > 0) {
+			tick = self->assignmentMetrics->startClock();
+			self->assignmentFrameNumbers.erase(myFrameNumber);
+		}
 	}
 	YerFace_MutexUnlock(self->myAssignmentMutex);
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
 		// self->logger->verbose("Assignment Thread handling frame #%lld", myFrameNumber);
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("FaceDetector handling frames out of order!");
+		}
 
 		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
 		FrameTimestamps myFrameTimestamps = workingFrame->frameTimestamps;
@@ -320,6 +340,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 		}
 
 		if(frameAssigned) {
+			lastFrameNumber = myFrameNumber;
 			self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_DETECTION, "faceDetector.ran");
 			self->assignmentMetrics->endClock(tick);
 			myFrameNumber = -1;

@@ -232,7 +232,7 @@ void FrameServer::setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameSt
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	frameStore[frameTimestamps.frameNumber]->status = newStatus;
-	// logger->verbose("Setting Frame #%lld Status to %d ...", frameNumber, newStatus);
+	// logger->verbose("Setting Frame #%lld Status to %d ...", frameTimestamps.frameNumber, newStatus);
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
 		callback.callback(callback.userdata, newStatus, frameTimestamps);
 	}

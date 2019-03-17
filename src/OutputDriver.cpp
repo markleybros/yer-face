@@ -31,6 +31,9 @@ bool OutputFrameContainer::isReady(void) {
 OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	serverThread = NULL;
 	outputFilename = myOutputFilename;
+	newestFrameTimestamps.frameNumber = -1;
+	newestFrameTimestamps.startTimestamp = -1.0;
+	newestFrameTimestamps.estimatedEndTimestamp = -1.0;
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -63,15 +66,34 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatu
 	}
 	websocketServerEnabled = config["YerFace"]["OutputDriver"]["websocketServerEnabled"];
 
+	//We need to know when the frame server has drained.
+	frameServerDrained = false;
+	FrameServerDrainedEventCallback frameServerDrainedCallback;
+	frameServerDrainedCallback.userdata = (void *)this;
+	frameServerDrainedCallback.callback = handleFrameServerDrainedEvent;
+	frameServer->onFrameServerDrainedEvent(frameServerDrainedCallback);
+
 	autoBasisTransmitted = false;
-	basisFlagged = false;
-	// FIXME - event lifecycle
-	// sdlDriver->onBasisFlagEvent([this] (void) -> void {
-	// 	if(this->eventLogger != NULL) {
-	// 		this->eventLogger->logEvent("basis", (json)true);
-	// 	}
-	// 	this->handleNewBasisEvent();
-	// });
+	sdlDriver->onBasisFlagEvent([this] (void) -> void {
+		YerFace_MutexLock(this->workerMutex);
+		bool eventHandled = false;
+		if(this->newestFrameTimestamps.frameNumber > 0 && !this->frameServerDrained) {
+			FrameNumber frameNumber = this->newestFrameTimestamps.frameNumber;
+			if(this->pendingFrames.find(frameNumber) != this->pendingFrames.end()) {
+				if(!this->pendingFrames[frameNumber].frameIsDraining) {
+					if(this->eventLogger != NULL) {
+						this->eventLogger->logEvent("basis", (json)true, this->newestFrameTimestamps);
+					}
+					this->handleNewBasisEvent(frameNumber);
+					eventHandled = true;
+				}
+			}
+		}
+		if(!eventHandled) {
+			this->logger->warn("Discarding user basis event because frame status is already drained. (Or similar bad state.)");
+		}
+		YerFace_MutexUnlock(this->workerMutex);
+	});
 	logger = new Logger("OutputDriver");
 
 	//Constrain websocket server logs a bit for sanity.
@@ -81,6 +103,7 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatu
 	server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
 
 	if(websocketServerEnabled) {
+		websocketServerRunning = true;
 		//Create worker thread.
 		if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
 			throw runtime_error("Failed spawning worker thread!");
@@ -133,6 +156,9 @@ OutputDriver::~OutputDriver() noexcept(false) {
 	YerFace_MutexUnlock(workerMutex);
 
 	if(websocketServerEnabled && serverThread) {
+		YerFace_MutexLock(connectionListMutex);
+		websocketServerRunning = false;
+		YerFace_MutexUnlock(connectionListMutex);
 		SDL_WaitThread(serverThread, NULL);
 	}
 
@@ -153,42 +179,37 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 		throw invalid_argument("eventLogger cannot be NULL");
 	}
 
-	// FIXME - event lifecycle
-	// EventType basisEvent;
-	// basisEvent.name = "basis";
-	// basisEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
-	// 	if(eventName != "basis" || (bool)eventPayload != true) {
-	// 		this->logger->warn("Got an unsupported replay event!");
-	// 		return false;
-	// 	}
-	// 	return this->handleReplayBasisEvent(sourcePacket);
-	// };
-	// eventLogger->registerEventType(basisEvent);
+	EventType basisEvent;
+	basisEvent.name = "basis";
+	basisEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
+		if(eventName != "basis" || (bool)eventPayload != true) {
+			this->logger->warn("Got an unsupported replay event!");
+			return false;
+		}
+		this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
+		if((double)sourcePacket["meta"]["startTime"] < 0.0 || (FrameNumber)sourcePacket["meta"]["frameNumber"] < 0) {
+			sourcePacket["meta"]["frameNumber"] = -1;
+			sourcePacket["meta"]["startTime"] = -1.0;
+			YerFace_MutexLock(this->streamFlagsMutex);
+			this->autoBasisTransmitted = true;
+			outputNewFrame(sourcePacket);
+			YerFace_MutexUnlock(this->streamFlagsMutex);
+			return false;
+		}
+		FrameNumber frameNumber = (FrameNumber)sourcePacket["meta"]["frameNumber"];
+		handleNewBasisEvent(frameNumber);
+		return true;
+	};
+	eventLogger->registerEventType(basisEvent);
 }
 
 // FIXME - event lifecycle
-// void OutputDriver::handleNewBasisEvent(bool generatedByUserInput) {
-// 	this->logger->verbose("Got a Basis Flag event. Handling...");
-// 	YerFace_MutexLock(streamFlagsMutex);
-// 	basisFlagged = true;
-// 	YerFace_MutexUnlock(streamFlagsMutex);
-// }
-
-// FIXME - event lifecycle
-// bool OutputDriver::handleReplayBasisEvent(json sourcePacket) {
-// 	this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
-// 	if((double)sourcePacket["meta"]["startTime"] < 0.0) {
-// 		sourcePacket["meta"]["frameNumber"] = -1;
-// 		sourcePacket["meta"]["startTime"] = 0.0;
-// 		YerFace_MutexLock(streamFlagsMutex);
-// 		autoBasisTransmitted = true;
-// 		outputNewFrame(sourcePacket, true);
-// 		YerFace_MutexUnlock(streamFlagsMutex);
-// 		return false;
-// 	}
-// 	handleNewBasisEvent(false);
-// 	return true;
-// }
+void OutputDriver::handleNewBasisEvent(FrameNumber frameNumber) {
+	logger->verbose("Got a Basis Flag event for Frame #%lu. Handling...", frameNumber);
+	YerFace_MutexLock(workerMutex);
+	pendingFrames[frameNumber].frame["meta"]["basis"] = true;
+	YerFace_MutexUnlock(workerMutex);
+}
 
 int OutputDriver::launchWebSocketServer(void *data) {
 	OutputDriver *self = (OutputDriver *)data;
@@ -210,13 +231,12 @@ int OutputDriver::launchWebSocketServer(void *data) {
 
 void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
 	YerFace_MutexLock(this->streamFlagsMutex);
-	std::stringstream jsonString;
-	jsonString << lastBasisFrame.dump(-1, ' ', true);
+	string jsonString = lastBasisFrame.dump(-1, ' ', true);
 	YerFace_MutexUnlock(this->streamFlagsMutex);
 
 	YerFace_MutexLock(this->connectionListMutex);
 	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
-	server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+	server.send(handle, jsonString, websocketpp::frame::opcode::text);
 	connectionList.insert(handle);
 	YerFace_MutexUnlock(this->connectionListMutex);
 }
@@ -231,21 +251,28 @@ void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
 void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
 	if(ec) {
 		logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
-		status->setIsRunning(false);
-		server.stop();
-		return;
+		throw runtime_error("WebSocket server error!");
 	}
-	if(!status->getIsRunning()) {
+	bool continueTimer = true;
+	YerFace_MutexLock(connectionListMutex);
+	if(!websocketServerRunning) {
 		server.stop();
+		continueTimer = false;
 	}
-	serverSetQuitPollTimer();
+	YerFace_MutexUnlock(connectionListMutex);
+	if(continueTimer) {
+		serverSetQuitPollTimer();
+	}
 }
 
 void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
-	outputFrame->frame["meta"] = json::object();
+	// outputFrame->frame["meta"] = json::object();
 	outputFrame->frame["meta"]["frameNumber"] = outputFrame->frameTimestamps.frameNumber;
 	outputFrame->frame["meta"]["startTime"] = outputFrame->frameTimestamps.startTimestamp;
-	outputFrame->frame["meta"]["basis"] = false; //Default to no basis. Will override below as necessary.
+	if(outputFrame->frame["meta"].find("basis") == outputFrame->frame["meta"].end()) {
+		//Default basis unless set earlier.
+		outputFrame->frame["meta"]["basis"] = false;
+	}
 
 	bool allPropsSet = true;
 	FacialPose facialPose = faceTracker->getFacialPose(outputFrame->frameTimestamps.frameNumber);
@@ -280,19 +307,17 @@ void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
 	}
 
 	YerFace_MutexLock(this->streamFlagsMutex);
-	if(basisFlagged) {
+	if((bool)outputFrame->frame["meta"]["basis"]) {
 		autoBasisTransmitted = true;
-		basisFlagged = false;
-		outputFrame->frame["meta"]["basis"] = true;
-		logger->info("Transmitting basis flag based on received basis event.");
+		logger->info("Transmitting basis flag.");
 	}
 	outputNewFrame(outputFrame->frame);
 	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
-void OutputDriver::registerLateFrameData(string key) {
-	lateFrameWaitOn.push_back(key);
-}
+// void OutputDriver::registerLateFrameData(string key) {
+// 	lateFrameWaitOn.push_back(key);
+// }
 
 // void OutputDriver::updateLateFrameData(FrameNumber frameNumber, string key, json value) {
 // 	if(!writerThread) {
@@ -313,60 +338,78 @@ void OutputDriver::registerLateFrameData(string key) {
 // 	YerFace_MutexUnlock(outputBufMutex);
 // }
 
-// void OutputDriver::insertCompletedFrameData(string key, json value) {
-// 	extraFrameData[key] = value;
-// }
+void OutputDriver::insertFrameData(string key, json value, FrameNumber frameNumber) {
+	YerFace_MutexLock(workerMutex);
+	pendingFrames[frameNumber].frame[key] = value;
+	YerFace_MutexUnlock(workerMutex);
+}
 
 void OutputDriver::serverSetQuitPollTimer(void) {
 	server.set_timer(100, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
 }
 
-void OutputDriver::outputNewFrame(json frame, bool replay) {
+void OutputDriver::outputNewFrame(json frame) {
 	YerFace_MutexLock(this->streamFlagsMutex);
 	if(frame["meta"]["basis"]) {
 		lastBasisFrame = frame;
 	}
 	YerFace_MutexUnlock(this->streamFlagsMutex);
 
-	std::stringstream jsonString;
-	jsonString << frame.dump(-1, ' ', true);
+	std::string jsonString;
+	jsonString = frame.dump(-1, ' ', true);
 
 	YerFace_MutexLock(this->connectionListMutex);
 	try {
 		for(auto handle : connectionList) {
-			server.send(handle, jsonString.str(), websocketpp::frame::opcode::text);
+			server.send(handle, jsonString, websocketpp::frame::opcode::text);
 		}
 	} catch (websocketpp::exception const &e) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
 	YerFace_MutexUnlock(this->connectionListMutex);
+
+	if(outputFilename.length() > 0) {
+		outputFilestream << jsonString << "\n";
+	}
 }
 
 bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 	OutputDriver *self = (OutputDriver *)worker->ptr;
 
+	static FrameNumber lastFrameNumber = -1;
 	bool didWork = false;
 	OutputFrameContainer *outputFrame = NULL;
+	FrameNumber myFrameNumber = -1;
 
 	YerFace_MutexLock(self->workerMutex);
 	//// CHECK FOR WORK ////
 	for(auto pendingFramePair : self->pendingFrames) {
-		if(outputFrame == NULL || pendingFramePair.first < outputFrame->frameTimestamps.frameNumber) {
-			if(self->pendingFrames[pendingFramePair.first].isReady() && !self->pendingFrames[pendingFramePair.first].outputProcessed) {
-				outputFrame = &self->pendingFrames[pendingFramePair.first];
+		if(myFrameNumber < 0 || pendingFramePair.first < myFrameNumber) {
+			if(!self->pendingFrames[pendingFramePair.first].outputProcessed) {
+				myFrameNumber = pendingFramePair.first;
 			}
 		}
+	}
+	if(myFrameNumber > 0) {
+		outputFrame = &self->pendingFrames[myFrameNumber];
+	}
+	if(outputFrame != NULL && !outputFrame->isReady()) {
+		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		myFrameNumber = -1;
+		outputFrame = NULL;
 	}
 	YerFace_MutexUnlock(self->workerMutex);
 
 	//// DO THE WORK ////
 	if(outputFrame != NULL) {
 		// self->logger->verbose("Output Worker Thread handling frame #%lld", outputFrame->frameTimestamps.frameNumber);
-		self->handleOutputFrame(outputFrame);
 
-		if(self->outputFilename.length() > 0) {
-			self->outputFilestream << outputFrame->frame.dump(-1, ' ', true) << "\n";
+		if(outputFrame->frameTimestamps.frameNumber <= lastFrameNumber) {
+			throw logic_error("OutputDriver handling frames out of order!");
 		}
+		lastFrameNumber = outputFrame->frameTimestamps.frameNumber;
+
+		self->handleOutputFrame(outputFrame);
 
 		YerFace_MutexLock(self->workerMutex);
 		outputFrame->outputProcessed = true;
@@ -387,6 +430,7 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
 		case FRAME_STATUS_NEW:
+			// self->logger->verbose("handleFrameStatusChange() Frame #%lld appearing as new! Queue depth is now %lu", frameNumber, self->pendingFrames.size());
 			newOutputFrame.frame = json::object();
 			newOutputFrame.outputProcessed = false;
 			newOutputFrame.frameIsDraining = false;
@@ -397,6 +441,7 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			newOutputFrame.frame = json::object();
 			YerFace_MutexLock(self->workerMutex);
 			self->pendingFrames[frameNumber] = newOutputFrame;
+			self->newestFrameTimestamps = frameTimestamps;
 			YerFace_MutexUnlock(self->workerMutex);
 			break;
 		case FRAME_STATUS_DRAINING:
@@ -412,6 +457,14 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			YerFace_MutexUnlock(self->workerMutex);
 			break;
 	}
+}
+
+void OutputDriver::handleFrameServerDrainedEvent(void *userdata) {
+	OutputDriver *self = (OutputDriver *)userdata;
+	// self->logger->verbose("Got notification that FrameServer has drained!");
+	YerFace_MutexLock(self->workerMutex);
+	self->frameServerDrained = true;
+	YerFace_MutexUnlock(self->workerMutex);
 }
 
 }; //namespace YerFace

@@ -38,21 +38,21 @@ public:
 	OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver() noexcept(false);
 	void setEventLogger(EventLogger *myEventLogger);
-	void registerLateFrameData(string key);
+	// void registerLateFrameData(string key);
 	// void updateLateFrameData(FrameNumber frameNumber, string key, json value);
-	// void insertCompletedFrameData(string key, json value);
+	void insertFrameData(string key, json value, FrameNumber frameNumber);
 private:
-	// void handleNewBasisEvent(bool generatedByUserInput);
-	// bool handleReplayBasisEvent(json sourcePacket);
+	void handleNewBasisEvent(FrameNumber frameNumber);
 	static int launchWebSocketServer(void* data);
 	void serverOnOpen(websocketpp::connection_hdl handle);
 	void serverOnClose(websocketpp::connection_hdl handle);
 	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void handleOutputFrame(OutputFrameContainer *outputFrame);
 	void serverSetQuitPollTimer(void);
-	void outputNewFrame(json frame, bool replay = false);
+	void outputNewFrame(json frame);
 	static bool workerHandler(WorkerPoolWorker *worker);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
+	static void handleFrameServerDrainedEvent(void *userdata);
 
 	String outputFilename;
 	Status *status;
@@ -69,11 +69,12 @@ private:
 	bool websocketServerEnabled;
 	websocketpp::server<websocketpp::config::asio> server;
 	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
+	bool websocketServerRunning;
 
 	SDL_Thread *serverThread;
 
 	SDL_mutex *streamFlagsMutex;
-	bool autoBasisTransmitted, basisFlagged;
+	bool autoBasisTransmitted;
 	json lastBasisFrame;
 
 	list<string> lateFrameWaitOn;
@@ -81,6 +82,8 @@ private:
 	WorkerPool *workerPool;
 	SDL_mutex *workerMutex;
 	unordered_map<FrameNumber, OutputFrameContainer> pendingFrames;
+	FrameTimestamps newestFrameTimestamps;
+	bool frameServerDrained;
 };
 
 }; //namespace YerFace
