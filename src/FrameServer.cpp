@@ -153,7 +153,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	}
 
 	frameStore[workingFrame->frameTimestamps.frameNumber] = workingFrame;
-	// logger->verbose("Inserted new working frame %ld into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
+	// logger->verbose("Inserted new working frame " YERFACE_FRAMENUMBER_FORMAT " into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
 
 	setFrameStatus(workingFrame->frameTimestamps, FRAME_STATUS_NEW);
 
@@ -223,7 +223,7 @@ bool FrameServer::isDrained(void) {
 
 void FrameServer::destroyFrame(FrameNumber frameNumber) {
 	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
-	// logger->verbose("Cleaning up GONE Frame #%lld ...", frameNumber);
+	// logger->verbose("Cleaning up GONE Frame #" YERFACE_FRAMENUMBER_FORMAT " ...", frameNumber);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
 }
@@ -232,7 +232,7 @@ void FrameServer::setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameSt
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	frameStore[frameTimestamps.frameNumber]->status = newStatus;
-	// logger->verbose("Setting Frame #%lld Status to %d ...", frameTimestamps.frameNumber, newStatus);
+	// logger->verbose("Setting Frame #" YERFACE_FRAMENUMBER_FORMAT " Status to %d ...", frameTimestamps.frameNumber, newStatus);
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
 		callback.callback(callback.userdata, newStatus, frameTimestamps);
 	}

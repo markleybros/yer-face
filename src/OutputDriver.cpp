@@ -20,8 +20,9 @@ bool OutputFrameContainer::isReady(void) {
 	if(!frameIsDraining) {
 		return false;
 	}
-	for(auto waitingForMe : waitingOn) {
-		if(waitingForMe) {
+	for(auto& waiting : waitingOn.items()) {
+		// fprintf(stderr, "FRAME WAITING ON %s?\n", waiting.key().c_str());
+		if(waiting.value()) {
 			return false;
 		}
 	}
@@ -235,7 +236,7 @@ void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
 	YerFace_MutexUnlock(this->streamFlagsMutex);
 
 	YerFace_MutexLock(this->connectionListMutex);
-	logger->verbose("WebSocket Connection Opened: 0x%X", handle);
+	logger->verbose("WebSocket Connection Opened.");
 	server.send(handle, jsonString, websocketpp::frame::opcode::text);
 	connectionList.insert(handle);
 	YerFace_MutexUnlock(this->connectionListMutex);
@@ -244,7 +245,7 @@ void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
 void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
 	YerFace_MutexLock(this->connectionListMutex);
 	connectionList.erase(handle);
-	logger->verbose("WebSocket Connection Closed: 0x%X", handle);
+	logger->verbose("WebSocket Connection Closed.");
 	YerFace_MutexUnlock(this->connectionListMutex);
 }
 
@@ -315,32 +316,25 @@ void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
 	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
-// void OutputDriver::registerLateFrameData(string key) {
-// 	lateFrameWaitOn.push_back(key);
-// }
-
-// void OutputDriver::updateLateFrameData(FrameNumber frameNumber, string key, json value) {
-// 	if(!writerThread) {
-// 		return;
-// 	}
-// 	YerFace_MutexLock(outputBufMutex);
-// 	bool success = false;
-// 	for(auto iter = outputBuf.begin(); iter != outputBuf.end(); ++iter) {
-// 		if((FrameNumber)iter->frame["meta"]["frameNumber"] == frameNumber) {
-// 			iter->frame[key] = value;
-// 			iter->waitingOn[key] = false;
-// 			success = true;
-// 		}
-// 	}
-// 	if(!success) {
-// 		throw runtime_error("could not update desired frame! buffer slippage or something goofy is going on");
-// 	}
-// 	YerFace_MutexUnlock(outputBufMutex);
-// }
+void OutputDriver::registerFrameData(string key) {
+	YerFace_MutexLock(workerMutex);
+	lateFrameWaitOn.push_back(key);
+	YerFace_MutexUnlock(workerMutex);
+}
 
 void OutputDriver::insertFrameData(string key, json value, FrameNumber frameNumber) {
 	YerFace_MutexLock(workerMutex);
+	if(pendingFrames.find(frameNumber) == pendingFrames.end()) {
+		throw runtime_error("Somebody is trying to insert frame data into a frame number which does not exist!");
+	}
+	if(pendingFrames[frameNumber].waitingOn.find(key) == pendingFrames[frameNumber].waitingOn.end()) {
+		throw runtime_error("Somebody is trying to insert frame data which was not previously registered!");
+	}
+	if(pendingFrames[frameNumber].waitingOn[key] != true) {
+		throw runtime_error("Somebody is trying to insert frame data which was already inserted!");
+	}
 	pendingFrames[frameNumber].frame[key] = value;
+	pendingFrames[frameNumber].waitingOn[key] = false;
 	YerFace_MutexUnlock(workerMutex);
 }
 
@@ -394,7 +388,7 @@ bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 		outputFrame = &self->pendingFrames[myFrameNumber];
 	}
 	if(outputFrame != NULL && !outputFrame->isReady()) {
-		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 		myFrameNumber = -1;
 		outputFrame = NULL;
 	}
@@ -402,7 +396,7 @@ bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(outputFrame != NULL) {
-		// self->logger->verbose("Output Worker Thread handling frame #%lld", outputFrame->frameTimestamps.frameNumber);
+		// self->logger->verbose("Output Worker Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, outputFrame->frameTimestamps.frameNumber);
 
 		if(outputFrame->frameTimestamps.frameNumber <= lastFrameNumber) {
 			throw logic_error("OutputDriver handling frames out of order!");
@@ -430,31 +424,34 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
 		case FRAME_STATUS_NEW:
-			// self->logger->verbose("handleFrameStatusChange() Frame #%lld appearing as new! Queue depth is now %lu", frameNumber, self->pendingFrames.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " appearing as new! Queue depth is now %lu", frameNumber, self->pendingFrames.size());
 			newOutputFrame.frame = json::object();
 			newOutputFrame.outputProcessed = false;
 			newOutputFrame.frameIsDraining = false;
 			newOutputFrame.frameTimestamps = frameTimestamps;
+			newOutputFrame.frame = json::object();
+			YerFace_MutexLock(self->workerMutex);
 			newOutputFrame.waitingOn = json::object();
 			for(string waitOn : self->lateFrameWaitOn) {
 				// self->logger->verbose("WAITING ON: %s", waitOn.c_str());
 				newOutputFrame.waitingOn[waitOn] = true;
 			}
-			newOutputFrame.frame = json::object();
-			YerFace_MutexLock(self->workerMutex);
 			self->pendingFrames[frameNumber] = newOutputFrame;
 			self->newestFrameTimestamps = frameTimestamps;
 			YerFace_MutexUnlock(self->workerMutex);
 			break;
 		case FRAME_STATUS_DRAINING:
 			YerFace_MutexLock(self->workerMutex);
-			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrames.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrames.size());
 			self->pendingFrames[frameNumber].frameIsDraining = true;
 			YerFace_MutexUnlock(self->workerMutex);
 			self->workerPool->sendWorkerSignal();
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->workerMutex);
+			if(!self->pendingFrames[frameNumber].outputProcessed) {
+				throw logic_error("Frame is gone, but not yet processed!");
+			}
 			self->pendingFrames.erase(frameNumber);
 			YerFace_MutexUnlock(self->workerMutex);
 			break;

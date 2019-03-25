@@ -16,7 +16,7 @@
 #include "Metrics.hpp"
 #include "Utilities.hpp"
 #include "OutputDriver.hpp"
-// #include "SphinxDriver.hpp"
+#include "SphinxDriver.hpp"
 #include "EventLogger.hpp"
 #include "ImageSequence.hpp"
 #include "PreviewHUD.hpp"
@@ -73,7 +73,7 @@ FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
 OutputDriver *outputDriver = NULL;
-// SphinxDriver *sphinxDriver = NULL;
+SphinxDriver *sphinxDriver = NULL;
 EventLogger *eventLogger = NULL;
 ImageSequence *imageSequence = NULL;
 PreviewHUD *previewHUD = NULL;
@@ -226,9 +226,9 @@ int main(int argc, const char** argv) {
 	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
 	faceMapper = new FaceMapper(config, status, frameServer, faceTracker, previewHUD);
 	outputDriver = new OutputDriver(config, outData, status, frameServer, faceTracker, sdlDriver);
-	// if(ffmpegDriver->getIsAudioInputPresent()) {
-	// 	sphinxDriver = new SphinxDriver(config, frameServer, ffmpegDriver, sdlDriver, outputDriver, lowLatency);
-	// }
+	if(ffmpegDriver->getIsAudioInputPresent()) {
+		sphinxDriver = new SphinxDriver(config, status, frameServer, ffmpegDriver, sdlDriver, outputDriver, previewHUD, lowLatency);
+	}
 	eventLogger = new EventLogger(config, inEvents, status, outputDriver, frameServer);
 	if(previewImgSeq.length() > 0) {
 		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
@@ -334,9 +334,9 @@ int main(int argc, const char** argv) {
 		delete imageSequence;
 	}
 	delete eventLogger;
-	// if(sphinxDriver != NULL) {
-	// 	delete sphinxDriver;
-	// }
+	if(sphinxDriver != NULL) {
+		delete sphinxDriver;
+	}
 	delete outputDriver;
 	delete faceMapper;
 	delete faceTracker;
@@ -458,6 +458,7 @@ void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
 	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
 	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density);
 	faceMapper->renderPreviewHUD(previewFrame, frameNumber, density);
+	sphinxDriver->renderPreviewHUD(previewFrame, frameNumber, density);
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }

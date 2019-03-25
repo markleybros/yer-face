@@ -25,6 +25,8 @@ EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, Outp
 		throw runtime_error("Failed creating mutex!");
 	}
 
+	outputDriver->registerFrameData("events");
+
 	eventReplay = false;
 	replayWorkerPool = NULL;
 	frameEvents.clear();
@@ -139,7 +141,7 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 		double frameEnd = frameTimestamps.estimatedEndTimestamp - frameDurationHalf;
 		double packetTime = nextPacket["meta"]["startTime"];
 		// if(nextPacket.find("events") != nextPacket.end()) {
-		// 	logger->verbose("==== EVENT REPLAY ATTEMPT: [packetTime: %lf, currentFrameNumber: %ld, currentFrameStart: %lf, currentFrameEnd: %lf]; Candidate Packet Events: %s", packetTime, frameTimestamps.frameNumber, frameStart, frameEnd, nextPacket["events"].dump(-1, ' ', true).c_str());
+		// 	logger->verbose("==== EVENT REPLAY ATTEMPT: [packetTime: %lf, currentFrameNumber: " YERFACE_FRAMENUMBER_FORMAT ", currentFrameStart: %lf, currentFrameEnd: %lf]; Candidate Packet Events: %s", packetTime, frameTimestamps.frameNumber, frameStart, frameEnd, nextPacket["events"].dump(-1, ' ', true).c_str());
 		// }
 		if(packetTime < frameEnd) {
 			if(packetTime >= 0.0 && packetTime < (frameStart - frameDurationHalf)) {
@@ -197,9 +199,7 @@ void EventLogger::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 			break;
 		case FRAME_STATUS_LATE_PROCESSING:
 			YerFace_MutexLock(self->myMutex);
-			if(self->frameEvents[frameNumber].size() > 0) {
-				self->outputDriver->insertFrameData("events", self->frameEvents[frameNumber], frameNumber);
-			}
+			self->outputDriver->insertFrameData("events", self->frameEvents[frameNumber], frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
 			break;
 		case FRAME_STATUS_GONE:
@@ -226,7 +226,7 @@ bool EventLogger::replayWorkerHandler(WorkerPoolWorker *worker) {
 		}
 	}
 	if(myFrameNumber > 0 && !self->pendingReplayFrames[myFrameNumber].readyForReplay) {
-		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 		myFrameNumber = -1;
 	}
 	if(myFrameNumber > 0) {

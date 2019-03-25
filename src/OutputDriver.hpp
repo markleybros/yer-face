@@ -38,8 +38,7 @@ public:
 	OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver() noexcept(false);
 	void setEventLogger(EventLogger *myEventLogger);
-	// void registerLateFrameData(string key);
-	// void updateLateFrameData(FrameNumber frameNumber, string key, json value);
+	void registerFrameData(string key);
 	void insertFrameData(string key, json value, FrameNumber frameNumber);
 private:
 	void handleNewBasisEvent(FrameNumber frameNumber);
@@ -77,10 +76,9 @@ private:
 	bool autoBasisTransmitted;
 	json lastBasisFrame;
 
-	list<string> lateFrameWaitOn;
-
 	WorkerPool *workerPool;
 	SDL_mutex *workerMutex;
+	list<string> lateFrameWaitOn;
 	unordered_map<FrameNumber, OutputFrameContainer> pendingFrames;
 	FrameTimestamps newestFrameTimestamps;
 	bool frameServerDrained;

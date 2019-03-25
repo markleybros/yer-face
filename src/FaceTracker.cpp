@@ -633,7 +633,7 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
 		case FRAME_STATUS_TRACKING:
-			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
 			YerFace_MutexLock(self->myMutex);
 			self->pendingPredictionFrameNumbers.push_back(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
@@ -716,7 +716,7 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 		}
 	}
 	if(myFrameNumber > 0 && !self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment) {
-		// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 		myFrameNumber = -1;
 	}
 	if(myFrameNumber > 0) {
@@ -733,7 +733,7 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		// self->logger->verbose("Face Tracker Assignment Thread handling frame #%lld", myFrameNumber);
+		// self->logger->verbose("Face Tracker Assignment Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
 		if(myFrameNumber <= lastFrameNumber) {
 			throw logic_error("FaceTracker handling frames out of order!");
 		}

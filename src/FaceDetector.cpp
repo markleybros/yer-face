@@ -169,7 +169,7 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 		detection.set = true;
 	}
 
-	// logger->verbose("==== WORKER #%d FINISHED DETECTION FOR FRAME #%lld", worker->num, detection.timestamps.frameNumber);
+	// logger->verbose("==== WORKER #%d FINISHED DETECTION FOR FRAME #" YERFACE_FRAMENUMBER_FORMAT, worker->num, detection.timestamps.frameNumber);
 
 	bool resultUsed = false;
 	YerFace_MutexLock(detectionsMutex);
@@ -197,7 +197,7 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceDetector *self = (FaceDetector *)userdata;
-	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
+	// self->logger->verbose("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
 	FacialDetectionBox detection;
 	FaceDetectorAssignmentTask assignment;
 	switch(newStatus) {
@@ -218,7 +218,7 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 		case FRAME_STATUS_DETECTION:
 			YerFace_MutexLock(self->myAssignmentMutex);
 			self->assignmentFrameNumbers[frameNumber].readyForAssignment = true;
-			// self->logger->verbose("handleFrameStatusChange() Frame #%lld waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->assignmentFrameNumbers.size());
 			YerFace_MutexUnlock(self->myAssignmentMutex);
 			self->assignmentWorkerPool->sendWorkerSignal();
 			break;
@@ -261,12 +261,12 @@ bool FaceDetector::detectionWorkerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(taskSet) {
-		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, task.myFrameNumber);
+		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, task.myFrameNumber);
 		MetricsTick tick = self->metrics->startClock();
 
-		// self->logger->verbose("Thread #%d, Frame #%lld - RUNNING Detection", worker->num, task.myFrameNumber);
+		// self->logger->verbose("Thread #%d, Frame #" YERFACE_FRAMENUMBER_FORMAT " - RUNNING Detection", worker->num, task.myFrameNumber);
 		self->doDetectFace(innerWorker, task);
-		// self->logger->verbose("Thread #%d, Frame #%lld - FINISHED Detection", worker->num, task.myFrameNumber);
+		// self->logger->verbose("Thread #%d, Frame #" YERFACE_FRAMENUMBER_FORMAT " - FINISHED Detection", worker->num, task.myFrameNumber);
 
 		self->metrics->endClock(tick);
 		didWork = true;
@@ -293,7 +293,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 			}
 		}
 		if(myFrameNumber > 0 && !self->assignmentFrameNumbers[myFrameNumber].readyForAssignment) {
-			// self->logger->verbose("BLOCKED on frame %ld because it is not ready!", myFrameNumber);
+			// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 			myFrameNumber = -1;
 		}
 		if(myFrameNumber > 0) {
@@ -305,7 +305,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		// self->logger->verbose("Assignment Thread handling frame #%lld", myFrameNumber);
+		// self->logger->verbose("Assignment Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
 		if(myFrameNumber <= lastFrameNumber) {
 			throw logic_error("FaceDetector handling frames out of order!");
 		}
@@ -320,13 +320,13 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 			if(myFrameTimestamps.startTimestamp <= latestDetectionUsableUntil) {
 				self->detections[myFrameNumber] = self->latestDetection;
 				frameAssigned = true;
-				// self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #%lld (LD Frame #%lld)", myFrameNumber, self->latestDetection.timestamps.frameNumber);
+				// self->logger->verbose("==== SUCCESSFUL ASSIGNMENT ON FRAME #" YERFACE_FRAMENUMBER_FORMAT " (LD Frame #" YERFACE_FRAMENUMBER_FORMAT ")", myFrameNumber, self->latestDetection.timestamps.frameNumber);
 			}
 		}
 		YerFace_MutexUnlock(self->detectionsMutex);
 
 		if(myFrameNumber != lastDetectionRequested) {
-			// self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #%lld", myFrameNumber);
+			// self->logger->verbose("==== REQUESTING A DETECTION ON FRAME #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
 			lastDetectionRequested = myFrameNumber;
 			FaceDetectionTask task;
 			task.myFrameNumber = myFrameNumber;
@@ -347,7 +347,7 @@ bool FaceDetector::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 			didWork = true;
 		} else {
 			if(lastFrameBlockedWarning != myFrameNumber) {
-				self->logger->warn("Uh-oh! We are blocked on a Face Detection Task for frame #%lld. If this happens a lot, consider some tuning.", myFrameNumber);
+				self->logger->warn("Uh-oh! We are blocked on a Face Detection Task for frame #" YERFACE_FRAMENUMBER_FORMAT ". If this happens a lot, consider some tuning.", myFrameNumber);
 				lastFrameBlockedWarning = myFrameNumber;
 			}
 		}

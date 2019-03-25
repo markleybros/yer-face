@@ -174,7 +174,7 @@ void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceMapper *self = (FaceMapper *)userdata;
 	FaceMapperPendingFrame newFrame;
-	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
+	// self->logger->verbose("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
@@ -190,7 +190,7 @@ void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 			}
 			break;
 		case FRAME_STATUS_MAPPING:
-			// self->logger->verbose("handleFrameStatusChange() Frame #%lld entered MAPPING.", frameNumber);
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " entered MAPPING.", frameNumber);
 			YerFace_MutexLock(self->myMutex);
 			self->pendingFrames[frameNumber].hasEnteredMapping = true;
 			YerFace_MutexUnlock(self->myMutex);
@@ -229,7 +229,7 @@ bool FaceMapper::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, myFrameNumber);
+		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, myFrameNumber);
 		if(myFrameNumber <= lastFrameNumber) {
 			throw logic_error("FaceMapper handling frames out of order!");
 		}

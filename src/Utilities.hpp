@@ -66,7 +66,9 @@ public:
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
 };
 
-typedef signed long long int FrameNumber;
+typedef intmax_t FrameNumber;
+#define YERFACE_FRAMENUMBER_FORMATINNER PRIdMAX
+#define YERFACE_FRAMENUMBER_FORMAT "%" YERFACE_FRAMENUMBER_FORMATINNER
 
 class FrameTimestamps {
 public:

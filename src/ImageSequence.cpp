@@ -88,7 +88,7 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(outputFrameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, outputFrameNumber);
+		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, outputFrameNumber);
 
 		MetricsTick tick = self->metrics->startClock();
 
@@ -102,8 +102,8 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 
 		int filenameLength = self->outputPrefix.length() + 32;
 		char filename[filenameLength];
-		snprintf(filename, filenameLength, "%s-%06lld.png", self->outputPrefix.c_str(), outputFrameNumber);
-		self->logger->verbose("Thread #%d writing preview frame #%lld to file: %s ", worker->num, outputFrameNumber, filename);
+		snprintf(filename, filenameLength, "%s-%06" YERFACE_FRAMENUMBER_FORMATINNER ".png", self->outputPrefix.c_str(), outputFrameNumber);
+		self->logger->verbose("Thread #%d writing preview frame #" YERFACE_FRAMENUMBER_FORMAT " to file: %s ", worker->num, outputFrameNumber, filename);
 		imwrite(filename, previewFrameCopy);
 
 		self->metrics->endClock(tick);
@@ -116,7 +116,7 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 void ImageSequence::handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	ImageSequence *self = (ImageSequence *)userdata;
-	// self->logger->verbose("Got notification that Frame #%lld has transitioned to LATE_PROCESSING.", frameNumber);
+	// self->logger->verbose("Got notification that Frame #" YERFACE_FRAMENUMBER_FORMAT " has transitioned to LATE_PROCESSING.", frameNumber);
 	//It is not safe or recommended to perform ANY work during a FrameStatusChangeEventCallback.
 	//(Notably, any attempt to operate on the frame is very likely to deadlock.)
 	//The only thing we can (and should) do is record the frame number in the list of frames we care about.

@@ -111,7 +111,7 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(frameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #%lld", worker->num, frameNumber);
+		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, frameNumber);
 		MetricsTick tick = self->metrics->startClock();
 
 		int density = self->status->getPreviewDebugDensity();
@@ -137,7 +137,7 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	PreviewHUD *self = (PreviewHUD *)userdata;
-	// self->logger->verbose("Handling Frame Status Change for Frame Number %lld to Status %d", frameNumber, newStatus);
+	// self->logger->verbose("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
