@@ -348,6 +348,7 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	YerFace_MutexLock(audioContext.demuxerMutex);
 
 	AudioFrameHandler *handler = new AudioFrameHandler();
+	handler->drained = false;
 	handler->audioFrameCallback = audioFrameCallback;
 	handler->resampler.swrContext = NULL;
 	handler->resampler.audioFrameBackings.clear();
@@ -657,11 +658,6 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 				// logger->verbose("Pumping VIDEO stream.");
 				pumpDemuxer(context, &packet, type);
 			}
-
-			if(getIsVideoDraining() && getIsVideoFrameBufferEmpty()) {
-				logger->verbose("Draining Video complete. Demuxer thread terminating...");
-				context->demuxerRunning = false;
-			}
 		} else {
 			if(!getIsAudioDraining()) {
 				// logger->verbose("Pumping AUDIO stream.");
@@ -673,10 +669,31 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 			flushAudioHandlers(getIsAudioDraining());
 		}
 
+		if(type == AVMEDIA_TYPE_VIDEO && getIsVideoDraining()) {
+			logger->verbose("Draining Video Demuxer complete. Demuxer thread terminating...");
+			context->demuxerRunning = false;
+		}
+		if((type == AVMEDIA_TYPE_AUDIO || includeAudio) && getIsAudioDraining()) {
+			logger->verbose("Draining Audio Demuxer complete. Demuxer thread terminating...");
+			context->demuxerRunning = false;
+		}
+
 		if(context->demuxerRunning) {
 			YerFace_MutexUnlock(context->demuxerMutex);
 			SDL_Delay(0); //All we want to do here is relinquish our execution thread. We still want to get it back asap.
 			YerFace_MutexLock(context->demuxerMutex);
+		}
+	}
+
+	if(type == AVMEDIA_TYPE_AUDIO || includeAudio) {
+		for(AudioFrameHandler *handler : audioFrameHandlers) {
+			if(handler->drained) {
+				throw runtime_error("Audio handler drained more than once?!");
+			}
+			if(handler->audioFrameCallback.isDrainedCallback != NULL) {
+				handler->audioFrameCallback.isDrainedCallback(handler->audioFrameCallback.userdata);
+			}
+			handler->drained = true;
 		}
 	}
 
@@ -729,7 +746,7 @@ bool FFmpegDriver::flushAudioHandlers(bool draining) {
 			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
 			if(nextFrame.timestamp < myNewestVideoFrameEstimatedEndTimestamp || draining || lowLatency) {
 				if(callbacksOkay) {
-					handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
+					handler->audioFrameCallback.audioFrameCallback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
 				}
 				av_freep(&nextFrame.bufferArray[0]);
 				av_freep(&nextFrame.bufferArray);
@@ -749,6 +766,9 @@ bool FFmpegDriver::getIsAudioInputPresent(void) {
 
 bool FFmpegDriver::getIsAudioDraining(void) {
 	//// WARNING! Do *NOT* call this function with either videoStreamMutex or audioStreamMutex locked!
+	if(!status->getIsRunning()) {
+		return true;
+	}
 	YerFace_MutexLock(videoStreamMutex);
 	YerFace_MutexLock(audioStreamMutex);
 	bool ret = (audioContext.formatContext != NULL && audioContext.demuxerDraining) || \
@@ -759,6 +779,9 @@ bool FFmpegDriver::getIsAudioDraining(void) {
 }
 
 bool FFmpegDriver::getIsVideoDraining(void) {
+	if(!status->getIsRunning()) {
+		return true;
+	}
 	YerFace_MutexLock(videoStreamMutex);
 	bool ret = videoContext.demuxerDraining;
 	YerFace_MutexUnlock(videoStreamMutex);

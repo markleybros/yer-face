@@ -40,6 +40,7 @@ public:
 	WorkerPool(json config, Status *myStatus, FrameServer *myFrameServer, WorkerPoolParameters myParameters);
 	~WorkerPool() noexcept(false);
 	void sendWorkerSignal(void);
+	void stopWorkerNow(void);
 private:
 	static void handleFrameServerDrainedEvent(void *userdata);
 	static int outerWorkerLoop(void *ptr);
@@ -53,7 +54,7 @@ private:
 	SDL_mutex *myMutex;
 	SDL_cond *myCond;
 
-	bool frameServerDrained;
+	bool frameServerDrained, running;
 
 	std::list<WorkerPoolWorker *> workers;
 };

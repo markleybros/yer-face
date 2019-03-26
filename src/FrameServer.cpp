@@ -105,7 +105,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 		throw logic_error("Can't insert new frame while draining!");
 	}
 
-	if(frameStore.size() >= YERFACE_FRAMESERVER_MAX_QUEUEDEPTH) {
+	if(lowLatency && frameStore.size() >= YERFACE_FRAMESERVER_MAX_QUEUEDEPTH) {
 		logger->warn("FrameStore has hit the maximum allowable queue depth of %d! Main loop is now BLOCKED! If this happens a lot, consider some tuning.", YERFACE_FRAMESERVER_MAX_QUEUEDEPTH);
 		while(frameStore.size() >= YERFACE_FRAMESERVER_MAX_QUEUEDEPTH) {
 			YerFace_MutexUnlock(myMutex);

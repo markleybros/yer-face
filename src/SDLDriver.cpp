@@ -98,7 +98,8 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 			throw runtime_error("encountered unsupported audio sample format");
 		}
 		audioFrameCallback.sampleRate = audioDevice.obtained.freq;
-		audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
+		audioFrameCallback.audioFrameCallback = FFmpegDriverAudioFrameCallback;
+		audioFrameCallback.isDrainedCallback = NULL;
 		ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 
 		FrameStatusChangeEventCallback frameStatusChangeCallback;

@@ -76,7 +76,8 @@ public:
 	enum AVSampleFormat sampleFormat;
 	int sampleRate;
 	void *userdata;
-	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> callback;
+	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> audioFrameCallback;
+	std::function<void(void *userdata)> isDrainedCallback;
 };
 
 class AudioFrameBacking {
@@ -97,6 +98,7 @@ public:
 
 class AudioFrameHandler {
 public:
+	bool drained;
 	AudioFrameResampler resampler;
 	AudioFrameCallback audioFrameCallback;
 };

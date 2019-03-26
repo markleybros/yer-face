@@ -67,8 +67,8 @@
       "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
-      "averageOverSeconds": 1.0,
-      "reportEverySeconds": 3.0
+      "averageOverSeconds": 30.0,
+      "reportEverySeconds": 5.0
     },
     "OutputDriver": {
       "websocketServerEnabled": true,

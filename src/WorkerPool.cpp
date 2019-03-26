@@ -34,6 +34,8 @@ WorkerPool::WorkerPool(json config, Status *myStatus, FrameServer *myFrameServer
 		throw invalid_argument("numWorkersPerCPU is nonsense.");
 	}
 
+	running = true;
+
 	//Hook into the frame lifecycle.
 
 	//We need to know when the frame server has drained.
@@ -58,9 +60,6 @@ WorkerPool::WorkerPool(json config, Status *myStatus, FrameServer *myFrameServer
 		WorkerPoolWorker *worker = new WorkerPoolWorker();
 		worker->num = i;
 		worker->ptr = parameters.usrPtr;
-		if(parameters.initializer != NULL) {
-			parameters.initializer(worker, parameters.usrPtr);
-		}
 		worker->self = (void *)this;
 		if((worker->thread = SDL_CreateThread(outerWorkerLoop, parameters.name.c_str(), (void *)worker)) == NULL) {
 			throw runtime_error("Failed starting thread!");
@@ -75,16 +74,15 @@ WorkerPool::~WorkerPool() noexcept(false) {
 	logger->debug("WorkerPool object destructing...");
 
 	YerFace_MutexLock(myMutex);
-	if(!frameServerDrained) {
-		logger->error("Frame server has not finished draining! Here be dragons!");
+	if(!frameServerDrained && running) {
+		logger->error("Frame server has not finished draining and nobody explicitly told us to stop! Here be dragons!");
+		running = false;
+		SDL_CondBroadcast(myCond);
 	}
 	YerFace_MutexUnlock(myMutex);
 
 	for(auto worker : workers) {
 		SDL_WaitThread(worker->thread, NULL);
-		if(parameters.deinitializer != NULL) {
-			parameters.deinitializer(worker, parameters.usrPtr);
-		}
 		delete worker;
 	}
 
@@ -99,12 +97,19 @@ void WorkerPool::sendWorkerSignal(void) {
 	YerFace_MutexUnlock(myMutex);
 }
 
+void WorkerPool::stopWorkerNow(void) {
+	YerFace_MutexLock(myMutex);
+	running = false;
+	SDL_CondBroadcast(myCond);
+	YerFace_MutexUnlock(myMutex);
+}
+
 void WorkerPool::handleFrameServerDrainedEvent(void *userdata) {
 	WorkerPool *self = (WorkerPool *)userdata;
 	// self->logger->verbose("Got notification that FrameServer has drained!");
 	YerFace_MutexLock(self->myMutex);
 	self->frameServerDrained = true;
-	SDL_CondSignal(self->myCond);
+	SDL_CondBroadcast(self->myCond);
 	YerFace_MutexUnlock(self->myMutex);
 }
 
@@ -113,8 +118,12 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 	WorkerPool *self = (WorkerPool *)worker->self;
 	self->logger->verbose("Worker Thread #%d Alive!", worker->num);
 
+	if(self->parameters.initializer != NULL) {
+		self->parameters.initializer(worker, self->parameters.usrPtr);
+	}
+
 	YerFace_MutexLock(self->myMutex);
-	while(!self->frameServerDrained) {
+	while(!self->frameServerDrained && self->running) {
 		// self->logger->verbose("Thread #%d Top of Loop", worker->num);
 
 		if(self->status->getIsPaused() && self->status->getIsRunning()) {
@@ -143,6 +152,10 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 		}
 	}
 	YerFace_MutexUnlock(self->myMutex);
+
+	if(self->parameters.deinitializer != NULL) {
+		self->parameters.deinitializer(worker, self->parameters.usrPtr);
+	}
 
 	self->logger->verbose("Thread #%d Done.", worker->num);
 	return 0;

@@ -28,7 +28,7 @@ namespace YerFace {
 class PrestonBlairPhonemes {
 public:
 	PrestonBlairPhonemes(void);
-	json seen, percent;
+	json percent;
 };
 
 class SphinxPhoneme {
@@ -59,21 +59,12 @@ public:
 class SphinxVideoFrame {
 public:
 	bool isLipFlappingReady, isLipFlappingProcessed;
+	bool isPhonemeBreakdownReady, isPhonemeBreakdownProcessed;
 	FrameTimestamps timestamps;
-	// double realEndTimestamp;
 	PrestonBlairPhonemes phonemes;
 	bool peak;
 	double maxAmplitude;
 };
-
-// class SphinxWorkingVariables {
-// public:
-// 	SphinxWorkingVariables(void);
-// 	PrestonBlairPhonemes lipFlapping;
-// 	int framesIncluded;
-// 	double maxAmplitude;
-// 	bool peak, inSpeech;
-// };
 
 class SphinxDriver {
 public:
@@ -81,16 +72,18 @@ public:
 	~SphinxDriver() noexcept(false);
 	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
 private:
-	// void processPhonemesIntoVideoFrames(bool draining);
-	// void handleProcessedVideoFrames(void);
-	void processUtteranceHypothesis(SphinxRecognizerResult *result);
+	bool processPhonemeBreakdown(SphinxVideoFrame *videoFrame);
+	void processUtteranceHypothesis(void);
 	void processAudioAmplitude(SphinxAudioFrame *audioFrame, SphinxRecognizerResult *result);
 	void processLipFlappingAudio(SphinxVideoFrame *videoFrame);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
+	static void FFmpegDriverAudioIsDrainedCallback(void *userdata);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static bool recognitionWorkerHandler(WorkerPoolWorker *worker);
+	static void recognitionWorkerDeinitializer(WorkerPoolWorker *worker, void *usrPtr);
 	static bool lipFlappingWorkerHandler(WorkerPoolWorker *worker);
+	static bool phonemeBreakdownWorkerHandler(WorkerPoolWorker *worker);
 	
 	string hiddenMarkovModel, allPhoneLM;
 	string lipFlappingTargetPhoneme;
@@ -112,6 +105,7 @@ private:
 
 	WorkerPool *recognitionWorkerPool;
 	SDL_mutex *recognitionMutex;
+	bool recognizerRunning, recognizerDrained;
 	double timestampOffset;
 	bool timestampOffsetSet;
 	list<SphinxAudioFrame *> audioFrameQueue;
@@ -120,8 +114,9 @@ private:
 	int utteranceIndex;
 	list<SphinxRecognizerResult> recognitionResults;
 	list<SphinxPhoneme> phonemeBuffer;
+	double lastProcessedPhonemeEndTime;
 
-	WorkerPool *lipFlappingWorkerPool;
+	WorkerPool *lipFlappingWorkerPool, *phonemeBreakdownWorkerPool;
 	SDL_mutex *workingVideoFramesMutex;
 	unordered_map<FrameNumber, SphinxVideoFrame *> workingVideoFrames;
 };
