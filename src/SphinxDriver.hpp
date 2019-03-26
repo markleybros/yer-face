@@ -43,7 +43,6 @@ public:
 	double startTimestamp, endTimestamp;
 	double maxAmplitude;
 	bool peak, inSpeech;
-	list<SphinxPhoneme> phonemeBuffer;
 };
 
 class SphinxAudioFrame {
@@ -80,7 +79,6 @@ class SphinxDriver {
 public:
 	SphinxDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, PreviewHUD *myPreviewHUD, bool myLowLatency);
 	~SphinxDriver() noexcept(false);
-	// void advanceWorkingToCompleted(void);
 	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
 private:
 	// void processPhonemesIntoVideoFrames(bool draining);
@@ -121,10 +119,11 @@ private:
 	bool utteranceRestarted, inSpeech;
 	int utteranceIndex;
 	list<SphinxRecognizerResult> recognitionResults;
+	list<SphinxPhoneme> phonemeBuffer;
 
 	WorkerPool *lipFlappingWorkerPool;
-	SDL_mutex *lipFlappingMutex;
-	unordered_map<FrameNumber, SphinxVideoFrame *> pendingLipFlappingFrames;
+	SDL_mutex *workingVideoFramesMutex;
+	unordered_map<FrameNumber, SphinxVideoFrame *> workingVideoFrames;
 };
 
 }; //namespace YerFace

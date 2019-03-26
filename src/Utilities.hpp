@@ -42,6 +42,15 @@ namespace YerFace {
 
 #endif
 
+class TimeIntervalComparison {
+public:
+	bool doesAEndBeforeB;
+	bool doesAOccurBeforeB;
+	bool doesAOccurDuringB;
+	bool doesAOccurAfterB;
+	bool doesAStartAfterB;
+};
+
 class Utilities {
 public:
 	static double normalize(double x, double length);
@@ -51,6 +60,7 @@ public:
 	static Point2d averagePoint(std::vector<Point2d> points);
 	static double lineDistance(Point2d a, Point2d b);
 	static double lineDistance(Point3d a, Point3d b);
+	static TimeIntervalComparison timeIntervalCompare(double startTimeA, double endTimeA, double startTimeB, double endTimeB);
 	static double degreesToRadians(double degrees);
 	static double radiansToDegrees(double radians, bool normalize = true);
 	static Vec3d rotationMatrixToEulerAngles(Mat &R, bool returnDegrees = true, bool degreesReflectAroundZero = true);
