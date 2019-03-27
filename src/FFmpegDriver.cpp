@@ -115,6 +115,7 @@ FFmpegDriver::~FFmpegDriver() {
 		}
 		delete handler;
 	}
+	sws_freeContext(swsContext);
 	delete logger;
 }
 
