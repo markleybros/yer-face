@@ -85,7 +85,6 @@ SphinxDriver::SphinxDriver(json config, Status *myStatus, FrameServer *myFrameSe
 		throw runtime_error("Failed to create PocketSphinx speech recognizer!");
 	}
 	
-	lastProcessedPhonemeEndTime = -1.0;
 	utteranceIndex = 1;
 	if(ps_start_utt(pocketSphinx) != 0) {
 		throw runtime_error("Failed to start PocketSphinx utterance");
@@ -192,11 +191,18 @@ SphinxDriver::~SphinxDriver() noexcept(false) {
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
 
+	for(SphinxAudioFrame *audioFrame : audioFramesAllocated) {
+		if(audioFrame->inUse) {
+			logger->error("About to free an in-use audio frame! Uh oh!");
+		}
+		av_freep(&audioFrame->buf);
+		delete audioFrame;
+	}
+
 	delete logger;
 }
 
 void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
-
 	static double vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 
 	if(density > 0) {
@@ -400,6 +406,7 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 	audioFrame->bufferSize = desiredBufferSize;
 	audioFrame->pos = 0;
 	audioFrame->inUse = true;
+	audioFramesAllocated.push_front(audioFrame);
 	YerFace_MutexUnlock(recognitionMutex);
 	return audioFrame;
 }

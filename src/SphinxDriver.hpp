@@ -114,7 +114,6 @@ private:
 	int utteranceIndex;
 	list<SphinxRecognizerResult> recognitionResults;
 	list<SphinxPhoneme> phonemeBuffer;
-	double lastProcessedPhonemeEndTime;
 
 	WorkerPool *lipFlappingWorkerPool, *phonemeBreakdownWorkerPool;
 	SDL_mutex *workingVideoFramesMutex;
