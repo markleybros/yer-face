@@ -67,7 +67,7 @@
       "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
-      "averageOverSeconds": 30.0,
+      "averageOverSeconds": 5.0,
       "reportEverySeconds": 5.0
     },
     "OutputDriver": {

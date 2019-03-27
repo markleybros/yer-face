@@ -222,8 +222,8 @@ bool FrameServer::isDrained(void) {
 }
 
 void FrameServer::destroyFrame(FrameNumber frameNumber) {
-	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
 	// logger->verbose("Cleaning up GONE Frame #" YERFACE_FRAMENUMBER_FORMAT " ...", frameNumber);
+	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
 }

@@ -118,11 +118,9 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 
 		WorkingFrame *previewFrame = self->frameServer->getWorkingFrame(frameNumber);
 		YerFace_MutexLock(previewFrame->previewFrameMutex);
-
 		for(auto renderer : myRenderers) {
 			renderer(previewFrame->previewFrame, frameNumber, density);
 		}
-
 		YerFace_MutexUnlock(previewFrame->previewFrameMutex);
 
 		self->frameServer->setWorkingFrameStatusCheckpoint(frameNumber, FRAME_STATUS_PREVIEWING, "previewHUD.ran");

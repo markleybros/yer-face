@@ -9,9 +9,9 @@
 #include "Status.hpp"
 #include "SDLDriver.hpp"
 #include "FFmpegDriver.hpp"
+#include "FrameServer.hpp"
 #include "FaceDetector.hpp"
 #include "FaceTracker.hpp"
-#include "FrameServer.hpp"
 #include "FaceMapper.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
@@ -458,7 +458,9 @@ void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
 	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
 	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density);
 	faceMapper->renderPreviewHUD(previewFrame, frameNumber, density);
-	sphinxDriver->renderPreviewHUD(previewFrame, frameNumber, density);
+	if(sphinxDriver != NULL) {
+		sphinxDriver->renderPreviewHUD(previewFrame, frameNumber, density);
+	}
 	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
 }
