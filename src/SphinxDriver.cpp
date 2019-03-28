@@ -166,7 +166,9 @@ SphinxDriver::~SphinxDriver() noexcept(false) {
 	YerFace_MutexUnlock(recognitionMutex);
 
 	delete lipFlappingWorkerPool;
-	delete phonemeBreakdownWorkerPool;
+	if(!lowLatency) {
+		delete phonemeBreakdownWorkerPool;
+	}
 
 	YerFace_MutexLock(workingVideoFramesMutex);
 	if(workingVideoFrames.size() > 0) {
