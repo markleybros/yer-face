@@ -480,7 +480,7 @@ void SphinxDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			break;
 		case FRAME_STATUS_LATE_PROCESSING:
 			YerFace_MutexLock(self->workingVideoFramesMutex);
-			self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on Phoneme Breakdown Worker. Queue depth is now %lu", frameNumber, self->workingVideoFrames.size());
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on Phoneme Breakdown Worker. Queue depth is now %lu", frameNumber, self->workingVideoFrames.size());
 			self->workingVideoFrames[frameNumber]->isPhonemeBreakdownReady = true;
 			YerFace_MutexUnlock(self->workingVideoFramesMutex);
 			self->phonemeBreakdownWorkerPool->sendWorkerSignal();

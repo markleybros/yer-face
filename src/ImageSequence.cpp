@@ -32,12 +32,12 @@ ImageSequence::ImageSequence(json config, Status *myStatus, FrameServer *myFrame
 	//We want to know when any frame has entered LATE_PROCESSING.
 	FrameStatusChangeEventCallback frameStatusLateProcessingCallback;
 	frameStatusLateProcessingCallback.userdata = (void *)this;
-	frameStatusLateProcessingCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+	frameStatusLateProcessingCallback.newStatus = FRAME_STATUS_PREVIEW_DISPLAY;
 	frameStatusLateProcessingCallback.callback = handleFrameStatusLateProcessing;
 	frameServer->onFrameStatusChangeEvent(frameStatusLateProcessingCallback);
 
-	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_LATE_PROCESSING without our blessing.
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "imageSequence.written");
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREVIEW_DISPLAY without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEW_DISPLAY, "imageSequence.written");
 
 	WorkerPoolParameters workerPoolParameters;
 	workerPoolParameters.name = "ImageSequence";
@@ -98,7 +98,7 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 		Mat previewFrameCopy = previewFrame->previewFrame.clone();
 		YerFace_MutexUnlock(previewFrame->previewFrameMutex);
 
-		self->frameServer->setWorkingFrameStatusCheckpoint(outputFrameNumber, FRAME_STATUS_LATE_PROCESSING, "imageSequence.written");
+		self->frameServer->setWorkingFrameStatusCheckpoint(outputFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "imageSequence.written");
 
 		int filenameLength = self->outputPrefix.length() + 32;
 		char filename[filenameLength];

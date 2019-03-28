@@ -32,11 +32,11 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 	FrameStatusChangeEventCallback frameStatusChangeCallback;
 	frameStatusChangeCallback.userdata = (void *)this;
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
-	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEWING;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEW_RENDER;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREVIEWING without our blessing.
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEWING, "previewHUD.ran");
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREVIEW_RENDER without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEW_RENDER, "previewHUD.ran");
 
 	WorkerPoolParameters workerPoolParameters;
 	workerPoolParameters.name = "PreviewHUD";
@@ -123,7 +123,7 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 		}
 		YerFace_MutexUnlock(previewFrame->previewFrameMutex);
 
-		self->frameServer->setWorkingFrameStatusCheckpoint(frameNumber, FRAME_STATUS_PREVIEWING, "previewHUD.ran");
+		self->frameServer->setWorkingFrameStatusCheckpoint(frameNumber, FRAME_STATUS_PREVIEW_RENDER, "previewHUD.ran");
 		self->metrics->endClock(tick);
 
 		didWork = true;
@@ -139,7 +139,7 @@ void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
-		case FRAME_STATUS_PREVIEWING:
+		case FRAME_STATUS_PREVIEW_RENDER:
 			YerFace_MutexLock(self->myMutex);
 			self->pendingFrameNumbers.push_back(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);

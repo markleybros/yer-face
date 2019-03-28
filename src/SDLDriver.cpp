@@ -105,7 +105,7 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		FrameStatusChangeEventCallback frameStatusChangeCallback;
 		frameStatusChangeCallback.userdata = (void *)this;
 		frameStatusChangeCallback.callback = handleFrameStatusChange;
-		frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+		frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEW_DISPLAY;
 		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	}
 
@@ -371,7 +371,7 @@ void SDLDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus newSt
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
-		case FRAME_STATUS_LATE_PROCESSING:
+		case FRAME_STATUS_PREVIEW_DISPLAY:
 			YerFace_MutexLock(self->frameTimestampsNowMutex);
 			self->frameTimestampsNow = frameTimestamps;
 			YerFace_MutexUnlock(self->frameTimestampsNowMutex);

@@ -283,6 +283,14 @@ int FrameServer::frameHerderLoop(void *ptr) {
 
 			//Advance this frame to the next status.
 			if(checkpointsPassed) {
+				// NOTE: We release image mats after PREVIEW_DISPLAY to prevent unbounded RAM usage
+				// when Sphinx holds frames in LATE_PROCESSING for an indeterminate amount of time.
+				if(status == FRAME_STATUS_PREVIEW_DISPLAY) {
+					workingFrame->frame.release();
+					workingFrame->detectionFrame.release();
+					workingFrame->previewFrame.release();
+				}
+
 				didWork = true;
 				self->setFrameStatus(workingFrame->frameTimestamps, (WorkingFrameStatus)(status + 1));
 			}

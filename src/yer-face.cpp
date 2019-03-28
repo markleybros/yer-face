@@ -84,11 +84,6 @@ bool frameSizeValid = false;
 SDL_mutex *frameSizeMutex;
 //END VARIABLES PROTECTED BY frameSizeMutex
 
-//VARIABLES PROTECTED BY previewRenderMutex
-list<FrameNumber> previewRenderFrameNumbers;
-SDL_mutex *previewRenderMutex;
-//END VARIABLES PROTECTED BY previewRenderMutex
-
 //VARIABLES PROTECTED BY previewDisplayMutex
 list<FrameNumber> previewDisplayFrameNumbers;
 SDL_mutex *previewDisplayMutex;
@@ -198,9 +193,6 @@ int main(int argc, const char** argv) {
 	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((previewRenderMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	if((previewDisplayMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
@@ -251,11 +243,10 @@ int main(int argc, const char** argv) {
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEWING;
 	if(!headless) {
-		frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+		frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEW_DISPLAY;
 		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
+		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
 	}
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
@@ -307,10 +298,10 @@ int main(int argc, const char** argv) {
 					YerFace_MutexLock(previewFrame->previewFrameMutex);
 					Mat previewFrameCopy = previewFrame->previewFrame.clone();
 					YerFace_MutexUnlock(previewFrame->previewFrameMutex);
-					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
+					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
 					sdlDriver->doRenderPreviewFrame(previewFrameCopy);
 				} else {
-					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_LATE_PROCESSING, "main.PreviewDisplayed");
+					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
 				}
 			}
 		}
@@ -350,7 +341,6 @@ int main(int argc, const char** argv) {
 	delete logger;
 
 	SDL_DestroyMutex(frameSizeMutex);
-	SDL_DestroyMutex(previewRenderMutex);
 	SDL_DestroyMutex(previewDisplayMutex);
 	SDL_DestroyMutex(frameServerDrainedMutex);
 	SDL_DestroyMutex(frameMetricsMutex);
@@ -429,12 +419,7 @@ void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, Frame
 			frameMetricsTicks[frameNumber] = metrics->startClock();
 			YerFace_MutexUnlock(frameMetricsMutex);
 			break;
-		case FRAME_STATUS_PREVIEWING:
-			YerFace_MutexLock(previewRenderMutex);
-			previewRenderFrameNumbers.push_front(frameNumber);
-			YerFace_MutexUnlock(previewRenderMutex);
-			break;
-		case FRAME_STATUS_LATE_PROCESSING:
+		case FRAME_STATUS_PREVIEW_DISPLAY:
 			YerFace_MutexLock(previewDisplayMutex);
 			previewDisplayFrameNumbers.push_front(frameNumber);
 			YerFace_MutexUnlock(previewDisplayMutex);
