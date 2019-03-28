@@ -52,10 +52,10 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatu
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
 	eventLogger = NULL;
-	if((streamFlagsMutex = SDL_CreateMutex()) == NULL) {
+	if((basisMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((connectionListMutex = SDL_CreateMutex()) == NULL) {
+	if((websocketMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((workerMutex = SDL_CreateMutex()) == NULL) {
@@ -157,14 +157,14 @@ OutputDriver::~OutputDriver() noexcept(false) {
 	YerFace_MutexUnlock(workerMutex);
 
 	if(websocketServerEnabled && serverThread) {
-		YerFace_MutexLock(connectionListMutex);
+		YerFace_MutexLock(websocketMutex);
 		websocketServerRunning = false;
-		YerFace_MutexUnlock(connectionListMutex);
+		YerFace_MutexUnlock(websocketMutex);
 		SDL_WaitThread(serverThread, NULL);
 	}
 
-	SDL_DestroyMutex(streamFlagsMutex);
-	SDL_DestroyMutex(connectionListMutex);
+	SDL_DestroyMutex(basisMutex);
+	SDL_DestroyMutex(websocketMutex);
 	SDL_DestroyMutex(workerMutex);
 
 	if(outputFilename.length() > 0 && outputFilestream.is_open()) {
@@ -191,10 +191,10 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 		if((double)sourcePacket["meta"]["startTime"] < 0.0 || (FrameNumber)sourcePacket["meta"]["frameNumber"] < 0) {
 			sourcePacket["meta"]["frameNumber"] = -1;
 			sourcePacket["meta"]["startTime"] = -1.0;
-			YerFace_MutexLock(this->streamFlagsMutex);
+			YerFace_MutexLock(this->basisMutex);
 			this->autoBasisTransmitted = true;
+			YerFace_MutexUnlock(this->basisMutex);
 			outputNewFrame(sourcePacket);
-			YerFace_MutexUnlock(this->streamFlagsMutex);
 			return false;
 		}
 		FrameNumber frameNumber = (FrameNumber)sourcePacket["meta"]["frameNumber"];
@@ -231,22 +231,22 @@ int OutputDriver::launchWebSocketServer(void *data) {
 }
 
 void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->streamFlagsMutex);
+	YerFace_MutexLock(this->basisMutex);
 	string jsonString = lastBasisFrame.dump(-1, ' ', true);
-	YerFace_MutexUnlock(this->streamFlagsMutex);
+	YerFace_MutexUnlock(this->basisMutex);
 
-	YerFace_MutexLock(this->connectionListMutex);
+	YerFace_MutexLock(this->websocketMutex);
 	logger->verbose("WebSocket Connection Opened.");
 	server.send(handle, jsonString, websocketpp::frame::opcode::text);
 	connectionList.insert(handle);
-	YerFace_MutexUnlock(this->connectionListMutex);
+	YerFace_MutexUnlock(this->websocketMutex);
 }
 
 void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->connectionListMutex);
+	YerFace_MutexLock(this->websocketMutex);
 	connectionList.erase(handle);
 	logger->verbose("WebSocket Connection Closed.");
-	YerFace_MutexUnlock(this->connectionListMutex);
+	YerFace_MutexUnlock(this->websocketMutex);
 }
 
 void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
@@ -255,12 +255,12 @@ void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
 		throw runtime_error("WebSocket server error!");
 	}
 	bool continueTimer = true;
-	YerFace_MutexLock(connectionListMutex);
+	YerFace_MutexLock(websocketMutex);
 	if(!websocketServerRunning) {
 		server.stop();
 		continueTimer = false;
 	}
-	YerFace_MutexUnlock(connectionListMutex);
+	YerFace_MutexUnlock(websocketMutex);
 	if(continueTimer) {
 		serverSetQuitPollTimer();
 	}
@@ -301,19 +301,19 @@ void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
 		outputFrame->frame["trackers"] = trackers;
 	}
 
+	YerFace_MutexLock(this->basisMutex);
 	if(allPropsSet && !autoBasisTransmitted) {
 		autoBasisTransmitted = true;
 		outputFrame->frame["meta"]["basis"] = true;
 		logger->info("All properties set. Transmitting initial basis flag automatically.");
 	}
-
-	YerFace_MutexLock(this->streamFlagsMutex);
 	if((bool)outputFrame->frame["meta"]["basis"]) {
 		autoBasisTransmitted = true;
 		logger->info("Transmitting basis flag.");
 	}
+	YerFace_MutexUnlock(this->basisMutex);
+	
 	outputNewFrame(outputFrame->frame);
-	YerFace_MutexUnlock(this->streamFlagsMutex);
 }
 
 void OutputDriver::registerFrameData(string key) {
@@ -343,16 +343,16 @@ void OutputDriver::serverSetQuitPollTimer(void) {
 }
 
 void OutputDriver::outputNewFrame(json frame) {
-	YerFace_MutexLock(this->streamFlagsMutex);
 	if(frame["meta"]["basis"]) {
+		YerFace_MutexLock(this->basisMutex);
 		lastBasisFrame = frame;
+		YerFace_MutexUnlock(this->basisMutex);
 	}
-	YerFace_MutexUnlock(this->streamFlagsMutex);
 
 	std::string jsonString;
 	jsonString = frame.dump(-1, ' ', true);
 
-	YerFace_MutexLock(this->connectionListMutex);
+	YerFace_MutexLock(this->websocketMutex);
 	try {
 		for(auto handle : connectionList) {
 			server.send(handle, jsonString, websocketpp::frame::opcode::text);
@@ -360,7 +360,7 @@ void OutputDriver::outputNewFrame(json frame) {
 	} catch (websocketpp::exception const &e) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
-	YerFace_MutexUnlock(this->connectionListMutex);
+	YerFace_MutexUnlock(this->websocketMutex);
 
 	if(outputFilename.length() > 0) {
 		outputFilestream << jsonString << "\n";

@@ -63,7 +63,7 @@ private:
 
 	ofstream outputFilestream;
 
-	SDL_mutex *connectionListMutex;
+	SDL_mutex *websocketMutex;
 	int websocketServerPort;
 	bool websocketServerEnabled;
 	websocketpp::server<websocketpp::config::asio> server;
@@ -72,7 +72,7 @@ private:
 
 	SDL_Thread *serverThread;
 
-	SDL_mutex *streamFlagsMutex;
+	SDL_mutex *basisMutex;
 	bool autoBasisTransmitted;
 	json lastBasisFrame;
 
