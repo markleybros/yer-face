@@ -1,11 +1,14 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FFmpegDriver.hpp"
 #include "SDLDriver.hpp"
 #include "OutputDriver.hpp"
 #include "Utilities.hpp"
+#include "Status.hpp"
+#include "WorkerPool.hpp"
+#include "PreviewHUD.hpp"
 
 namespace PocketSphinx {
 extern "C" {
@@ -17,13 +20,29 @@ using namespace std;
 
 namespace YerFace {
 
+#define YERFACE_SPHINX_SAMPLERATE 16000
+
 // We use the Preston Blair 'toon phoneme set. See: http://minyos.its.rmit.edu.au/aim/a_notes/mouth_shapes_01.html
 // This class will represent a single video frame's snapshot of phoneme representation.
 // There will be Booleans for if we saw the phoneme at all, and floating point percentages (0.0 - 1.0) for the influence of each phoneme on the frame.
 class PrestonBlairPhonemes {
 public:
 	PrestonBlairPhonemes(void);
-	json seen, percent;
+	json percent;
+};
+
+class SphinxPhoneme {
+public:
+	string pbPhoneme;
+	double startTime, endTime;
+	int utteranceIndex;
+};
+
+class SphinxRecognizerResult {
+public:
+	double startTimestamp, endTimestamp;
+	double maxAmplitude;
+	bool peak, inSpeech;
 };
 
 class SphinxAudioFrame {
@@ -39,84 +58,66 @@ public:
 
 class SphinxVideoFrame {
 public:
-	bool processed;
+	bool isLipFlappingReady, isLipFlappingProcessed;
+	bool isPhonemeBreakdownReady, isPhonemeBreakdownProcessed;
 	FrameTimestamps timestamps;
-	double realEndTimestamp;
 	PrestonBlairPhonemes phonemes;
-};
-
-class SphinxPhoneme {
-public:
-	string pbPhoneme;
-	double startTime, endTime;
-	int utteranceIndex;
-};
-
-class SphinxWorkingVariables {
-public:
-	SphinxWorkingVariables(void);
-	PrestonBlairPhonemes lipFlapping;
-	int framesIncluded;
+	bool peak;
 	double maxAmplitude;
-	bool peak, inSpeech;
 };
 
 class SphinxDriver {
 public:
-	SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency);
+	SphinxDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, PreviewHUD *myPreviewHUD, bool myLowLatency);
 	~SphinxDriver() noexcept(false);
-	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
-	void drainPipelineDataNow(void);
+	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
 private:
-	void initializeRecognitionThread(void);
-	void processPhonemesIntoVideoFrames(bool draining);
-	void handleProcessedVideoFrames(void);
+	bool processPhonemeBreakdown(SphinxVideoFrame *videoFrame);
 	void processUtteranceHypothesis(void);
-	void processAudioAmplitude(PocketSphinx::int16 const *buf, int samples);
-	void processLipFlappingAudio(void);
-	static int runRecognitionLoop(void *ptr);
+	void processAudioAmplitude(SphinxAudioFrame *audioFrame, SphinxRecognizerResult *result);
+	void processLipFlappingAudio(SphinxVideoFrame *videoFrame);
 	SphinxAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
+	static void FFmpegDriverAudioIsDrainedCallback(void *userdata);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
+	static bool recognitionWorkerHandler(WorkerPoolWorker *worker);
+	static void recognitionWorkerDeinitializer(WorkerPoolWorker *worker, void *usrPtr);
+	static bool lipFlappingWorkerHandler(WorkerPoolWorker *worker);
+	static bool phonemeBreakdownWorkerHandler(WorkerPoolWorker *worker);
 	
 	string hiddenMarkovModel, allPhoneLM;
 	string lipFlappingTargetPhoneme;
 	double lipFlappingResponseThreshold, lipFlappingNonLinearResponse, lipFlappingNotInSpeechScale;
 	json sphinxToPrestonBlairPhonemeMapping;
-	FrameDerivatives *frameDerivatives;
+	Status *status;
+	FrameServer *frameServer;
 	FFmpegDriver *ffmpegDriver;
 	SDLDriver *sdlDriver;
 	OutputDriver *outputDriver;
+	PreviewHUD *previewHUD;
 	bool lowLatency;
+	Logger *logger;
 
 	double vuMeterWidth, vuMeterWarningThreshold, vuMeterPeakHoldSeconds;
 
-	Logger *logger;
-
 	PocketSphinx::ps_decoder_t *pocketSphinx;
 	PocketSphinx::cmd_ln_t *pocketSphinxConfig;
-	
-	SDL_mutex *myWrkMutex, *myCmpMutex;
-	SDL_cond *myWrkCond;
-	SDL_Thread *recognizerThread;
 
-	bool drained;
-	bool recognizerRunning;
-	bool utteranceRestarted, inSpeech;
-	int utteranceIndex;
+	WorkerPool *recognitionWorkerPool;
+	SDL_mutex *recognitionMutex;
+	bool recognizerRunning, recognizerDrained;
 	double timestampOffset;
 	bool timestampOffsetSet;
-
-	list<SphinxPhoneme> phonemeBuffer;
-
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
+	bool utteranceRestarted, inSpeech;
+	int utteranceIndex;
+	list<SphinxRecognizerResult> recognitionResults;
+	list<SphinxPhoneme> phonemeBuffer;
 
-	list<SphinxVideoFrame *> videoFrames;
-
-	SphinxWorkingVariables working, completed;
-
-	double vuMeterLastSetPeak;
+	WorkerPool *lipFlappingWorkerPool, *phonemeBreakdownWorkerPool;
+	SDL_mutex *workingVideoFramesMutex;
+	unordered_map<FrameNumber, SphinxVideoFrame *> workingVideoFrames;
 };
 
 }; //namespace YerFace

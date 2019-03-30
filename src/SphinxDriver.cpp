@@ -10,17 +10,6 @@ using namespace PocketSphinx;
 namespace YerFace {
 
 PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
-	seen = {
-		{ "AI", false },
-		{ "E", false },
-		{ "O", false },
-		{ "U", false },
-		{ "MBP", false },
-		{ "FV", false },
-		{ "L", false },
-		{ "WQ", false },
-		{ "etc", false }
-	};
 	percent = {
 		{ "AI", 0.0 },
 		{ "E", 0.0 },
@@ -34,14 +23,7 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 	};
 }
 
-SphinxWorkingVariables::SphinxWorkingVariables(void) {
-	maxAmplitude = 0.0;
-	framesIncluded = 0;
-	peak = false;
-	inSpeech = false;
-}
-
-SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, bool myLowLatency) {
+SphinxDriver::SphinxDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, PreviewHUD *myPreviewHUD, bool myLowLatency) {
 	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
 	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
 	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
@@ -52,9 +34,13 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	vuMeterWidth = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWidth"];
 	vuMeterWarningThreshold = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWarningThreshold"];
 	vuMeterPeakHoldSeconds = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterPeakHoldSeconds"];
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
 	ffmpegDriver = myFFmpegDriver;
 	if(ffmpegDriver == NULL) {
@@ -68,23 +54,24 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	if(outputDriver == NULL) {
 		throw invalid_argument("outputDriver cannot be NULL");
 	}
-	lowLatency = myLowLatency;
-	if(!lowLatency) {
-		outputDriver->registerLateFrameData("phonemes");
+	previewHUD = myPreviewHUD;
+	if(previewHUD == NULL) {
+		throw invalid_argument("previewHUD cannot be NULL");
 	}
+	lowLatency = myLowLatency;
 	logger = new Logger("SphinxDriver");
+
+	outputDriver->registerFrameData("phonemes");
 	
-	drained = false;
-	vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 	pocketSphinx = NULL;
 	pocketSphinxConfig = NULL;
 	timestampOffsetSet = false;
 	utteranceRestarted = false;
 	inSpeech = false;
-	if((myWrkMutex = SDL_CreateMutex()) == NULL) {
+	if((recognitionMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
+	if((workingVideoFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	
@@ -108,91 +95,129 @@ SphinxDriver::SphinxDriver(json config, FrameDerivatives *myFrameDerivatives, FF
 	audioFrameCallback.userdata = (void *)this;
 	audioFrameCallback.channelLayout = AV_CH_LAYOUT_MONO;
 	audioFrameCallback.sampleFormat = AV_SAMPLE_FMT_S16;
-	audioFrameCallback.sampleRate = 16000;
-	audioFrameCallback.callback = FFmpegDriverAudioFrameCallback;
+	audioFrameCallback.sampleRate = YERFACE_SPHINX_SAMPLERATE;
+	audioFrameCallback.audioFrameCallback = FFmpegDriverAudioFrameCallback;
+	audioFrameCallback.isDrainedCallback = FFmpegDriverAudioIsDrainedCallback;
 	ffmpegDriver->registerAudioFrameCallback(audioFrameCallback);
 
-	initializeRecognitionThread();
+	FrameStatusChangeEventCallback frameStatusChangeCallback;
+	frameStatusChangeCallback.userdata = (void *)this;
+	frameStatusChangeCallback.callback = handleFrameStatusChange;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_MAPPING;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	if(!lowLatency) {
+		frameStatusChangeCallback.newStatus = FRAME_STATUS_LATE_PROCESSING;
+		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	}
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	logger->debug("SphinxDriver object constructed in %s mode!", lowLatency ? "realtime lip flapping" : "offline phoneme breakdown");
+	recognizerRunning = true;
+	recognizerDrained = false;
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "SphinxDriver.Recognition";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = recognitionWorkerDeinitializer;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = recognitionWorkerHandler;
+	recognitionWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from the relevant statuses without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_MAPPING, "sphinxDriver.ran");
+
+	workerPoolParameters.name = "SphinxDriver.LipFlapping";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = lipFlappingWorkerHandler;
+	lipFlappingWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
+	if(!lowLatency) {
+		frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_LATE_PROCESSING, "sphinxDriver.ran");
+
+		workerPoolParameters.name = "SphinxDriver.PhonemeBreakdown";
+		workerPoolParameters.numWorkers = 1;
+		workerPoolParameters.numWorkersPerCPU = 0.0;
+		workerPoolParameters.initializer = NULL;
+		workerPoolParameters.deinitializer = NULL;
+		workerPoolParameters.usrPtr = (void *)this;
+		workerPoolParameters.handler = phonemeBreakdownWorkerHandler;
+		phonemeBreakdownWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+	}
+
+	logger->debug("SphinxDriver object constructed in %s mode!", lowLatency ? "LOW LATENCY (lip flapping)" : "OFFLINE (preston blair phoneme breakdown)");
 }
 
 SphinxDriver::~SphinxDriver() noexcept(false) {
 	logger->debug("SphinxDriver object destructing...");
-	drainPipelineDataNow();
+
+	delete recognitionWorkerPool;
+
+	YerFace_MutexLock(recognitionMutex);
+	if(audioFrameQueue.size() > 0) {
+		logger->error("Input audio frames are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(recognitionMutex);
+
+	delete lipFlappingWorkerPool;
+	if(!lowLatency) {
+		delete phonemeBreakdownWorkerPool;
+	}
+
+	YerFace_MutexLock(workingVideoFramesMutex);
+	if(workingVideoFrames.size() > 0) {
+		logger->error("Output Video frames are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(workingVideoFramesMutex);
+
+	YerFace_MutexLock(recognitionMutex);
+	if(recognitionResults.size() > 0) {
+		logger->error("Not all recognition results were consumed! Woe is me!");
+	}
+	if(phonemeBuffer.size() > 0) {
+		logger->error("Not all phoneme buffer items were consumed! Woe is me!");
+	}
+	YerFace_MutexUnlock(recognitionMutex);
+
+	SDL_DestroyMutex(recognitionMutex);
+	recognitionMutex = NULL;
+	SDL_DestroyMutex(workingVideoFramesMutex);
+	workingVideoFramesMutex = NULL;
+
 	ps_free(pocketSphinx);
 	cmd_ln_free_r(pocketSphinxConfig);
-	for(SphinxVideoFrame *frame : videoFrames) {
-		delete frame;
+
+	for(SphinxAudioFrame *audioFrame : audioFramesAllocated) {
+		if(audioFrame->inUse) {
+			logger->error("About to free an in-use audio frame! Uh oh!");
+		}
+		av_freep(&audioFrame->buf);
+		delete audioFrame;
 	}
-	SDL_DestroyMutex(myWrkMutex);
-	SDL_DestroyMutex(myCmpMutex);
-	SDL_DestroyCond(myWrkCond);
-	myWrkMutex = NULL;
-	myCmpMutex = NULL;
-	myWrkCond = NULL;
+
 	delete logger;
 }
 
-void SphinxDriver::initializeRecognitionThread(void) {
-	recognizerRunning = true;
-	if((myWrkCond = SDL_CreateCond()) == NULL) {
-		throw runtime_error("Failed creating condition!");
-	}
-	if((recognizerThread = SDL_CreateThread(SphinxDriver::runRecognitionLoop, "SphinxLoop", (void *)this)) == NULL) {
-		throw runtime_error("Failed starting thread!");
-	}
-}
+void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+	static double vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 
-void SphinxDriver::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myWrkMutex);
-
-	if(lowLatency) {
-		//Sometimes an entire video frame goes by without us seeing any new audio frames.
-		if(!working.framesIncluded) {
-			//Cheat by using last frame's results for lip flapping.
-			working = completed;
-		}
-		processLipFlappingAudio();
-		outputDriver->insertCompletedFrameData("phonemes", working.lipFlapping.percent);
-	} else {
-		// Add an (unprocessed) video frame (with some metadata) to the video frame buffer.
-		SphinxVideoFrame *sphinxVideoFrame = new SphinxVideoFrame();
-		sphinxVideoFrame->processed = false;
-		sphinxVideoFrame->timestamps = frameDerivatives->getCompletedFrameTimestamps();
-		sphinxVideoFrame->realEndTimestamp = sphinxVideoFrame->timestamps.estimatedEndTimestamp;
-		if(videoFrames.size() > 0) {
-			videoFrames.back()->realEndTimestamp = sphinxVideoFrame->timestamps.startTimestamp;
-		}
-		videoFrames.push_back(sphinxVideoFrame);
-
-		processPhonemesIntoVideoFrames(false);
-		handleProcessedVideoFrames();
-	}
-
-	YerFace_MutexLock(myCmpMutex);
-	SphinxWorkingVariables empty;
-	completed = working;
-	working = empty;
-	YerFace_MutexUnlock(myCmpMutex);
-
-	YerFace_MutexUnlock(myWrkMutex);
-}
-
-void SphinxDriver::renderPreviewHUD(void) {
-	YerFace_MutexLock(myCmpMutex);
-	if(drained) {
-		YerFace_MutexUnlock(myCmpMutex);
-		return;
-	}
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
 	if(density > 0) {
+		YerFace_MutexLock(workingVideoFramesMutex);
+		double maxAmplitude = workingVideoFrames[frameNumber]->maxAmplitude;
+		bool peak = workingVideoFrames[frameNumber]->peak;
+		YerFace_MutexUnlock(workingVideoFramesMutex);
+
 		Rect2d previewRect;
 		Point2d previewCenter;
-		sdlDriver->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
+		previewHUD->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
 
-		double vuHeight = previewRect.height * completed.maxAmplitude;
+		double vuHeight = previewRect.height * maxAmplitude;
 		Rect2d vuMeter;
 		vuMeter.x = previewRect.x;
 		vuMeter.y = previewRect.y + (previewRect.height - vuHeight);
@@ -200,12 +225,12 @@ void SphinxDriver::renderPreviewHUD(void) {
 		vuMeter.height = vuHeight;
 
 		Scalar color = Scalar(0, 255, 0);
-		if(completed.maxAmplitude >= vuMeterWarningThreshold) {
+		if(maxAmplitude >= vuMeterWarningThreshold) {
 			color = Scalar(0, 165, 255);
 		}
 		rectangle(frame, vuMeter, color, FILLED);
 
-		if(completed.peak) {
+		if(peak) {
 			vuMeterLastSetPeak = (double)SDL_GetTicks() / (double)1000.0;
 		}
 		double now = (double)SDL_GetTicks() / (double)1000.0;
@@ -214,103 +239,61 @@ void SphinxDriver::renderPreviewHUD(void) {
 			rectangle(frame, peakIndicator, Scalar(0, 0, 255), FILLED);
 		}
 	}
-	YerFace_MutexUnlock(myCmpMutex);
-}
-void SphinxDriver::drainPipelineDataNow(void) {
-	if(drained) {
-		return;
-	}
-	YerFace_MutexLock(myWrkMutex);
-	YerFace_MutexLock(myCmpMutex);
-	drained = true;
-	YerFace_MutexUnlock(myCmpMutex);
-	recognizerRunning = false;
-	SDL_CondSignal(myWrkCond);
-	YerFace_MutexUnlock(myWrkMutex);
-	SDL_WaitThread(recognizerThread, NULL);
-	recognizerThread = NULL;
 }
 
-void SphinxDriver::processPhonemesIntoVideoFrames(bool draining) {
-	list<SphinxVideoFrame *>::iterator videoFrameIterator = videoFrames.begin();
-	list<SphinxPhoneme>::iterator phonemeIterator = phonemeBuffer.begin();
-	while(phonemeIterator != phonemeBuffer.end()) {
-		if(videoFrameIterator == videoFrames.end()) {
-			if(draining) {
-				logger->warn("We ran out of video frames trying to processPhonemesIntoVideoFrames()!");
-				return;
-			}
-			throw logic_error("We ran out of video frames trying to processPhonemesIntoVideoFrames()!");
+bool SphinxDriver::processPhonemeBreakdown(SphinxVideoFrame *videoFrame) {
+	bool processedThroughFrameTime = false;
+	YerFace_MutexLock(recognitionMutex);
+	while(phonemeBuffer.size()) {
+		double phonemeStartTime = phonemeBuffer.back().startTime;
+		double phonemeEndTime = phonemeBuffer.back().endTime;
+		TimeIntervalComparison comparison = Utilities::timeIntervalCompare(phonemeStartTime, phonemeEndTime, videoFrame->timestamps.startTimestamp, videoFrame->timestamps.estimatedEndTimestamp);
+		// logger->verbose("COMPARISON... [A: %lf-%lf (%s)], [B: %lf-%lf], [doesAEndBeforeB: %d, doesAOccurBeforeB: %d, doesAOccurDuringB: %d, doesAOccurAfterB: %d, doesAStartAfterB: %d]", phonemeStartTime, phonemeEndTime, phonemeBuffer.back().pbPhoneme.c_str(), videoFrame->timestamps.startTimestamp, videoFrame->timestamps.estimatedEndTimestamp, comparison.doesAEndBeforeB, comparison.doesAOccurBeforeB, comparison.doesAOccurDuringB, comparison.doesAOccurAfterB, comparison.doesAStartAfterB);
+		if(comparison.doesAEndBeforeB) {
+			phonemeBuffer.pop_back();
+			continue;
 		}
-		bool iteratePhoneme = true;
-		SphinxVideoFrame *videoFrame = *videoFrameIterator;
-		SphinxPhoneme phoneme = *phonemeIterator;
-
-		if(
-		  // Does the startTime land within the bounds of this frame?
-		  (phoneme.startTime >= videoFrame->timestamps.startTimestamp && phoneme.startTime < videoFrame->realEndTimestamp) ||
-		  // Does the endTime land within the bounds of this frame?
-		  (phoneme.endTime >= videoFrame->timestamps.startTimestamp && phoneme.endTime < videoFrame->realEndTimestamp) ||
-		  // Does this frame sit completely inside the start and end times of this segment?
-		  (phoneme.startTime < videoFrame->timestamps.startTimestamp && phoneme.endTime > videoFrame->realEndTimestamp)) {
-			if(phoneme.pbPhoneme.length() > 0) {
-				bool wasSeen = false;
+		if(comparison.doesAOccurDuringB) {
+			if(phonemeBuffer.back().pbPhoneme.length() > 0) {
 				double currentPercent = 0.0;
 				try {
-					wasSeen = videoFrame->phonemes.seen.at(phoneme.pbPhoneme);
-					currentPercent = videoFrame->phonemes.percent.at(phoneme.pbPhoneme);
+					currentPercent = videoFrame->phonemes.percent.at(phonemeBuffer.back().pbPhoneme);
 				} catch(exception &e) {
 					throw logic_error("Preston Blair mapping returned an unrecognized phoneme!");
 				}
-				if(!wasSeen) {
-					wasSeen = true;
-					videoFrame->phonemes.seen[phoneme.pbPhoneme] = wasSeen;
+				double divisor = videoFrame->timestamps.estimatedEndTimestamp - videoFrame->timestamps.startTimestamp;
+				if(phonemeStartTime < videoFrame->timestamps.startTimestamp) {
+					phonemeStartTime = videoFrame->timestamps.startTimestamp;
 				}
-				double divisor = videoFrame->realEndTimestamp - videoFrame->timestamps.startTimestamp;
-				double startTime = phoneme.startTime;
-				double endTime = phoneme.endTime;
-				if(startTime < videoFrame->timestamps.startTimestamp) {
-					startTime = videoFrame->timestamps.startTimestamp;
+				if(phonemeEndTime > videoFrame->timestamps.estimatedEndTimestamp) {
+					phonemeEndTime = videoFrame->timestamps.estimatedEndTimestamp;
 				}
-				if(endTime > videoFrame->realEndTimestamp) {
-					endTime = videoFrame->realEndTimestamp;
-				}
-				double numerator = endTime - startTime;
+				double numerator = phonemeEndTime - phonemeStartTime;
 				currentPercent = currentPercent + (numerator / divisor);
-				// logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
+				// logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", phonemeBuffer.back().pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
 				if(currentPercent > 1.0) {
 					currentPercent = 1.0;
 				}
-				videoFrame->phonemes.percent[phoneme.pbPhoneme] = currentPercent;
+				videoFrame->phonemes.percent[phonemeBuffer.back().pbPhoneme] = currentPercent;
+			}
+			if(!comparison.doesAOccurAfterB) {
+				phonemeBuffer.pop_back();
 			}
 		}
-		if(phoneme.startTime >= (*videoFrameIterator)->realEndTimestamp || phoneme.endTime >= (*videoFrameIterator)->realEndTimestamp) {
-			iteratePhoneme = false;
-			videoFrame->processed = true;
-			++videoFrameIterator;
-		}
-		if(iteratePhoneme) {
-			++phonemeIterator;
+		if(comparison.doesAOccurAfterB) {
+			processedThroughFrameTime = true;
+			break;
 		}
 	}
-}
-
-void SphinxDriver::handleProcessedVideoFrames(void) {
-	// Handle any already-processed frames off the other side of the video frame buffer.
-	while(videoFrames.size() > 0 && videoFrames.front()->processed) {
-		std::stringstream jsonString;
-		jsonString << videoFrames.front()->phonemes.percent.dump(-1, ' ', true);
-		// logger->verbose("  FRAME %ld: %s", videoFrames.front()->timestamps.frameNumber, jsonString.str().c_str());
-		outputDriver->updateLateFrameData(videoFrames.front()->timestamps.frameNumber, "phonemes", videoFrames.front()->phonemes.percent);
-		SphinxVideoFrame *old = videoFrames.front();
-		videoFrames.pop_front();
-		delete old;
-	}
+	bool frameSuccessfullyProcessed = processedThroughFrameTime || recognizerDrained;
+	YerFace_MutexUnlock(recognitionMutex);
+	return frameSuccessfullyProcessed;
 }
 
 void SphinxDriver::processUtteranceHypothesis(void) {
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
+	bool addedPhonemes = false;
 	while(segmentIterator != NULL) {
 		int32 startFrame, endFrame;
 		ps_seg_frames(segmentIterator, &startFrame, &endFrame);
@@ -323,104 +306,85 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 		phoneme.pbPhoneme = "";
 		try {
 			phoneme.pbPhoneme = sphinxToPrestonBlairPhonemeMapping.at(symbol);
-			phonemeBuffer.push_back(phoneme);
+			phonemeBuffer.push_front(phoneme);
+			addedPhonemes = true;
 		} catch(nlohmann::detail::out_of_range &e) {
 			// logger->verbose("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
 		}
 
 		segmentIterator = ps_seg_next(segmentIterator);
 	}
+	if(addedPhonemes) {
+		phonemeBreakdownWorkerPool->sendWorkerSignal();
+	}
 }
 
-void SphinxDriver::processAudioAmplitude(PocketSphinx::int16 const *buf, int samples) {
-	working.framesIncluded++;
+void SphinxDriver::processAudioAmplitude(SphinxAudioFrame *audioFrame, SphinxRecognizerResult *result) {
+	PocketSphinx::int16 const *buf = (PocketSphinx::int16 const *)audioFrame->buf;
+	int samples = audioFrame->audioSamples;
 	for(int i = 0; i < samples; i++) {
 		double amplitude = fabs((double)buf[i]) / (double)0x7FFF;
-		if(amplitude > working.maxAmplitude) {
-			working.maxAmplitude = amplitude;
+		if(amplitude > result->maxAmplitude) {
+			result->maxAmplitude = amplitude;
 		}
 	}
-	if(working.maxAmplitude >= 1.0) {
-		working.maxAmplitude = 1.0;
-		working.peak = true;
-	}
-	if(inSpeech) {
-		working.inSpeech = true;
+	if(result->maxAmplitude >= 1.0) {
+		result->maxAmplitude = 1.0;
+		result->peak = true;
 	}
 }
 
-void SphinxDriver::processLipFlappingAudio(void) {
+void SphinxDriver::processLipFlappingAudio(SphinxVideoFrame *videoFrame) {
+	double maxAmplitude = 0.0;
+	bool inSpeech = false;
+	bool peak = false;
+	YerFace_MutexLock(recognitionMutex);
+	while(recognitionResults.size()) {
+		TimeIntervalComparison comparison = Utilities::timeIntervalCompare(recognitionResults.back().startTimestamp, recognitionResults.back().endTimestamp, videoFrame->timestamps.startTimestamp, videoFrame->timestamps.estimatedEndTimestamp);
+		// logger->verbose("COMPARISON... doesAEndBeforeB: %d, doesAOccurBeforeB: %d, doesAOccurDuringB: %d, doesAOccurAfterB: %d, doesAStartAfterB: %d", comparison.doesAEndBeforeB, comparison.doesAOccurBeforeB, comparison.doesAOccurDuringB, comparison.doesAOccurAfterB, comparison.doesAStartAfterB);
+		if(comparison.doesAEndBeforeB) {
+			recognitionResults.pop_back();
+			continue;
+		}
+		if(comparison.doesAOccurDuringB) {
+			if(recognitionResults.back().maxAmplitude >= maxAmplitude) {
+				maxAmplitude = recognitionResults.back().maxAmplitude;
+			}
+			if(recognitionResults.back().inSpeech) {
+				inSpeech = true;
+			}
+			if(recognitionResults.back().peak) {
+				peak = true;
+			}
+			if(!comparison.doesAOccurAfterB) {
+				recognitionResults.pop_back();
+			}
+		}
+		if(comparison.doesAOccurAfterB) {
+			break;
+		}
+	}
+	YerFace_MutexUnlock(recognitionMutex);
+
 	double lipFlappingAmount = 0.0;
 	double normalized = 0.0;
-	if(working.maxAmplitude >= lipFlappingResponseThreshold) {
-		normalized = Utilities::normalize(working.maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
+	if(maxAmplitude >= lipFlappingResponseThreshold) {
+		normalized = Utilities::normalize(maxAmplitude - lipFlappingResponseThreshold, 1.0 - lipFlappingResponseThreshold);
 		double temp = pow(normalized, lipFlappingNonLinearResponse);
-		if(!working.inSpeech) {
+		if(!inSpeech) {
 			temp = temp * lipFlappingNotInSpeechScale;
 		}
 		lipFlappingAmount = temp;
 	}
-	if(lipFlappingAmount > (double)working.lipFlapping.percent[lipFlappingTargetPhoneme]) {
-		working.lipFlapping.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
+	if(lipFlappingAmount > (double)videoFrame->phonemes.percent[lipFlappingTargetPhoneme]) {
+		videoFrame->phonemes.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
 	}
-}
-
-int SphinxDriver::runRecognitionLoop(void *ptr) {
-	SphinxDriver *self = (SphinxDriver *)ptr;
-	self->logger->verbose("Speech Recognition Thread alive!");
-
-	YerFace_MutexLock(self->myWrkMutex);
-	while(self->recognizerRunning) {
-		if(SDL_CondWait(self->myWrkCond, self->myWrkMutex) < 0) {
-			throw runtime_error("Failed waiting on condition.");
-		}
-		while(self->recognizerRunning && self->audioFrameQueue.size() > 0) {
-			if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
-				throw runtime_error("Failed processing audio samples in PocketSphinx");
-			}
-			self->inSpeech = ps_get_in_speech(self->pocketSphinx);
-			self->processAudioAmplitude((int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples);
-			self->audioFrameQueue.back()->inUse = false;
-			self->audioFrameQueue.pop_back();
-
-			if(self->inSpeech && self->utteranceRestarted) {
-				self->utteranceRestarted = false;
-			}
-			if(!self->inSpeech && !self->utteranceRestarted) {
-				if(ps_end_utt(self->pocketSphinx) < 0) {
-					throw runtime_error("Failed to end PocketSphinx utterance");
-				}
-				if(!self->lowLatency) {
-					self->processUtteranceHypothesis();
-				}
-				self->utteranceIndex++;
-				if(ps_start_utt(self->pocketSphinx) < 0) {
-					throw runtime_error("Failed to start PocketSphinx utterance");
-				}
-				self->utteranceRestarted = true;
-			}
-		}
-	}
-	self->logger->verbose("Recognition loop ended. Draining speech recognizer...");
-	if(ps_end_utt(self->pocketSphinx) < 0) {
-		throw runtime_error("Failed to end PocketSphinx utterance");
-	}
-	if(!self->lowLatency) {
-		self->processUtteranceHypothesis();
-		for(SphinxVideoFrame *frame : self->videoFrames) {
-			frame->processed = true;
-		}
-		self->processPhonemesIntoVideoFrames(true);
-		self->handleProcessedVideoFrames();
-	}
-
-	YerFace_MutexUnlock(self->myWrkMutex);
-	self->logger->verbose("Speech Recognition Thread quitting...");
-	return 0;
+	videoFrame->maxAmplitude = maxAmplitude;
+	videoFrame->peak = peak;
 }
 
 SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize) {
-	YerFace_MutexLock(myWrkMutex);
+	YerFace_MutexLock(recognitionMutex);
 	for(SphinxAudioFrame *audioFrame : audioFramesAllocated) {
 		if(!audioFrame->inUse) {
 			if(audioFrame->bufferSize < desiredBufferSize) {
@@ -433,7 +397,7 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 			}
 			audioFrame->pos = 0;
 			audioFrame->inUse = true;
-			YerFace_MutexUnlock(myWrkMutex);
+			YerFace_MutexUnlock(recognitionMutex);
 			return audioFrame;
 		}
 	}
@@ -444,16 +408,22 @@ SphinxAudioFrame *SphinxDriver::getNextAvailableAudioFrame(int desiredBufferSize
 	audioFrame->bufferSize = desiredBufferSize;
 	audioFrame->pos = 0;
 	audioFrame->inUse = true;
-	YerFace_MutexUnlock(myWrkMutex);
+	audioFramesAllocated.push_front(audioFrame);
+	YerFace_MutexUnlock(recognitionMutex);
 	return audioFrame;
 }
 
 void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp) {
 	SphinxDriver *self = (SphinxDriver *)userdata;
-	if(self->myWrkMutex == NULL) {
+	if(self->recognitionMutex == NULL) {
 		return;
 	}
-	YerFace_MutexLock(self->myWrkMutex);
+	YerFace_MutexLock(self->recognitionMutex);
+	if(!self->recognizerRunning) {
+		self->logger->error("==== Received an audio frame, but the recognition worker has already stopped! Dropping this audio frame! ====");
+		YerFace_MutexUnlock(self->recognitionMutex);
+		return;
+	}
 	if(!self->timestampOffsetSet) {
 		self->timestampOffset = timestamp;
 		self->timestampOffsetSet = true;
@@ -465,8 +435,248 @@ void SphinxDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, 
 	audioFrame->audioBytes = audioBytes;
 	audioFrame->timestamp = timestamp;
 	self->audioFrameQueue.push_front(audioFrame);
-	SDL_CondSignal(self->myWrkCond);
-	YerFace_MutexUnlock(self->myWrkMutex);
+	YerFace_MutexUnlock(self->recognitionMutex);
+	self->recognitionWorkerPool->sendWorkerSignal();
+}
+
+void SphinxDriver::FFmpegDriverAudioIsDrainedCallback(void *userdata) {
+	SphinxDriver *self = (SphinxDriver *)userdata;
+	if(self->recognitionMutex == NULL) {
+		return;
+	}
+	self->logger->debug("Received notification that audio has drained.");
+	YerFace_MutexLock(self->recognitionMutex);
+	if(!self->recognizerRunning) {
+		self->logger->error("==== Received notification that audio has drained, but the recognizer is already stopped! ====");
+	}
+	YerFace_MutexUnlock(self->recognitionMutex);
+	self->recognitionWorkerPool->stopWorkerNow();
+}
+
+void SphinxDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	SphinxDriver *self = (SphinxDriver *)userdata;
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
+	SphinxVideoFrame *videoFrame = NULL;
+	switch(newStatus) {
+		default:
+			throw logic_error("Handler passed unsupported frame status change event!");
+		case FRAME_STATUS_NEW:
+			videoFrame = new SphinxVideoFrame();
+			videoFrame->isLipFlappingReady = false;
+			videoFrame->isLipFlappingProcessed = false;
+			videoFrame->isPhonemeBreakdownReady = false;
+			videoFrame->isPhonemeBreakdownProcessed = self->lowLatency ? true : false;
+			videoFrame->timestamps = frameTimestamps;
+			YerFace_MutexLock(self->workingVideoFramesMutex);
+			self->workingVideoFrames[frameNumber] = videoFrame;
+			YerFace_MutexUnlock(self->workingVideoFramesMutex);
+			break;
+		case FRAME_STATUS_MAPPING:
+			YerFace_MutexLock(self->workingVideoFramesMutex);
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on Lip Flapping Worker. Queue depth is now %lu", frameNumber, self->workingVideoFrames.size());
+			self->workingVideoFrames[frameNumber]->isLipFlappingReady = true;
+			YerFace_MutexUnlock(self->workingVideoFramesMutex);
+			self->lipFlappingWorkerPool->sendWorkerSignal();
+			break;
+		case FRAME_STATUS_LATE_PROCESSING:
+			YerFace_MutexLock(self->workingVideoFramesMutex);
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on Phoneme Breakdown Worker. Queue depth is now %lu", frameNumber, self->workingVideoFrames.size());
+			self->workingVideoFrames[frameNumber]->isPhonemeBreakdownReady = true;
+			YerFace_MutexUnlock(self->workingVideoFramesMutex);
+			self->phonemeBreakdownWorkerPool->sendWorkerSignal();
+			break;
+		case FRAME_STATUS_GONE:
+			YerFace_MutexLock(self->workingVideoFramesMutex);
+			videoFrame = self->workingVideoFrames[frameNumber];
+			if(!videoFrame->isLipFlappingProcessed) {
+				throw logic_error("Frame is gone, but not yet processed by Lip Flapping worker!");
+			}
+			if(!videoFrame->isPhonemeBreakdownProcessed) {
+				throw logic_error("Frame is gone, but not yet processed by Phoneme Breakdown worker!");
+			}
+			delete videoFrame;
+			self->workingVideoFrames.erase(frameNumber);
+			YerFace_MutexUnlock(self->workingVideoFramesMutex);
+			break;
+	}
+}
+
+bool SphinxDriver::recognitionWorkerHandler(WorkerPoolWorker *worker) {
+	SphinxDriver *self = (SphinxDriver *)worker->ptr;
+
+	bool didWork = false;
+
+	YerFace_MutexLock(self->recognitionMutex);
+	if(self->audioFrameQueue.size() > 0) {
+		if(ps_process_raw(self->pocketSphinx, (int16 const *)self->audioFrameQueue.back()->buf, self->audioFrameQueue.back()->audioSamples, 0, 0) < 0) {
+			throw runtime_error("Failed processing audio samples in PocketSphinx");
+		}
+		self->inSpeech = ps_get_in_speech(self->pocketSphinx);
+		SphinxRecognizerResult result;
+		result.inSpeech = self->inSpeech;
+		result.peak = false;
+		result.startTimestamp = self->audioFrameQueue.back()->timestamp;
+		result.endTimestamp = result.startTimestamp + ((double)self->audioFrameQueue.back()->audioSamples / (double)YERFACE_SPHINX_SAMPLERATE);
+		self->processAudioAmplitude(self->audioFrameQueue.back(), &result);
+		self->audioFrameQueue.back()->inUse = false;
+		self->audioFrameQueue.pop_back();
+
+		if(self->inSpeech && self->utteranceRestarted) {
+			self->utteranceRestarted = false;
+		}
+		if(!self->inSpeech && !self->utteranceRestarted) {
+			if(ps_end_utt(self->pocketSphinx) < 0) {
+				throw runtime_error("Failed to end PocketSphinx utterance");
+			}
+			if(!self->lowLatency) {
+				self->processUtteranceHypothesis();
+			}
+			self->utteranceIndex++;
+			if(ps_start_utt(self->pocketSphinx) < 0) {
+				throw runtime_error("Failed to start PocketSphinx utterance");
+			}
+			self->utteranceRestarted = true;
+		}
+
+		self->recognitionResults.push_front(result);
+		self->lipFlappingWorkerPool->sendWorkerSignal();
+
+		didWork = true;
+	}
+	YerFace_MutexUnlock(self->recognitionMutex);
+
+	return didWork;
+}
+
+void SphinxDriver::recognitionWorkerDeinitializer(WorkerPoolWorker *worker, void *usrPtr) {
+	SphinxDriver *self = (SphinxDriver *)usrPtr;
+
+	self->logger->debug("Recognition Worker Deinitializing...");
+	YerFace_MutexLock(self->recognitionMutex);
+
+	self->recognizerRunning = false;
+	if(ps_end_utt(self->pocketSphinx) < 0) {
+		throw runtime_error("Failed to end PocketSphinx utterance");
+	}
+	if(!self->lowLatency) {
+		self->processUtteranceHypothesis();
+	}
+	self->recognizerDrained = true;
+
+	YerFace_MutexUnlock(self->recognitionMutex);
+}
+
+bool SphinxDriver::lipFlappingWorkerHandler(WorkerPoolWorker *worker) {
+	SphinxDriver *self = (SphinxDriver *)worker->ptr;
+
+	bool didWork = false;
+	static FrameNumber lastFrameNumber = -1;
+	FrameNumber myFrameNumber = -1;
+	SphinxVideoFrame *videoFrame = NULL;
+
+	YerFace_MutexLock(self->workingVideoFramesMutex);
+	//// CHECK FOR WORK ////
+	for(auto pendingFramePair : self->workingVideoFrames) {
+		if(myFrameNumber < 0 || pendingFramePair.first < myFrameNumber) {
+			if(!self->workingVideoFrames[pendingFramePair.first]->isLipFlappingProcessed) {
+				myFrameNumber = pendingFramePair.first;
+			}
+		}
+	}
+	if(myFrameNumber > 0) {
+		videoFrame = self->workingVideoFrames[myFrameNumber];
+	}
+	if(videoFrame != NULL) {
+		if(!videoFrame->isLipFlappingReady) {
+			// self->logger->verbose("Lip Flapping BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
+			myFrameNumber = -1;
+			videoFrame = NULL;
+		}
+	}
+	YerFace_MutexUnlock(self->workingVideoFramesMutex);
+
+	//// DO THE WORK ////
+	if(videoFrame != NULL) {
+		// self->logger->verbose("Lip Flapping Worker Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
+
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("SphinxDriver Lip Flapping Worker handling frames out of order!");
+		}
+		lastFrameNumber = myFrameNumber;
+
+		YerFace_MutexLock(self->workingVideoFramesMutex);
+		self->processLipFlappingAudio(videoFrame);
+		json percent = videoFrame->phonemes.percent;
+		videoFrame->isLipFlappingProcessed = true;
+		YerFace_MutexUnlock(self->workingVideoFramesMutex);
+
+		if(self->lowLatency) {
+			self->outputDriver->insertFrameData("phonemes", percent, myFrameNumber);
+		}
+
+		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_MAPPING, "sphinxDriver.ran");
+
+		didWork = true;
+	}
+	return didWork;
+}
+
+bool SphinxDriver::phonemeBreakdownWorkerHandler(WorkerPoolWorker *worker) {
+	SphinxDriver *self = (SphinxDriver *)worker->ptr;
+
+	bool didWork = false;
+	static FrameNumber lastFrameNumber = -1;
+	FrameNumber myFrameNumber = -1;
+	SphinxVideoFrame *videoFrame = NULL;
+
+	YerFace_MutexLock(self->workingVideoFramesMutex);
+	//// CHECK FOR WORK ////
+	for(auto pendingFramePair : self->workingVideoFrames) {
+		if(myFrameNumber < 0 || pendingFramePair.first < myFrameNumber) {
+			if(!self->workingVideoFrames[pendingFramePair.first]->isPhonemeBreakdownProcessed) {
+				myFrameNumber = pendingFramePair.first;
+			}
+		}
+	}
+	if(myFrameNumber > 0) {
+		videoFrame = self->workingVideoFrames[myFrameNumber];
+	}
+	if(videoFrame != NULL) {
+		if(!videoFrame->isPhonemeBreakdownReady) {
+			// self->logger->verbose("Phoneme Breakdown BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
+			myFrameNumber = -1;
+			videoFrame = NULL;
+		}
+	}
+	YerFace_MutexUnlock(self->workingVideoFramesMutex);
+
+	//// DO THE WORK ////
+	if(videoFrame != NULL) {
+		// self->logger->verbose("Phoneme Breakdown Worker Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
+
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("SphinxDriver Phoneme Breakdown Worker handling frames out of order!");
+		}
+
+		YerFace_MutexLock(self->workingVideoFramesMutex);
+		bool processed = self->processPhonemeBreakdown(videoFrame);
+		json percent;
+		if(processed) {
+			percent = videoFrame->phonemes.percent;
+			videoFrame->isPhonemeBreakdownProcessed = true;
+		}
+		YerFace_MutexUnlock(self->workingVideoFramesMutex);
+		if(processed) {
+			if(!self->lowLatency) {
+				self->outputDriver->insertFrameData("phonemes", percent, myFrameNumber);
+			}
+
+			self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_LATE_PROCESSING, "sphinxDriver.ran");
+			lastFrameNumber = myFrameNumber;
+			didWork = true;
+		}
+	}
+	return didWork;
 }
 
 } //namespace YerFace

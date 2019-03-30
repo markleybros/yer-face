@@ -15,30 +15,30 @@ using namespace dlib;
 
 namespace YerFace {
 
-FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency) {
+// Pose recovery approach largely informed by the following sources:
+//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+//  - https://github.com/severin-lemaignan/gazr/
+FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
-	faceDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceDetector"];
-	working.faceRect.set = false;
-	working.facialFeatures.set = false;
-	working.facialFeatures.featuresExposed.set = false;
-	working.facialPose.set = false;
-	working.previouslyReportedFacialPose.set = false;
-	complete.faceRect.set = false;
-	complete.facialFeatures.set = false;
-	complete.facialPose.set = false;
-	newestClassificationBox.run = false;
-	newestClassificationBox.set = false;
+	previouslyReportedFacialPose.set = false;
 	facialCameraModel.set = false;
 
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
+	}
 	sdlDriver = mySDLDriver;
 	if(sdlDriver == NULL) {
 		throw invalid_argument("sdlDriver cannot be NULL");
 	}
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
 	}
-	lowLatency = myLowLatency;
+	faceDetector = myFaceDetector;
+	if(faceDetector == NULL) {
+		throw invalid_argument("faceDetector cannot be NULL");
+	}
 	poseSmoothingOverSeconds = config["YerFace"]["FaceTracker"]["poseSmoothingOverSeconds"];
 	if(poseSmoothingOverSeconds <= 0.0) {
 		throw invalid_argument("poseSmoothingOverSeconds cannot be less than or equal to zero.");
@@ -102,253 +102,194 @@ FaceTracker::FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *
 	depthSliceH = config["YerFace"]["FaceTracker"]["depthSlices"]["H"];
 
 	logger = new Logger("FaceTracker");
-	metrics = new Metrics(config, "FaceTracker.Process.All", frameDerivatives);
-	metricsLandmarks = new Metrics(config, "FaceTracker.Process.Landmarks", frameDerivatives);
-	metricsClassifier = new Metrics(config, "FaceTracker.ClassifierThread", frameDerivatives, true);
+	metricsPredictor = new Metrics(config, "FaceTracker.Predictor");
+	metricsAssignment = new Metrics(config, "FaceTracker.Assignment");
 
-	if((myCmpMutex = SDL_CreateMutex()) == NULL) {
+	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myClassificationMutex = SDL_CreateMutex()) == NULL) {
+	if((myAssignmentMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
-	deserialize(featureDetectionModelFileName.c_str()) >> shapePredictor;
-	if(faceDetectionModelFileName.length() > 0) {
-		usingDNNFaceDetection = true;
-		deserialize(faceDetectionModelFileName.c_str()) >> faceDetectionModel;
-	} else {
-		usingDNNFaceDetection = false;
-		frontalFaceDetector = get_frontal_face_detector();
-	}
+	//We want to know when any frame has entered various statuses.
+	FrameStatusChangeEventCallback frameStatusChangeCallback;
+	frameStatusChangeCallback.userdata = (void *)this;
+	frameStatusChangeCallback.callback = handleFrameStatusChange;
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_TRACKING;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	classifierRunning = true;
-	if((classifierThread = SDL_CreateThread(FaceTracker::runClassificationLoop, "TrackerLoop", (void *)this)) == NULL) {
-		throw runtime_error("Failed starting thread!");
-	}
+	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_TRACKING without our blessing.
+	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_TRACKING, "faceTracker.ran");
 
-	logger->debug("FaceTracker object constructed and ready to go! Using Face Detection Method: %s, Low Latency Mode: %s", usingDNNFaceDetection ? "DNN" : "HOG", lowLatency ? "Enabled" : "Disabled");
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "FaceTracker.Predictor";
+	workerPoolParameters.numWorkers = config["YerFace"]["FaceTracker"]["numWorkers"];
+	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["FaceTracker"]["numWorkersPerCPU"];
+	workerPoolParameters.initializer = predictorWorkerInitializer;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = predictorWorkerHandler;
+	predictorWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
+	workerPoolParameters.name = "FaceTracker.Assignment";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = NULL;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = assignmentWorkerHandler;
+	assignmentWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
+
+	logger->debug("FaceTracker object constructed and ready to go!");
 }
 
 FaceTracker::~FaceTracker() noexcept(false) {
 	logger->debug("FaceTracker object destructing...");
-	YerFace_MutexLock(myClassificationMutex);
-	classifierRunning = false;
-	YerFace_MutexUnlock(myClassificationMutex);
-	SDL_WaitThread(classifierThread, NULL);
-	SDL_DestroyMutex(myCmpMutex);
-	SDL_DestroyMutex(myClassificationMutex);
-	delete metrics;
-	delete metricsLandmarks;
-	delete metricsClassifier;
+
+	delete predictorWorkerPool;
+
+	YerFace_MutexLock(myMutex);
+	if(pendingPredictionFrameNumbers.size() > 0) {
+		logger->error("Frames are still pending! Woe is me!");
+	}
+	if(outputFrames.size() > 0) {
+		logger->error("Outputs are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(myMutex);
+
+	YerFace_MutexLock(myAssignmentMutex);
+	if(pendingAssignmentFrameNumbers.size() > 0) {
+		logger->error("Assignment Frames are still pending! Woe is me!");
+	}
+	YerFace_MutexUnlock(myAssignmentMutex);
+
+	SDL_DestroyMutex(myMutex);
+	SDL_DestroyMutex(myAssignmentMutex);
+	delete metricsPredictor;
 	delete logger;
 }
 
-// Pose recovery approach largely informed by the following sources:
-//  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-//  - https://github.com/severin-lemaignan/gazr/
-void FaceTracker::processCurrentFrame(void) {
-	MetricsTick tick = metrics->startClock();
-
-	ClassificationFrame classificationFrame = frameDerivatives->getClassificationFrame();
-
-	static bool didClassifierRun = false;
-	while(!didClassifierRun) {
-		YerFace_MutexLock(myClassificationMutex);
-		if(newestClassificationBox.run) {
-			YerFace_MutexUnlock(myClassificationMutex);
-			didClassifierRun = true;
-			break;
-		}
-		YerFace_MutexUnlock(myClassificationMutex);
-		SDL_Delay(10);
-	}
-
-	assignFaceRect();
-
-	doIdentifyFeatures(classificationFrame);
-
-	doCalculateFacialTransformation();
-
-	doPrecalculateFacialPlaneNormal();
-
-	metrics->endClock(tick);
-}
-
-void FaceTracker::advanceWorkingToCompleted(void) {
-	YerFace_MutexLock(myCmpMutex);
-	complete = working;
-	YerFace_MutexUnlock(myCmpMutex);
-	working.faceRect.set = false;
-	working.facialFeatures.set = false;
-	working.facialFeatures.featuresExposed.set = false;
-	working.facialPose.set = false;
-}
-
-void FaceTracker::doClassifyFace(ClassificationFrame classificationFrame) {
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
-	std::vector<dlib::rectangle> faces;
-
-	if(usingDNNFaceDetection) {
-		//Using dlib's CNN-based face detector which can (optimistically) be pushed out to the GPU
-		dlib::matrix<dlib::rgb_pixel> imageMatrix;
-		dlib::assign_image(imageMatrix, dlibClassificationFrame);
-		std::vector<dlib::mmod_rect> detections = faceDetectionModel(imageMatrix);
-		for(dlib::mmod_rect detection : detections) {
-			faces.push_back(detection.rect);
-		}
-	} else {
-		//Using dlib's built-in HOG face detector instead of a CNN-based detector
-		faces = frontalFaceDetector(dlibClassificationFrame);
-	}
-
-	int bestFace = -1;
-	int bestFaceArea = -1;
-	Rect2d tempBox, tempBoxNormalSize, bestFaceBox, bestFaceBoxNormalSize;
-	int i = -1;
-	for(dlib::rectangle face : faces) {
-		i++;
-		tempBox.x = face.left();
-		tempBox.y = face.top();
-		tempBox.width = face.right() - tempBox.x;
-		tempBox.height = face.bottom() - tempBox.y;
-		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / classificationFrame.scaleFactor);
-		if((int)face.area() > bestFaceArea) {
-			bestFace = i;
-			bestFaceArea = face.area();
-			bestFaceBox = tempBox;
-			bestFaceBoxNormalSize = tempBoxNormalSize;
-		}
-	}
-	YerFace_MutexLock(myClassificationMutex);
-	newestClassificationBox.timestamps = classificationFrame.timestamps;
-	newestClassificationBox.run = true;
-	newestClassificationBox.set = false;
-	if(bestFace >= 0) {
-		newestClassificationBox.box = bestFaceBox;
-		newestClassificationBox.boxNormalSize = bestFaceBoxNormalSize;
-		newestClassificationBox.set = true;
-	}
-	YerFace_MutexUnlock(myClassificationMutex);
-}
-
-void FaceTracker::assignFaceRect(void) {
-	YerFace_MutexLock(myClassificationMutex);
-	working.faceRect.set = false;
-	if(newestClassificationBox.set) {
-		working.faceRect.rect = newestClassificationBox.boxNormalSize;
-		working.faceRect.set = true;
-	} else {
-		logger->warn("Lost face completely! Will keep searching...");
-	}
-	YerFace_MutexUnlock(myClassificationMutex);
-}
-
-void FaceTracker::doIdentifyFeatures(ClassificationFrame classificationFrame) {
-	working.facialFeatures.set = false;
-	if(!working.faceRect.set) {
+void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
+	FaceTrackerWorker *innerWorker = (FaceTrackerWorker *)worker->ptr;
+	FacialDetectionBox facialDetection = faceDetector->getFacialDetection(output->frameNumber);
+	if(!facialDetection.set) {
 		return;
 	}
-	dlib::cv_image<dlib::bgr_pixel> dlibClassificationFrame = cv_image<bgr_pixel>(classificationFrame.frame);
-	dlib::rectangle dlibClassificationBox = dlib::rectangle(
-		working.faceRect.rect.x * classificationFrame.scaleFactor,
-		working.faceRect.rect.y * classificationFrame.scaleFactor,
-		(working.faceRect.rect.width + working.faceRect.rect.x) * classificationFrame.scaleFactor,
-		(working.faceRect.rect.height + working.faceRect.rect.y) * classificationFrame.scaleFactor);
 
-	MetricsTick tick = metricsLandmarks->startClock();
-	full_object_detection result = shapePredictor(dlibClassificationFrame, dlibClassificationBox);
-	metricsLandmarks->endClock(tick);
+	// FIXME - Currently we're using the full sized frame as input to the Shape Predictor.
+	// This seems fine, and the performance is quite reasonable. However, workingFrame->detectionFrame
+	// is usually smaller, and Shape Predictor definitely runs faster on it, albiet at a
+	// noticeable reduction in quality. Ideally we should expose this choice to the user,
+	// although I'm not sure yet how.
+	Mat searchFrame = workingFrame->frame;
+	double searchFrameScaleFactor = 1.0; //workingFrame->detectionScaleFactor (see above)
+	Rect2d searchRect = facialDetection.boxNormalSize;
 
-	working.facialFeatures.featuresExposed.features.clear();
-	working.facialFeatures.featuresExposed.features.resize(result.num_parts());
+	dlib::cv_image<dlib::bgr_pixel> dlibSearchFrame = cv_image<bgr_pixel>(searchFrame);
+	dlib::rectangle dlibSearchBox = dlib::rectangle(
+		searchRect.x * searchFrameScaleFactor,
+		searchRect.y * searchFrameScaleFactor,
+		(searchRect.width + searchRect.x) * searchFrameScaleFactor,
+		(searchRect.height + searchRect.y) * searchFrameScaleFactor);
 
-	working.facialFeatures.features.clear();
-	working.facialFeatures.features3D.clear();
+	full_object_detection result = innerWorker->shapePredictor(dlibSearchFrame, dlibSearchBox);
+
+	output->facialFeatures.featuresExposed.features.clear();
+	output->facialFeatures.featuresExposed.features.resize(result.num_parts());
+
+	output->facialFeatures.features.clear();
+	output->facialFeatures.features3D.clear();
 	dlib::point part;
 	Point2d partPoint;
 	for(unsigned long featureIndex = 0; featureIndex < result.num_parts(); featureIndex++) {
 		part = result.part(featureIndex);
-		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, classificationFrame.scaleFactor)) {
+		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, searchFrameScaleFactor)) {
 			return;
 		}
 
-		working.facialFeatures.featuresExposed.features[featureIndex] = partPoint;
+		output->facialFeatures.featuresExposed.features[featureIndex] = partPoint;
 
 		bool pushCorrelationPoint = false;
 		switch(featureIndex) {
 			case IDX_NOSE_SELLION:
-				working.facialFeatures.features3D.push_back(vertexNoseSellion);
+				output->facialFeatures.features3D.push_back(vertexNoseSellion);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_RIGHTEYE_OUTER_CORNER:
-				working.facialFeatures.features3D.push_back(vertexEyeRightOuterCorner);
+				output->facialFeatures.features3D.push_back(vertexEyeRightOuterCorner);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_LEFTEYE_OUTER_CORNER:
-				working.facialFeatures.features3D.push_back(vertexEyeLeftOuterCorner);
+				output->facialFeatures.features3D.push_back(vertexEyeLeftOuterCorner);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_JAWLINE_0:
-				working.facialFeatures.features3D.push_back(vertexRightEar);
+				output->facialFeatures.features3D.push_back(vertexRightEar);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_JAWLINE_16:
-				working.facialFeatures.features3D.push_back(vertexLeftEar);
+				output->facialFeatures.features3D.push_back(vertexLeftEar);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_NOSE_TIP:
-				working.facialFeatures.features3D.push_back(vertexNoseTip);
+				output->facialFeatures.features3D.push_back(vertexNoseTip);
 				pushCorrelationPoint = true;
 				break;
 			case IDX_JAWLINE_8:
-				working.facialFeatures.features3D.push_back(vertexMenton);
+				output->facialFeatures.features3D.push_back(vertexMenton);
 				pushCorrelationPoint = true;
 				break;
 		}
 		if(pushCorrelationPoint) {
-			working.facialFeatures.features.push_back(partPoint);
+			output->facialFeatures.features.push_back(partPoint);
 		}
 	}
 
 	//Stommion needs a little extra help.
 	part = result.part(IDX_MOUTHIN_CENTER_TOP);
 	Point2d mouthTop;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, classificationFrame.scaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, searchFrameScaleFactor)) {
 		return;
 	}
 	part = result.part(IDX_MOUTHIN_CENTER_BOTTOM);
 	Point2d mouthBottom;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, classificationFrame.scaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, searchFrameScaleFactor)) {
 		return;
 	}
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
-	working.facialFeatures.features.push_back(partPoint);
-	working.facialFeatures.features3D.push_back(vertexStommion);
-	working.facialFeatures.set = true;
-	working.facialFeatures.featuresExposed.set = true;
+	output->facialFeatures.features.push_back(partPoint);
+	output->facialFeatures.features3D.push_back(vertexStommion);
+	output->facialFeatures.set = true;
+	output->facialFeatures.featuresExposed.set = true;
 }
 
-void FaceTracker::doInitializeCameraModel(void) {
+void FaceTracker::doInitializeCameraModel(WorkingFrame *workingFrame) {
 	//Totally fake, idealized camera.
-	Size frameSize = frameDerivatives->getWorkingFrameSize();
+	Size frameSize = workingFrame->frame.size();
 	double focalLength = frameSize.width;
 	Point2d center = Point2d(frameSize.width / 2, frameSize.height / 2);
+
+	YerFace_MutexLock(myAssignmentMutex);
 	facialCameraModel.cameraMatrix = Utilities::generateFakeCameraMatrix(focalLength, center);
 	facialCameraModel.distortionCoefficients = Mat::zeros(4, 1, DataType<double>::type);
 	facialCameraModel.set = true;
+	YerFace_MutexUnlock(myAssignmentMutex);
 }
 
-void FaceTracker::doCalculateFacialTransformation(void) {
-	if(!working.facialFeatures.set) {
-		working.previouslyReportedFacialPose.set = false;
+void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
+	if(!output->facialFeatures.set) {
+		previouslyReportedFacialPose.set = false;
 		return;
 	}
-	if(!facialCameraModel.set) {
-		doInitializeCameraModel();
-	}
 
-	FrameTimestamps frameTimestamps = frameDerivatives->getWorkingFrameTimestamps();
+	FacialCameraModel camera = facialCameraModel;
+
+	FrameTimestamps frameTimestamps = workingFrame->frameTimestamps;
 	double frameTimestamp = frameTimestamps.startTimestamp;
 	FacialPose tempPose;
 	tempPose.timestamp = frameTimestamp;
@@ -357,7 +298,7 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	//// DO FACIAL POSE SOLUTION ////
 
-	solvePnP(working.facialFeatures.features3D, working.facialFeatures.features, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, tempRotationVector, tempPose.translationVector);
+	solvePnP(output->facialFeatures.features3D, output->facialFeatures.features, camera.cameraMatrix, camera.distortionCoefficients, tempRotationVector, tempPose.translationVector);
 	tempRotationVector.at<double>(0) = tempRotationVector.at<double>(0) * -1.0;
 	tempRotationVector.at<double>(1) = tempRotationVector.at<double>(1) * -1.0;
 	Rodrigues(tempRotationVector, tempPose.rotationMatrix);
@@ -367,11 +308,11 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 	bool reportNewPose = true;
 	double degreesDifference, distance, scaledRotationThreshold, scaledTranslationThreshold;
 	double timeScale = (double)(frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / (double)(1.0 / 30.0);
-	if(working.previouslyReportedFacialPose.set) {
+	if(previouslyReportedFacialPose.set) {
 		scaledRotationThreshold = poseRotationHighRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationHighRejectionThreshold * timeScale;
-		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(working.previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
-		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(working.previouslyReportedFacialPose.translationVector));
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(previouslyReportedFacialPose.translationVector));
 		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
 			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
@@ -390,14 +331,14 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		reportNewPose = false;
 	}
 	if(!reportNewPose) {
-		if(working.previouslyReportedFacialPose.set) {
-			if(tempPose.timestamp - working.previouslyReportedFacialPose.timestamp >= poseRejectionResetAfterSeconds) {
-				logger->warn("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - working.previouslyReportedFacialPose.timestamp);
-				working.previouslyReportedFacialPose.set = false;
+		if(previouslyReportedFacialPose.set) {
+			if(tempPose.timestamp - previouslyReportedFacialPose.timestamp >= poseRejectionResetAfterSeconds) {
+				logger->warn("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - previouslyReportedFacialPose.timestamp);
+				previouslyReportedFacialPose.set = false;
 			}
-			working.facialPose = working.previouslyReportedFacialPose;
+			output->facialPose = previouslyReportedFacialPose;
 		} else {
-			working.facialPose.set = false;
+			output->facialPose.set = false;
 		}
 		return;
 	}
@@ -436,12 +377,12 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 
 	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
 	tempPose.translationVectorInternal = tempPose.translationVector.clone();
-	if(working.previouslyReportedFacialPose.set) {
+	if(previouslyReportedFacialPose.set) {
 		int i;
 		double delta;
 
 		// Do the de-noising thing first for the externally-facing matrices
-		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrix);
+		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrix);
 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 
@@ -454,14 +395,14 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
 
 		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVector.at<double>(i) - working.previouslyReportedFacialPose.translationVector.at<double>(i);
+			delta = tempPose.translationVector.at<double>(i) - previouslyReportedFacialPose.translationVector.at<double>(i);
 			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVector.at<double>(i) = working.previouslyReportedFacialPose.translationVector.at<double>(i);
+				tempPose.translationVector.at<double>(i) = previouslyReportedFacialPose.translationVector.at<double>(i);
 			}
 		}
 
 		// Do the de-noising thing again, but for the internally-facing matrices
-		prevAngles = Utilities::rotationMatrixToEulerAngles(working.previouslyReportedFacialPose.rotationMatrixInternal);
+		prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrixInternal);
 		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
 
@@ -474,28 +415,148 @@ void FaceTracker::doCalculateFacialTransformation(void) {
 		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
 
 		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVectorInternal.at<double>(i) - working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
+			delta = tempPose.translationVectorInternal.at<double>(i) - previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
 			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVectorInternal.at<double>(i) = working.previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
+				tempPose.translationVectorInternal.at<double>(i) = previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
 			}
 		}
 	}
 
-	working.facialPose = tempPose;
-	working.previouslyReportedFacialPose = working.facialPose;
+	output->facialPose = tempPose;
+	previouslyReportedFacialPose = output->facialPose;
 }
 
-void FaceTracker::doPrecalculateFacialPlaneNormal(void) {
-	if(!working.facialPose.set) {
+void FaceTracker::doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output) {
+	if(!output->facialPose.set) {
 		return;
 	}
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
-	planeNormalMat = working.facialPose.rotationMatrix * planeNormalMat;
-	working.facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
+	planeNormalMat = output->facialPose.rotationMatrix * planeNormalMat;
+	output->facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
 
-FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType) {
-	if(!working.facialPose.set) {
+bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor) {
+	if(*src == OBJECT_PART_NOT_PRESENT) {
+		return false;
+	}
+	*dst = Point2d(src->x(), src->y());
+	dst->x /= detectionScaleFactor;
+	dst->y /= detectionScaleFactor;
+	return true;
+}
+
+void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::renderPreviewHUD() passed invalid frame number");
+	}
+	FaceTrackerOutput output = outputFrames[frameNumber];
+	YerFace_MutexUnlock(myMutex);
+
+	YerFace_MutexLock(myAssignmentMutex);
+	FacialCameraModel camera = facialCameraModel;
+	YerFace_MutexUnlock(myAssignmentMutex);
+
+	if(density > 0) {
+		if(output.facialPose.set) {
+			std::vector<Point3d> gizmo3d(6);
+			std::vector<Point2d> gizmo2d;
+			gizmo3d[0] = Point3d(-50,0.0,0.0);
+			gizmo3d[1] = Point3d(50,0.0,0.0);
+			gizmo3d[2] = Point3d(0.0,50,0.0);
+			gizmo3d[3] = Point3d(0.0,-50,0.0);
+			gizmo3d[4] = Point3d(0.0,0.0,50);
+			gizmo3d[5] = Point3d(0.0,0.0,-50);
+			
+			Mat tempRotationVector;
+			Rodrigues(output.facialPose.rotationMatrix, tempRotationVector);
+			projectPoints(gizmo3d, tempRotationVector, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, gizmo2d);
+			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
+			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
+			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
+		}
+	}
+	if(density > 3) {
+		if(output.facialFeatures.set) {
+			for(auto feature : output.facialFeatures.featuresExposed.features) {
+				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
+			}
+		}
+	}
+
+	if(density > 4) {
+		if(output.facialPose.set) {
+			std::vector<Point3d> edges3d;
+			std::vector<Point2d> edges2d;
+
+			std::list<double> depths = { depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG };
+			for(double depth : depths) {
+				double planeWidth = 300;
+				double gridIncrement = 25;
+				double planeEdge = (planeWidth / 2.0);
+				for(double x = planeEdge * -1.0; x <= planeEdge; x = x + gridIncrement) {
+					edges3d.push_back(Point3d(x, planeEdge, depth));
+					edges3d.push_back(Point3d(x, planeEdge * -1.0, depth));
+				}
+				for(double y = planeEdge * -1.0; y <= planeEdge; y = y + gridIncrement) {
+					edges3d.push_back(Point3d(planeEdge, y, depth));
+					edges3d.push_back(Point3d(planeEdge * -1.0, y, depth));
+				}
+			}
+
+			projectPoints(edges3d, output.facialPose.rotationMatrix, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, edges2d);
+
+			for(unsigned int i = 0; i + 1 < edges2d.size(); i = i + 2) {
+				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255));
+			}
+		}
+	}
+}
+
+FacialFeatures FaceTracker::getFacialFeatures(FrameNumber frameNumber) {
+	FacialFeatures val;
+	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getFacialFeatures() passed invalid frame number");
+	}
+	val = outputFrames[frameNumber].facialFeatures.featuresExposed;
+	YerFace_MutexUnlock(myMutex);
+	return val;
+}
+
+FacialCameraModel FaceTracker::getFacialCameraModel(void) {
+	FacialCameraModel val;
+	YerFace_MutexLock(myAssignmentMutex);
+	val = facialCameraModel;
+	YerFace_MutexUnlock(myAssignmentMutex);
+	return val;
+}
+
+FacialPose FaceTracker::getFacialPose(FrameNumber frameNumber) {
+	FacialPose val;
+	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getFacialPose() passed invalid frame number");
+	}
+	val = outputFrames[frameNumber].facialPose;
+	YerFace_MutexUnlock(myMutex);
+	return val;
+}
+
+FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumber frameNumber, MarkerType markerType) {
+	FacialPose facialPose;
+	YerFace_MutexLock(myMutex);
+	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
+		YerFace_MutexUnlock(myMutex);
+		throw invalid_argument("FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() passed invalid frame number");
+	}
+	facialPose = outputFrames[frameNumber].facialPose;
+	YerFace_MutexUnlock(myMutex);
+
+	if(!facialPose.set) {
 		throw runtime_error("Can't do FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose() when no working FacialPose is set.");
 	}
 
@@ -539,147 +600,168 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(MarkerType
 	}
 
 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
-	translationOffset = working.facialPose.rotationMatrix * translationOffset;
+	translationOffset = facialPose.rotationMatrix * translationOffset;
 
 	FacialPlane facialPlane;
-	Mat translationVector = working.facialPose.translationVector + translationOffset;
+	Mat translationVector = facialPose.translationVector + translationOffset;
 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
-	facialPlane.planeNormal = working.facialPose.facialPlaneNormal;
+	facialPlane.planeNormal = facialPose.facialPlaneNormal;
 
 	return facialPlane;
 }
 
-bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor) {
-	if(*src == OBJECT_PART_NOT_PRESENT) {
-		return false;
-	}
-	*dst = Point2d(src->x(), src->y());
-	dst->x /= classificationScaleFactor;
-	dst->y /= classificationScaleFactor;
-	return true;
-}
-
-void FaceTracker::renderPreviewHUD(void) {
-	YerFace_MutexLock(myCmpMutex);
-	Mat frame = frameDerivatives->getCompletedPreviewFrame();
-	int density = sdlDriver->getPreviewDebugDensity();
-	if(density > 0) {
-		if(complete.facialPose.set) {
-			std::vector<Point3d> gizmo3d(6);
-			std::vector<Point2d> gizmo2d;
-			gizmo3d[0] = Point3d(-50,0.0,0.0);
-			gizmo3d[1] = Point3d(50,0.0,0.0);
-			gizmo3d[2] = Point3d(0.0,50,0.0);
-			gizmo3d[3] = Point3d(0.0,-50,0.0);
-			gizmo3d[4] = Point3d(0.0,0.0,50);
-			gizmo3d[5] = Point3d(0.0,0.0,-50);
-			
-			Mat tempRotationVector;
-			Rodrigues(complete.facialPose.rotationMatrix, tempRotationVector);
-			projectPoints(gizmo3d, tempRotationVector, complete.facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, gizmo2d);
-			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
-			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
-		}
-	}
-	if(density > 1) {
-		if(complete.faceRect.set) {
-			cv::rectangle(frame, complete.faceRect.rect, Scalar(255, 255, 0), 1);
-		}
-	}
-	if(density > 3) {
-		if(complete.facialFeatures.set) {
-			for(auto feature : complete.facialFeatures.featuresExposed.features) {
-				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
-			}
-		}
-	}
-
-	if(density > 4) {
-		if(complete.facialPose.set) {
-			std::vector<Point3d> edges3d;
-			std::vector<Point2d> edges2d;
-
-			std::list<double> depths = { depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG };
-			for(double depth : depths) {
-				double planeWidth = 300;
-				double gridIncrement = 25;
-				double planeEdge = (planeWidth / 2.0);
-				for(double x = planeEdge * -1.0; x <= planeEdge; x = x + gridIncrement) {
-					edges3d.push_back(Point3d(x, planeEdge, depth));
-					edges3d.push_back(Point3d(x, planeEdge * -1.0, depth));
-				}
-				for(double y = planeEdge * -1.0; y <= planeEdge; y = y + gridIncrement) {
-					edges3d.push_back(Point3d(planeEdge, y, depth));
-					edges3d.push_back(Point3d(planeEdge * -1.0, y, depth));
-				}
-			}
-
-			projectPoints(edges3d, complete.facialPose.rotationMatrix, complete.facialPose.translationVector, facialCameraModel.cameraMatrix, facialCameraModel.distortionCoefficients, edges2d);
-
-			for(unsigned int i = 0; i + 1 < edges2d.size(); i = i + 2) {
-				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255));
-			}
-		}
-	}
-	YerFace_MutexUnlock(myCmpMutex);
-}
-
-FacialRect FaceTracker::getFacialBoundingBox(void) {
-	FacialRect val = working.faceRect;
-	return val;
-}
-
-FacialFeatures FaceTracker::getFacialFeatures(void) {
-	FacialFeatures val = working.facialFeatures.featuresExposed;
-	return val;
-}
-
-FacialCameraModel FaceTracker::getFacialCameraModel(void) {
-	FacialCameraModel val = facialCameraModel;
-	return val;
-}
-
-FacialPose FaceTracker::getWorkingFacialPose(void) {
-	FacialPose val = working.facialPose;
-	return val;
-}
-
-FacialPose FaceTracker::getCompletedFacialPose(void) {
-	YerFace_MutexLock(myCmpMutex);
-	FacialPose val = complete.facialPose;
-	YerFace_MutexUnlock(myCmpMutex);
-	return val;
-}
-
-int FaceTracker::runClassificationLoop(void *ptr) {
-	FaceTracker *self = (FaceTracker *)ptr;
-	self->logger->verbose("Face Tracker Classification Thread alive!");
-
-	signed long lastClassificationFrameNumber = -1;
-
-	while(true) {
-		ClassificationFrame classificationFrame = self->frameDerivatives->getClassificationFrame();
-
-		if(classificationFrame.set && classificationFrame.timestamps.set &&
-		  classificationFrame.timestamps.frameNumber != lastClassificationFrameNumber) {
-			MetricsTick tick = self->metricsClassifier->startClock();
-			self->doClassifyFace(classificationFrame);
-			lastClassificationFrameNumber = classificationFrame.timestamps.frameNumber;
-			self->metricsClassifier->endClock(tick);
-		}
-
-		YerFace_MutexLock(self->myClassificationMutex);
-		if(!self->classifierRunning) {
-			YerFace_MutexUnlock(self->myClassificationMutex);
+void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
+	FrameNumber frameNumber = frameTimestamps.frameNumber;
+	FaceTracker *self = (FaceTracker *)userdata;
+	FaceTrackerOutput output;
+	FaceTrackerAssignmentTask assignment;
+	switch(newStatus) {
+		default:
+			throw logic_error("Handler passed unsupported frame status change event!");
+		case FRAME_STATUS_NEW:
+			output.set = false;
+			output.facialFeatures.set = false;
+			output.facialFeatures.featuresExposed.set = false;
+			output.facialPose.set = false;
+			YerFace_MutexLock(self->myMutex);
+			self->outputFrames[frameNumber] = output;
+			YerFace_MutexUnlock(self->myMutex);
+			assignment.frameNumber = frameNumber;
+			assignment.readyForAssignment = false;
+			YerFace_MutexLock(self->myAssignmentMutex);
+			self->pendingAssignmentFrameNumbers[frameNumber] = assignment;
+			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
-		}
-		YerFace_MutexUnlock(self->myClassificationMutex);
-		SDL_Delay(0);
+		case FRAME_STATUS_TRACKING:
+			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
+			YerFace_MutexLock(self->myMutex);
+			self->pendingPredictionFrameNumbers.push_back(frameNumber);
+			YerFace_MutexUnlock(self->myMutex);
+			self->predictorWorkerPool->sendWorkerSignal();
+			break;
+		case FRAME_STATUS_GONE:
+			YerFace_MutexLock(self->myMutex);
+			self->outputFrames.erase(frameNumber);
+			YerFace_MutexUnlock(self->myMutex);
+			break;
+	}
+}
+
+void FaceTracker::predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr) {
+	FaceTracker *self = (FaceTracker *)ptr;
+	FaceTrackerWorker *innerWorker = new FaceTrackerWorker();
+	innerWorker->self = self;
+	deserialize(self->featureDetectionModelFileName.c_str()) >> innerWorker->shapePredictor;
+	worker->ptr = (void *)innerWorker;
+}
+
+bool FaceTracker::predictorWorkerHandler(WorkerPoolWorker *worker) {
+	FaceTrackerWorker *innerWorker = (FaceTrackerWorker *)worker->ptr;
+	FaceTracker *self = innerWorker->self;
+
+	bool didWork = false;
+	FrameNumber myFrameNumber = -1;
+
+	YerFace_MutexLock(self->myMutex);
+	//// CHECK FOR WORK ////
+	if(self->pendingPredictionFrameNumbers.size() > 0) {
+		myFrameNumber = self->pendingPredictionFrameNumbers.front();
+		self->pendingPredictionFrameNumbers.pop_front();
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		MetricsTick tick = self->metricsPredictor->startClock();
+
+		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
+
+		FaceTrackerOutput output;
+		output.set = false;
+		output.facialFeatures.set = false;
+		output.facialFeatures.featuresExposed.set = false;
+		output.facialPose.set = false;
+		output.frameNumber = myFrameNumber;
+
+		self->doIdentifyFeatures(worker, workingFrame, &output);
+
+		YerFace_MutexLock(self->myMutex);
+		self->outputFrames[myFrameNumber] = output;
+		YerFace_MutexUnlock(self->myMutex);
+
+		YerFace_MutexLock(self->myAssignmentMutex);
+		self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment = true;
+		YerFace_MutexUnlock(self->myAssignmentMutex);
+		self->assignmentWorkerPool->sendWorkerSignal();
+
+		self->metricsPredictor->endClock(tick);
+		didWork = true;
 	}
 
-	self->logger->verbose("Face Tracker Classification Thread quitting...");
-	return 0;
+	return didWork;
+}
+
+bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
+	FaceTracker *self = (FaceTracker *)worker->ptr;
+
+	bool didWork = false;
+	FrameNumber myFrameNumber = -1;
+	static FrameNumber lastFrameNumber = -1;
+
+	YerFace_MutexLock(self->myAssignmentMutex);
+	//// CHECK FOR WORK ////
+	for(auto pendingAssignmentPair : self->pendingAssignmentFrameNumbers) {
+		if(myFrameNumber < 0 || pendingAssignmentPair.first < myFrameNumber) {
+			myFrameNumber = pendingAssignmentPair.first;
+		}
+	}
+	if(myFrameNumber > 0 && !self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment) {
+		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
+		myFrameNumber = -1;
+	}
+	if(myFrameNumber > 0) {
+		self->pendingAssignmentFrameNumbers.erase(myFrameNumber);
+	}
+	YerFace_MutexUnlock(self->myAssignmentMutex);
+
+	YerFace_MutexLock(self->myMutex);
+	FaceTrackerOutput output;
+	if(myFrameNumber > 0) {
+		output = self->outputFrames[myFrameNumber];
+	}
+	YerFace_MutexUnlock(self->myMutex);
+
+	//// DO THE WORK ////
+	if(myFrameNumber > 0) {
+		// self->logger->verbose("Face Tracker Assignment Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
+		if(myFrameNumber <= lastFrameNumber) {
+			throw logic_error("FaceTracker handling frames out of order!");
+		}
+		lastFrameNumber = myFrameNumber;
+
+		MetricsTick tick = self->metricsAssignment->startClock();
+
+		WorkingFrame *workingFrame = self->frameServer->getWorkingFrame(myFrameNumber);
+		
+		YerFace_MutexLock(self->myAssignmentMutex);
+		if(!self->facialCameraModel.set) {
+			self->doInitializeCameraModel(workingFrame);
+		}
+		self->doCalculateFacialTransformation(worker, workingFrame, &output);
+		self->doPrecalculateFacialPlaneNormal(worker, workingFrame, &output);
+		YerFace_MutexUnlock(self->myAssignmentMutex);
+
+		YerFace_MutexLock(self->myMutex);
+		self->outputFrames[myFrameNumber] = output;
+		YerFace_MutexUnlock(self->myMutex);
+
+		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_TRACKING, "faceTracker.ran");
+		self->metricsAssignment->endClock(tick);
+
+		didWork = true;
+	}
+
+	return didWork;
 }
 
 }; //namespace YerFace

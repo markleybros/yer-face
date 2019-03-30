@@ -1,8 +1,15 @@
 {
   "YerFace": {
+    "FaceDetector": {
+      "numWorkersPerCPU": 0.0,
+      "numWorkers": 1,
+      "resultGoodForSeconds": 0.5,
+      "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
+    },
     "FaceTracker": {
+      "numWorkersPerCPU": 0.1375,
+      "numWorkers": 0,
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
-      "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat",
       "poseSmoothingOverSeconds": 0.5,
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.0,
@@ -42,14 +49,14 @@
         "H": 25
       }
     },
-    "FrameDerivatives": {
+    "FrameServer": {
       "LowLatency": {
-        "classificationBoundingBox": 320,
-        "classificationScaleFactor": 0.0
+        "detectionBoundingBox": 320,
+        "detectionScaleFactor": 0.0
       },
       "Offline": {
-        "classificationBoundingBox": 640,
-        "classificationScaleFactor": 0.0
+        "detectionBoundingBox": 640,
+        "detectionScaleFactor": 0.0
       }
     },
     "MarkerTracker": {
@@ -60,8 +67,8 @@
       "markerRejectionResetAfterSeconds": 0.1
     },
     "Metrics": {
-      "averageOverSeconds": 1.0,
-      "reportEverySeconds": 3.0
+      "averageOverSeconds": 5.0,
+      "reportEverySeconds": 5.0
     },
     "OutputDriver": {
       "websocketServerEnabled": true,
@@ -124,14 +131,20 @@
       }
     },
     "EventLogger": {
-      "eventTimestampAdjustment": 0.003
     },
     "SDLDriver": {
-      "PreviewHUD": {
-        "previewRatio": 1.25,
-        "previewWidthPercentage": 0.2,
-        "previewCenterHeightPercentage": 0.2
-      }
+    },
+    "ImageSequence": {
+      "numWorkersPerCPU": 0.25,
+      "numWorkers": 0
+    },
+    "PreviewHUD": {
+      "numWorkersPerCPU": 0.5,
+      "numWorkers": 0,
+      "initialPreviewDisplayDensity": 4,
+      "previewRatio": 1.25,
+      "previewWidthPercentage": 0.2,
+      "previewCenterHeightPercentage": 0.2
     }
   }
 }

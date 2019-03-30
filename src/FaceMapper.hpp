@@ -2,10 +2,12 @@
 
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "FaceTracker.hpp"
 #include "MarkerTracker.hpp"
 #include "Metrics.hpp"
+#include "Status.hpp"
+#include "PreviewHUD.hpp"
 
 using namespace std;
 using namespace cv;
@@ -14,23 +16,30 @@ namespace YerFace {
 
 class MarkerTracker;
 
+class FaceMapperPendingFrame {
+public:
+	FrameNumber frameNumber;
+	bool hasEnteredMapping;
+	bool hasCompletedMapping;
+};
+
 class FaceMapper {
 public:
-	FaceMapper(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, FaceTracker *myFaceTracker);
-	~FaceMapper();
-	void processCurrentFrame(void);
-	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
-	SDLDriver *getSDLDriver(void);
-	FrameDerivatives *getFrameDerivatives(void);
+	FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, PreviewHUD *myPreviewHUD);
+	~FaceMapper() noexcept(false);
+	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	FrameServer *getFrameServer(void);
 	FaceTracker *getFaceTracker(void);
 private:
-	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
+	static bool workerHandler(WorkerPoolWorker *worker);
+
+	Status *status;
+	FrameServer *frameServer;
 	FaceTracker *faceTracker;
+	PreviewHUD *previewHUD;
 
 	Logger *logger;
-	SDL_mutex *myCmpMutex;
 	Metrics *metrics;
 
 	MarkerTracker *markerEyelidLeftTop;
@@ -57,6 +66,10 @@ private:
 	MarkerTracker *markerLipsRightBottom;
 
 	std::vector<MarkerTracker *> trackers;
+
+	SDL_mutex *myMutex;
+	std::unordered_map<FrameNumber, FaceMapperPendingFrame> pendingFrames;
+	WorkerPool *workerPool;
 };
 
 }; //namespace YerFace

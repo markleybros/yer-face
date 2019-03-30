@@ -12,7 +12,7 @@
 #include "MarkerType.hpp"
 #include "FaceMapper.hpp"
 #include "FaceTracker.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Utilities.hpp"
 
 using namespace std;
@@ -24,14 +24,8 @@ class MarkerPoint {
 public:
 	Point2d point;
 	Point3d point3d;
-	double timestamp;
+	FrameTimestamps timestamp;
 	bool set;
-};
-
-class MarkerTrackerWorkingVariables {
-public:
-	MarkerPoint markerPoint;
-	MarkerPoint previouslyReportedMarkerPoint;
 };
 
 class FaceMapper;
@@ -41,16 +35,17 @@ public:
 	MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *myFaceMapper);
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
-	void processCurrentFrame(void);
-	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
-	MarkerPoint getCompletedMarkerPoint(void);
+	void processFrame(FrameNumber frameNumber);
+	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	void frameStatusNew(FrameNumber frameNumber);
+	void frameStatusGone(FrameNumber frameNumber);
+	MarkerPoint getMarkerPoint(FrameNumber frameNumber);
 	static vector<MarkerTracker *> getMarkerTrackers(void);
 	static MarkerTracker *getMarkerTrackerByType(MarkerType markerType);
 private:
-	void assignMarkerPoint(void);
-	void calculate3dMarkerPoint(void);
-	void performMarkerPointValidationAndSmoothing(void);
+	void assignMarkerPoint(FrameNumber frameNumber, MarkerPoint *markerPoint);
+	void calculate3dMarkerPoint(FrameNumber frameNumber, MarkerPoint *markerPoint);
+	void performMarkerPointValidationAndSmoothing(WorkingFrame *workingFrame, FrameNumber frameNumber, MarkerPoint *markerPoint);
 	
 	static vector<MarkerTracker *> markerTrackers;
 	static SDL_mutex *myStaticMutex;
@@ -64,14 +59,13 @@ private:
 	double markerRejectionResetAfterSeconds;
 
 	Logger *logger;
-	SDL_mutex *myCmpMutex;
-	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
+	FrameServer *frameServer;
 	FaceTracker *faceTracker;
 
+	SDL_mutex *myMutex;
 	list<MarkerPoint> markerPointSmoothingBuffer;
-
-	MarkerTrackerWorkingVariables working, complete;
+	MarkerPoint previouslyReportedMarkerPoint;
+	unordered_map<FrameNumber, MarkerPoint> markerPoints;
 };
 
 }; //namespace YerFace

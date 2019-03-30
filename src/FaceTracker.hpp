@@ -11,11 +11,14 @@
 #include "dlib/image_processing.h"
 
 #include "Logger.hpp"
+#include "Status.hpp"
 #include "SDLDriver.hpp"
+#include "FaceDetector.hpp"
 #include "MarkerType.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Metrics.hpp"
 #include "Utilities.hpp"
+#include "WorkerPool.hpp"
 
 using namespace std;
 using namespace cv;
@@ -86,6 +89,8 @@ enum DlibFeatureIndexes {
 	IDX_MOUTHIN_RIGHT_BOTTOM = 67
 };
 
+class FaceTracker;
+
 class FacialPose {
 public:
 	Mat translationVector, rotationMatrix;
@@ -99,12 +104,6 @@ class FacialPlane {
 public:
 	Point3d planePoint;
 	Vec3d planeNormal;
-};
-
-class FacialRect {
-public:
-	Rect2d rect;
-	bool set;
 };
 
 class FacialFeatures {
@@ -127,59 +126,52 @@ public:
 	bool set;
 };
 
-class FacialClassificationBox {
+class FaceTrackerWorker {
 public:
-	Rect2d box;
-	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
-	FrameTimestamps timestamps; //The timestamp (including frame number) to which this classification belongs.
-	bool run; //Did the classifier run?
-	bool set; //Is the box valid?
+	FaceTracker *self;
+
+	dlib::shape_predictor shapePredictor;
 };
 
-class FaceTrackerWorkingVariables {
+class FaceTrackerOutput {
 public:
-	FacialRect faceRect;
+	bool set;
+	FrameNumber frameNumber;
 	FacialFeaturesInternal facialFeatures;
 	FacialPose facialPose;
-	FacialPose previouslyReportedFacialPose;
 };
 
-
-template <long num_filters, typename SUBNET> using con5d = dlib::con<num_filters,5,5,2,2,SUBNET>;
-template <long num_filters, typename SUBNET> using con5  = dlib::con<num_filters,5,5,1,1,SUBNET>;
-
-template <typename SUBNET> using downsampler  = dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<16,SUBNET>>>>>>>>>;
-template <typename SUBNET> using rcon5  = dlib::relu<dlib::affine<con5<45,SUBNET>>>;
-
-using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<dlib::input_rgb_image_pyramid<dlib::pyramid_down<6>>>>>>>>;
+class FaceTrackerAssignmentTask {
+public:
+	FrameNumber frameNumber;
+	bool readyForAssignment;
+};
 
 class FaceTracker {
 public:
-	FaceTracker(json config, SDLDriver *mySDLDriver, FrameDerivatives *myFrameDerivatives, bool myLowLatency);
+	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
 	~FaceTracker() noexcept(false);
-	void processCurrentFrame(void);
-	void advanceWorkingToCompleted(void);
-	void renderPreviewHUD(void);
-	FacialRect getFacialBoundingBox(void);
-	FacialFeatures getFacialFeatures(void);
+	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	FacialFeatures getFacialFeatures(FrameNumber frameNumber);
 	FacialCameraModel getFacialCameraModel(void);
-	FacialPose getWorkingFacialPose(void);
-	FacialPose getCompletedFacialPose(void);
-	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(MarkerType markerType);
+	FacialPose getFacialPose(FrameNumber frameNumber);
+	FacialPlane getCalculatedFacialPlaneForWorkingFacialPose(FrameNumber frameNumber, MarkerType markerType);
 private:
-	void doClassifyFace(ClassificationFrame classificationFrame);
-	void assignFaceRect(void);
-	void doIdentifyFeatures(ClassificationFrame classificationFrame);
-	void doInitializeCameraModel(void);
-	void doCalculateFacialTransformation(void);
-	void doPrecalculateFacialPlaneNormal(void);
-	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double classificationScaleFactor);
-	static int runClassificationLoop(void *ptr);
+	void doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	void doInitializeCameraModel(WorkingFrame *workingFrame);
+	void doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	void doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
+	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
+	static void predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
+	static bool predictorWorkerHandler(WorkerPoolWorker *worker);
+	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
+	Status *status;
 	SDLDriver *sdlDriver;
-	FrameDerivatives *frameDerivatives;
-	bool lowLatency;
+	FrameServer *frameServer;
+	FaceDetector *faceDetector;
 	double poseSmoothingOverSeconds;
 	double poseSmoothingExponent;
 	double poseRotationLowRejectionThreshold;
@@ -209,25 +201,19 @@ private:
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;
-	Metrics *metrics, *metricsLandmarks, *metricsClassifier;
-
-	bool usingDNNFaceDetection;
-
-	FacialCameraModel facialCameraModel;
+	Metrics *metricsPredictor, *metricsAssignment;
 
 	list<FacialPose> facialPoseSmoothingBuffer;
+	FacialPose previouslyReportedFacialPose;
+	FacialCameraModel facialCameraModel;
 
-	dlib::frontal_face_detector frontalFaceDetector;
-	dlib::shape_predictor shapePredictor;
-	FaceDetectionModel faceDetectionModel;
+	SDL_mutex *myMutex, *myAssignmentMutex;
 
-	FacialClassificationBox newestClassificationBox;
+	std::list<FrameNumber> pendingPredictionFrameNumbers;
+	unordered_map<FrameNumber, FaceTrackerAssignmentTask> pendingAssignmentFrameNumbers;
+	unordered_map<FrameNumber, FaceTrackerOutput> outputFrames;
 
-	FaceTrackerWorkingVariables working, complete;
-
-	SDL_mutex *myCmpMutex, *myClassificationMutex;
-	SDL_Thread *classifierThread;
-	bool classifierRunning;
+	WorkerPool *predictorWorkerPool, *assignmentWorkerPool;
 };
 
 }; //namespace YerFace

@@ -2,11 +2,12 @@
 
 #include "Logger.hpp"
 #include "OutputDriver.hpp"
-#include "FrameDerivatives.hpp"
+#include "FrameServer.hpp"
 #include "Utilities.hpp"
+#include "Status.hpp"
+#include "WorkerPool.hpp"
 
 #include <list>
-#include <fstream>
 
 using namespace std;
 
@@ -20,33 +21,38 @@ public:
 	function<bool(string eventName, json eventPayload, json sourcePacket)> replayCallback;
 };
 
+class EventLoggerReplayTask {
+public:
+	FrameTimestamps frameTimestamps;
+	bool readyForReplay;
+};
+
 class EventLogger {
 public:
-	EventLogger(json config, string myEventFile, OutputDriver *myOutputDriver, FrameDerivatives *myFrameDerivatives, double myFrom);
-	~EventLogger();
+	EventLogger(json config, string myEventFile, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer);
+	~EventLogger() noexcept(false);
 	void registerEventType(EventType eventType);
-	void logEvent(string eventName, json payload, bool propagate = false, json sourcePacket = json::object());
-	void startNewFrame(void);
-	void handleCompletedFrame(void);
+	void logEvent(string eventName, json payload, FrameTimestamps frameTimestamps, bool propagate = false, json sourcePacket = json::object());
 private:
-	void processNextPacket(void);
+	void processNextPacket(FrameTimestamps frameTimestamps);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
+	static bool replayWorkerHandler(WorkerPoolWorker *worker);
 	string eventFilename;
+	Status *status;
 	OutputDriver *outputDriver;
-	FrameDerivatives *frameDerivatives;
-	double from;
+	FrameServer *frameServer;
 
 	Logger *logger;
 
-	FrameTimestamps workingFrameTimestamps;
-
-	double eventTimestampAdjustment;
-	bool eventReplay, eventReplayHold;
 	ifstream eventFilestream;
-	json nextPacket;
 
+	WorkerPool *replayWorkerPool;
+	SDL_mutex *myMutex;
 	list<EventType> registeredEventTypes;
-
-	json events;
+	unordered_map<FrameNumber, json> frameEvents;
+	unordered_map<FrameNumber, EventLoggerReplayTask> pendingReplayFrames;
+	bool eventReplay, eventReplayHold;
+	json nextPacket;
 };
 
 }; //namespace YerFace

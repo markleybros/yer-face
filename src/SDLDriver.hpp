@@ -1,28 +1,15 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "Status.hpp"
+#include "FrameServer.hpp"
 #include "FFmpegDriver.hpp"
 
 #include <list>
 
 namespace YerFace {
 
-#define YERFACE_PREVIEW_DEBUG_DENSITY_MAX 5
 #define YERFACE_AUDIO_LATE_GRACE 0.1
-
-enum PreviewPositionInFrame {
-	BottomLeft,
-	BottomRight,
-	TopRight
-};
-
-enum PreviewPositionInFrameDirection {
-	MoveUp,
-	MoveDown,
-	MoveLeft,
-	MoveRight
-};
 
 class SDLWindowRenderer {
 public:
@@ -50,7 +37,7 @@ public:
 
 class SDLDriver {
 public:
-	SDLDriver(json config, FrameDerivatives *myFrameDerivatives, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
+	SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height);
 	SDLWindowRenderer getPreviewWindow(void);
@@ -58,40 +45,20 @@ public:
 	void doRenderPreviewFrame(Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
-	void setIsRunning(bool newisRunning);
-	bool getIsRunning(void);
-	void setIsPaused(bool newIsPaused);
-	bool toggleIsPaused(void);
-	bool getIsPaused(void);
-	void setPreviewPositionInFrame(PreviewPositionInFrame newPosition);
-	PreviewPositionInFrame movePreviewPositionInFrame(PreviewPositionInFrameDirection moveDirection);
-	PreviewPositionInFrame getPreviewPositionInFrame(void);
-	void setPreviewDebugDensity(int newDensity);
-	int incrementPreviewDebugDensity(void);
-	int getPreviewDebugDensity(void);
-	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
+	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	void stopAudioDriverNow(void);
 private:
 	SDLAudioFrame *getNextAvailableAudioFrame(int desiredBufferSize);
 
-	FrameDerivatives *frameDerivatives;
+	Status *status;
+	FrameServer *frameServer;
 	FFmpegDriver *ffmpegDriver;
 	bool headless;
 	bool audioPreview;
 
 	Logger *logger;
-
-	bool isRunning;
-	SDL_mutex *isRunningMutex;
-	bool isPaused;
-	SDL_mutex *isPausedMutex;
-	PreviewPositionInFrame previewPositionInFrame;
-	SDL_mutex *previewPositionInFrameMutex;
-	int previewDebugDensity;
-	SDL_mutex *previewDebugDensityMutex;
-	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 
 	SDLWindowRenderer previewWindow;
 	SDL_Texture *previewTexture;
@@ -104,6 +71,9 @@ private:
 
 	SDL_mutex *onBasisFlagCallbacksMutex;
 	std::vector<function<void(void)>> onBasisFlagCallbacks;
+
+	SDL_mutex *frameTimestampsNowMutex;
+	FrameTimestamps frameTimestampsNow;
 };
 
 }; //namespace YerFace

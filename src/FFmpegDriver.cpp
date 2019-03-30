@@ -21,23 +21,22 @@ MediaContext::MediaContext(void) {
 	videoStreamIndex = -1;
 	audioStream = NULL;
 	demuxerDraining = false;
-	scanning = false;
 }
 
-FFmpegDriver::FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions) {
+FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions) {
 	logger = new Logger("FFmpegDriver");
 
-	frameDerivatives = myFrameDerivatives;
-	if(frameDerivatives == NULL) {
-		throw invalid_argument("frameDerivatives cannot be NULL");
+	status = myStatus;
+	if(status == NULL) {
+		throw invalid_argument("status cannot be NULL");
 	}
-	frameDrop = myFrameDrop;
+	frameServer = myFrameServer;
+	if(frameServer == NULL) {
+		throw invalid_argument("frameServer cannot be NULL");
+	}
 	lowLatency = myLowLatency;
-	from = myFrom;
-	until = myUntil;
 
 	swsContext = NULL;
-	readyVideoFrameBufferEmptyWarning = false;
 	videoStreamInitialTimestampSet = false;
 	audioStreamInitialTimestampSet = false;
 	newestVideoFrameTimestamp = -1.0;
@@ -116,6 +115,7 @@ FFmpegDriver::~FFmpegDriver() {
 		}
 		delete handler;
 	}
+	sws_freeContext(swsContext);
 	delete logger;
 }
 
@@ -306,19 +306,10 @@ VideoFrame FFmpegDriver::getNextVideoFrame(void) {
 	YerFace_MutexLock(videoContext.demuxerMutex);
 	YerFace_MutexLock(videoFrameBufferMutex);
 	VideoFrame result;
+	// logger->verbose("getNextVideoFrame() current readyVideoFrameBuffer.size() is %lu", readyVideoFrameBuffer.size());
 	if(readyVideoFrameBuffer.size() > 0) {
-		if(frameDrop) {
-			int dropCount = 0;
-			while(readyVideoFrameBuffer.size() > 1) {
-				releaseVideoFrame(readyVideoFrameBuffer.back());
-				readyVideoFrameBuffer.pop_back();
-				dropCount++;
-			}
-			// logger->warn("Dropped %d frame(s)!", dropCount);
-		}
 		result = readyVideoFrameBuffer.back();
 		readyVideoFrameBuffer.pop_back();
-		SDL_CondSignal(videoContext.demuxerCond);
 	} else {
 		YerFace_MutexUnlock(videoFrameBufferMutex);
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
@@ -337,14 +328,9 @@ bool FFmpegDriver::waitForNextVideoFrame(VideoFrame *videoFrame) {
 			return false;
 		}
 
-		//Wait for the demuxer thread to generate more frames. Usually this only happens in realtime scenarios with --frameDrop
 		YerFace_MutexUnlock(videoContext.demuxerMutex);
-
-		if(!readyVideoFrameBufferEmptyWarning) {
-			logger->warn("======== waitForNextVideoFrame() Caller is trapped in an expensive polling loop! ========");
-			readyVideoFrameBufferEmptyWarning = true;
-		}
-		SDL_Delay(1);
+		logger->warn("waitForNextVideoFrame() Caller is trapped in an expensive polling loop! If this happens a lot, please consider some tuning.");
+		SDL_Delay(10);
 		YerFace_MutexLock(videoContext.demuxerMutex);
 	}
 	*videoFrame = getNextVideoFrame();
@@ -363,6 +349,7 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	YerFace_MutexLock(audioContext.demuxerMutex);
 
 	AudioFrameHandler *handler = new AudioFrameHandler();
+	handler->drained = false;
 	handler->audioFrameCallback = audioFrameCallback;
 	handler->resampler.swrContext = NULL;
 	handler->resampler.audioFrameBackings.clear();
@@ -380,18 +367,25 @@ void FFmpegDriver::logAVErr(String msg, int err) {
 
 VideoFrameBacking *FFmpegDriver::getNextAvailableVideoFrameBacking(void) {
 	YerFace_MutexLock(videoFrameBufferMutex);
+	VideoFrameBacking *myBacking = NULL;
+	unsigned int availableBackings = 0;
 	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
 		if(!backing->inUse) {
-			backing->inUse = true;
-			YerFace_MutexUnlock(videoFrameBufferMutex);
-			return backing;
+			availableBackings++;
+			if(myBacking == NULL) {
+				backing->inUse = true;
+				myBacking = backing;
+			}
 		}
 	}
-	logger->warn("Out of spare frames in the video frame buffer! Allocating a new one.");
-	VideoFrameBacking *newBacking = allocateNewVideoFrameBacking();
-	newBacking->inUse = true;
+	// logger->verbose("getNextAvailableVideoFrameBacking() total backings: %lu, available backings: %u", allocatedVideoFrameBackings.size(), availableBackings);
+	if(myBacking == NULL) {
+		logger->warn("Out of spare frames in the video frame buffer! Allocating a new one.");
+		myBacking = allocateNewVideoFrameBacking();
+		myBacking->inUse = true;
+	}
 	YerFace_MutexUnlock(videoFrameBufferMutex);
-	return newBacking;
+	return myBacking;
 }
 
 VideoFrameBacking *FFmpegDriver::allocateNewVideoFrameBacking(void) {
@@ -432,20 +426,19 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				return false;
 			}
 
+			context->frameNumber++;
+
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_VIDEO);
-			if(!handleScanning(context, &timestamp)) {
-				av_frame_unref(context->frame);
-				continue;
-			}
 
 			VideoFrame videoFrame;
-			videoFrame.timestamp = timestamp;
-			videoFrame.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp);
+			videoFrame.timestamp.startTimestamp = timestamp;
+			videoFrame.timestamp.estimatedEndTimestamp = calculateEstimatedEndTimestamp(videoFrame.timestamp.startTimestamp);
+			videoFrame.timestamp.frameNumber = context->frameNumber;
 			videoFrame.frameBacking = getNextAvailableVideoFrameBacking();
 
 			YerFace_MutexLock(videoStreamMutex);
-			newestVideoFrameTimestamp = videoFrame.timestamp;
-			newestVideoFrameEstimatedEndTimestamp = videoFrame.estimatedEndTimestamp;
+			newestVideoFrameTimestamp = videoFrame.timestamp.startTimestamp;
+			newestVideoFrameEstimatedEndTimestamp = videoFrame.timestamp.estimatedEndTimestamp;
 			YerFace_MutexUnlock(videoStreamMutex);
 			// logger->verbose("Inserted a VideoFrame with timestamps: %.04lf - (estimated) %.04lf", videoFrame.timestamp, videoFrame.estimatedEndTimestamp);
 
@@ -453,6 +446,17 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			videoFrame.frameCV = Mat(height, width, CV_8UC3, videoFrame.frameBacking->frameBGR->data[0]);
 
 			YerFace_MutexLock(videoFrameBufferMutex);
+			if(lowLatency) {
+				int dropCount = 0;
+				while(readyVideoFrameBuffer.size() > 0) {
+					releaseVideoFrame(readyVideoFrameBuffer.back());
+					readyVideoFrameBuffer.pop_back();
+					dropCount++;
+				}
+				if(dropCount) {
+					logger->warn("Dropped %d frame(s)!", dropCount);
+				}
+			}
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
 
@@ -468,10 +472,6 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 
 		while(avcodec_receive_frame(context->audioDecoderContext, context->frame) == 0) {
 			timestamp = resolveFrameTimestamp(context, context->frame, AVMEDIA_TYPE_AUDIO);
-			if(!handleScanning(context, &timestamp)) {
-				av_frame_unref(context->frame);
-				continue;
-			}
 
 			YerFace_MutexLock(audioStreamMutex);
 			newestAudioFrameTimestamp = timestamp;
@@ -547,19 +547,10 @@ void FFmpegDriver::initializeDemuxerThread(MediaContext *context, enum AVMediaTy
 	context->demuxerRunning = false;
 	context->demuxerThread = NULL;
 	context->demuxerMutex = NULL;
-	context->demuxerCond = NULL;
-	
+	context->frameNumber = 0;
+
 	if((context->demuxerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating demuxer mutex!");
-	}
-	if(type == AVMEDIA_TYPE_VIDEO) {
-		if((context->demuxerCond = SDL_CreateCond()) == NULL) {
-			throw runtime_error("Failed creating condition!");
-		}
-	}
-
-	if(from != -1.0 && from > 0.0) {
-		context->scanning = true;
 	}
 }
 
@@ -602,17 +593,10 @@ void FFmpegDriver::destroyDemuxerThread(MediaContext *context, enum AVMediaType 
 	YerFace_MutexLock(context->demuxerMutex);
 	context->demuxerRunning = false;
 	context->demuxerDraining = true;
-	if(context->demuxerCond != NULL) {
-		SDL_CondSignal(context->demuxerCond);
-	}
 	YerFace_MutexUnlock(context->demuxerMutex);
 
 	if(context->demuxerThread != NULL) {
 		SDL_WaitThread(context->demuxerThread, NULL);
-	}
-
-	if(context->demuxerCond != NULL) {
-		SDL_DestroyCond(context->demuxerCond);
 	}
 
 	SDL_DestroyMutex(context->demuxerMutex);
@@ -647,18 +631,33 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 	AVPacket packet;
 	av_init_packet(&packet);
 
+	bool blockedWarning = false;
 	YerFace_MutexLock(context->demuxerMutex);
 	while(context->demuxerRunning) {
+		if(status->getIsPaused() && status->getIsRunning()) {
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(100);
+			YerFace_MutexLock(context->demuxerMutex);
+			continue;
+		}
+		
+		if(getIsAllocatedVideoFrameBackingsFull()) {
+			if(!blockedWarning) {
+				logger->warn("%s Demuxer Loop is BLOCKED because our internal frame buffer is full. If this happens a lot, consider some tuning.", type == AVMEDIA_TYPE_VIDEO ? "Video" : "Audio");
+				blockedWarning = true;
+			}
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(10);
+			YerFace_MutexLock(context->demuxerMutex);
+			continue;
+		} else {
+			blockedWarning = false;
+		}
+		
 		if(type == AVMEDIA_TYPE_VIDEO) {
-			if(!getIsVideoDraining() && \
-			  (getIsVideoFrameBufferEmpty() || frameDrop)) {
+			if(!getIsVideoDraining()) {
 				// logger->verbose("Pumping VIDEO stream.");
 				pumpDemuxer(context, &packet, type);
-			}
-
-			if(getIsVideoDraining() && getIsVideoFrameBufferEmpty()) {
-				logger->verbose("Draining Video complete. Demuxer thread terminating...");
-				context->demuxerRunning = false;
 			}
 		} else {
 			if(!getIsAudioDraining()) {
@@ -671,18 +670,31 @@ int FFmpegDriver::innerDemuxerLoop(MediaContext *context, enum AVMediaType type,
 			flushAudioHandlers(getIsAudioDraining());
 		}
 
+		if(type == AVMEDIA_TYPE_VIDEO && getIsVideoDraining()) {
+			logger->verbose("Draining Video Demuxer complete. Demuxer thread terminating...");
+			context->demuxerRunning = false;
+		}
+		if((type == AVMEDIA_TYPE_AUDIO || includeAudio) && getIsAudioDraining()) {
+			logger->verbose("Draining Audio Demuxer complete. Demuxer thread terminating...");
+			context->demuxerRunning = false;
+		}
+
 		if(context->demuxerRunning) {
-			if(frameDrop || context->scanning || type == AVMEDIA_TYPE_AUDIO) {
-				YerFace_MutexUnlock(context->demuxerMutex);
-				SDL_Delay(0);
-				YerFace_MutexLock(context->demuxerMutex);
-			} else if(!getIsVideoFrameBufferEmpty()) {
-				// logger->verbose("Video Demuxer Thread going to sleep, waiting for work.");
-				if(SDL_CondWait(context->demuxerCond, context->demuxerMutex) < 0) {
-					throw runtime_error("Failed waiting on condition.");
-				}
-				// logger->verbose("Video Demuxer Thread is awake now!");
+			YerFace_MutexUnlock(context->demuxerMutex);
+			SDL_Delay(0); //All we want to do here is relinquish our execution thread. We still want to get it back asap.
+			YerFace_MutexLock(context->demuxerMutex);
+		}
+	}
+
+	if(type == AVMEDIA_TYPE_AUDIO || includeAudio) {
+		for(AudioFrameHandler *handler : audioFrameHandlers) {
+			if(handler->drained) {
+				throw runtime_error("Audio handler drained more than once?!");
 			}
+			if(handler->audioFrameCallback.isDrainedCallback != NULL) {
+				handler->audioFrameCallback.isDrainedCallback(handler->audioFrameCallback.userdata);
+			}
+			handler->drained = true;
 		}
 	}
 
@@ -735,7 +747,7 @@ bool FFmpegDriver::flushAudioHandlers(bool draining) {
 			AudioFrameBacking nextFrame = handler->resampler.audioFrameBackings.back();
 			if(nextFrame.timestamp < myNewestVideoFrameEstimatedEndTimestamp || draining || lowLatency) {
 				if(callbacksOkay) {
-					handler->audioFrameCallback.callback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
+					handler->audioFrameCallback.audioFrameCallback(handler->audioFrameCallback.userdata, nextFrame.bufferArray[0], nextFrame.audioSamples, nextFrame.audioBytes, nextFrame.timestamp);
 				}
 				av_freep(&nextFrame.bufferArray[0]);
 				av_freep(&nextFrame.bufferArray);
@@ -755,6 +767,9 @@ bool FFmpegDriver::getIsAudioInputPresent(void) {
 
 bool FFmpegDriver::getIsAudioDraining(void) {
 	//// WARNING! Do *NOT* call this function with either videoStreamMutex or audioStreamMutex locked!
+	if(!status->getIsRunning()) {
+		return true;
+	}
 	YerFace_MutexLock(videoStreamMutex);
 	YerFace_MutexLock(audioStreamMutex);
 	bool ret = (audioContext.formatContext != NULL && audioContext.demuxerDraining) || \
@@ -765,6 +780,9 @@ bool FFmpegDriver::getIsAudioDraining(void) {
 }
 
 bool FFmpegDriver::getIsVideoDraining(void) {
+	if(!status->getIsRunning()) {
+		return true;
+	}
 	YerFace_MutexLock(videoStreamMutex);
 	bool ret = videoContext.demuxerDraining;
 	YerFace_MutexUnlock(videoStreamMutex);
@@ -847,19 +865,17 @@ void FFmpegDriver::recursivelyListAllAVOptions(void *obj, string depth) {
 	}
 }
 
-bool FFmpegDriver::handleScanning(MediaContext *context, double *timestamp) {
-	if((from != -1.0 && *timestamp < from) || (until != -1.0 && *timestamp > until)) {
-		if(until != -1.0 && *timestamp > until) {
-			context->demuxerDraining = true;
+bool FFmpegDriver::getIsAllocatedVideoFrameBackingsFull(void) {
+	bool isFull = true;
+	YerFace_MutexLock(videoFrameBufferMutex);
+	for(VideoFrameBacking *backing : allocatedVideoFrameBackings) {
+		if(!backing->inUse) {
+			isFull = false;
+			break;
 		}
-		logger->verbose("Throwing away a frame at (unadjusted) timestamp %.04lf to handle scanning. (From and Until)", *timestamp);
-		return false;
 	}
-	context->scanning = false;
-	if(from != -1.0) {
-		*timestamp = *timestamp - from;
-	}
-	return true;
+	YerFace_MutexUnlock(videoFrameBufferMutex);
+	return isFull;
 }
 
 }; //namespace YerFace

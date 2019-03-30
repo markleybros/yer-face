@@ -1,7 +1,8 @@
 #pragma once
 
 #include "Logger.hpp"
-#include "FrameDerivatives.hpp"
+#include "Utilities.hpp"
+#include "FrameServer.hpp"
 
 #include <string>
 #include <list>
@@ -21,7 +22,7 @@ namespace YerFace {
 #define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
 
-class FrameDerivatives;
+class FrameServer;
 
 enum FFmpegDriverOutAudioChannelMap {
 	CHANNELMAP_NONE = 0,
@@ -38,6 +39,7 @@ public:
 	AVFormatContext *formatContext;
 
 	AVFrame *frame;
+	FrameNumber frameNumber;
 
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
@@ -48,12 +50,10 @@ public:
 	AVStream *audioStream;
 
 	SDL_mutex *demuxerMutex;
-	SDL_cond *demuxerCond;
 	SDL_Thread *demuxerThread;
 	bool demuxerRunning;
 
 	bool demuxerDraining;
-	bool scanning;
 };
 
 class VideoFrameBacking {
@@ -65,7 +65,7 @@ public:
 
 class VideoFrame {
 public:
-	double timestamp, estimatedEndTimestamp;
+	FrameTimestamps timestamp;
 	VideoFrameBacking *frameBacking;
 	Mat frameCV;
 };
@@ -76,7 +76,8 @@ public:
 	enum AVSampleFormat sampleFormat;
 	int sampleRate;
 	void *userdata;
-	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> callback;
+	std::function<void(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp)> audioFrameCallback;
+	std::function<void(void *userdata)> isDrainedCallback;
 };
 
 class AudioFrameBacking {
@@ -97,13 +98,14 @@ public:
 
 class AudioFrameHandler {
 public:
+	bool drained;
 	AudioFrameResampler resampler;
 	AudioFrameCallback audioFrameCallback;
 };
 
 class FFmpegDriver {
 public:
-	FFmpegDriver(FrameDerivatives *myFrameDerivatives, bool myFrameDrop, bool myLowLatency, double myFrom, double myUntil, bool myListAllAvailableOptions);
+	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
 	void rollDemuxerThreads(void);
@@ -134,11 +136,11 @@ private:
 	bool getIsVideoDraining(void);
 	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
-	bool handleScanning(MediaContext *context, double *timestamp);
+	bool getIsAllocatedVideoFrameBackingsFull(void);
 
-	FrameDerivatives *frameDerivatives;
-	bool frameDrop, lowLatency;
-	double from, until;
+	Status *status;
+	FrameServer *frameServer;
+	bool lowLatency;
 
 	Logger *logger;
 
@@ -152,7 +154,6 @@ private:
 
 	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
-	double videoStreamRealStartTime;
 	double videoStreamInitialTimestamp;
 	bool videoStreamInitialTimestampSet;
 	double newestVideoFrameTimestamp;
@@ -160,7 +161,6 @@ private:
 
 	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
-	double audioStreamRealStartTime;
 	double audioStreamInitialTimestamp;
 	bool audioStreamInitialTimestampSet;
 	double newestAudioFrameTimestamp;
@@ -172,7 +172,6 @@ private:
 	SDL_mutex *videoFrameBufferMutex;
 	list<VideoFrame> readyVideoFrameBuffer;
 	list<VideoFrameBacking *> allocatedVideoFrameBackings;
-	bool readyVideoFrameBufferEmptyWarning;
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
 	bool audioCallbacksOkay;
