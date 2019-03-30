@@ -85,8 +85,8 @@ private:
 	string outputPrefix;
 
 	Logger *logger;
+	
 	SDL_mutex *myMutex;
-	unordered_map<FrameNumber, FaceDetectorAssignmentTask> assignmentFrameNumbers;
 	list<FaceDetectionTask> detectionTasks;
 
 	SDL_mutex *detectionsMutex;
@@ -95,7 +95,7 @@ private:
 	bool latestDetectionLostWarning;
 
 	SDL_mutex *myAssignmentMutex;
-	SDL_Thread *myAssignmentThread;
+	unordered_map<FrameNumber, FaceDetectorAssignmentTask> assignmentFrameNumbers;
 
 	WorkerPool *detectionWorkerPool, *assignmentWorkerPool;
 };

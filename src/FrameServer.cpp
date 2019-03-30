@@ -35,16 +35,21 @@ FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((myCond = SDL_CreateCond()) == NULL) {
-		throw runtime_error("Failed creating condition!");
-	}
-
-	draining = false;
-	if((herderThread = SDL_CreateThread(FrameServer::frameHerderLoop, "FrameHerder", (void *)this)) == NULL) {
-		throw runtime_error("Failed starting thread!");
-	}
 
 	metrics = new Metrics(config, "FrameServer");
+
+	draining = false;
+
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "FrameServer.Herder";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = NULL;
+	workerPoolParameters.deinitializer = workerDeinitializer;
+	workerPoolParameters.usrPtr = (void *)this;
+	workerPoolParameters.handler = workerHandler;
+	workerPool = new WorkerPool(config, status, this, workerPoolParameters);
+
 	logger->debug("FrameServer constructed and ready to go!");
 }
 
@@ -58,7 +63,7 @@ FrameServer::~FrameServer() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
-	SDL_WaitThread(herderThread, NULL);
+	delete workerPool;
 	
 	YerFace_MutexLock(myMutex);
 	if(frameStore.size() > 0) {
@@ -66,7 +71,6 @@ FrameServer::~FrameServer() noexcept(false) {
 	}
 	YerFace_MutexUnlock(myMutex);
 
-	SDL_DestroyCond(myCond);
 	SDL_DestroyMutex(myMutex);
 	delete metrics;
 	delete logger;
@@ -159,7 +163,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 
 	metrics->endClock(tick);
 
-	SDL_CondSignal(myCond);
+	workerPool->sendWorkerSignal();
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -209,7 +213,7 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 		throw logic_error("Trying to set a checkpoint on a status for a frame, but the checkpoint was already set!");
 	}
 	frame->checkpoints[status][checkpointKey] = true;
-	SDL_CondSignal(myCond);
+	workerPool->sendWorkerSignal();
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -226,6 +230,10 @@ void FrameServer::destroyFrame(FrameNumber frameNumber) {
 	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
+
+	if(isDrained()) {
+		workerPool->stopWorkerNow();
+	}
 }
 
 void FrameServer::setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameStatus newStatus) {
@@ -245,85 +253,68 @@ void FrameServer::checkStatusValue(WorkingFrameStatus status) {
 	}
 }
 
-int FrameServer::frameHerderLoop(void *ptr) {
-	FrameServer *self = (FrameServer *)ptr;
-	self->logger->verbose("Frame Herder Thread alive!");
+bool FrameServer::workerHandler(WorkerPoolWorker *worker) {
+	FrameServer *self = (FrameServer *)worker->ptr;
+
+	bool didWork = false;
+	std::list<FrameNumber> garbageFrames;
 
 	YerFace_MutexLock(self->myMutex);
-	while(!self->isDrained()) {
-		if(self->status->getIsPaused() && self->status->getIsRunning()) {
-			YerFace_MutexUnlock(self->myMutex);
-			SDL_Delay(100);
-			YerFace_MutexLock(self->myMutex);
+
+	// self->logger->verbose("Frame Herder Top-of-loop. FrameStore size: %lu", self->frameStore.size());
+	for(auto framePair : self->frameStore) {
+		FrameNumber frameNumber = framePair.first;
+		WorkingFrame *workingFrame = framePair.second;
+		WorkingFrameStatus status = workingFrame->status;
+
+		//Does this frame need to be garbage collected?
+		if(status == FRAME_STATUS_GONE) {
+			didWork = true;
+			garbageFrames.push_back(frameNumber);
 			continue;
 		}
 
-		bool didWork = false;
-		std::list<FrameNumber> garbageFrames;
-		// self->logger->verbose("Frame Herder Top-of-loop. FrameStore size: %lu", self->frameStore.size());
-		for(auto framePair : self->frameStore) {
-			FrameNumber frameNumber = framePair.first;
-			WorkingFrame *workingFrame = framePair.second;
-			WorkingFrameStatus status = workingFrame->status;
-
-			//Does this frame need to be garbage collected?
-			if(status == FRAME_STATUS_GONE) {
-				didWork = true;
-				garbageFrames.push_back(frameNumber);
-				continue;
-			}
-
-			//Is this frame eligible for a new status?
-			bool checkpointsPassed = true;
-			for(auto checkpointPair : workingFrame->checkpoints[status]) {
-				if(!checkpointPair.second) {
-					checkpointsPassed = false;
-				}
-			}
-
-			//Advance this frame to the next status.
-			if(checkpointsPassed) {
-				// NOTE: We release image mats after PREVIEW_DISPLAY to prevent unbounded RAM usage
-				// when Sphinx holds frames in LATE_PROCESSING for an indeterminate amount of time.
-				if(status == FRAME_STATUS_PREVIEW_DISPLAY) {
-					workingFrame->frame.release();
-					workingFrame->detectionFrame.release();
-					workingFrame->previewFrame.release();
-				}
-
-				didWork = true;
-				self->setFrameStatus(workingFrame->frameTimestamps, (WorkingFrameStatus)(status + 1));
+		//Is this frame eligible for a new status?
+		bool checkpointsPassed = true;
+		for(auto checkpointPair : workingFrame->checkpoints[status]) {
+			if(!checkpointPair.second) {
+				checkpointsPassed = false;
 			}
 		}
 
-		//Destroy GONE frames.
-		while(garbageFrames.size() > 0) {
-			self->destroyFrame(garbageFrames.front());
-			garbageFrames.pop_front();
-		}
-
-		//Sleep until needed.
-		if(!didWork) {
-			int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
-			if(result < 0) {
-				throw runtime_error("CondWaitTimeout() failed!");
-			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				if(!self->status->getIsPaused()) {
-					self->logger->warn("Timed out waiting for Condition signal!");
-				}
+		//Advance this frame to the next status.
+		if(checkpointsPassed) {
+			// NOTE: We release image mats after PREVIEW_DISPLAY to prevent unbounded RAM usage
+			// when Sphinx holds frames in LATE_PROCESSING for an indeterminate amount of time.
+			if(status == FRAME_STATUS_PREVIEW_DISPLAY) {
+				workingFrame->frame.release();
+				workingFrame->detectionFrame.release();
+				workingFrame->previewFrame.release();
 			}
+
+			didWork = true;
+			self->setFrameStatus(workingFrame->frameTimestamps, (WorkingFrameStatus)(status + 1));
 		}
 	}
 
-	//Drained.
-	for(auto callback : self->onFrameServerDrainedCallbacks) {
-		callback.callback(callback.userdata);
+	//Destroy GONE frames.
+	while(garbageFrames.size() > 0) {
+		self->destroyFrame(garbageFrames.front());
+		garbageFrames.pop_front();
 	}
 
 	YerFace_MutexUnlock(self->myMutex);
 
-	self->logger->verbose("Frame Herder Thread quitting...");
-	return 0;
+	return didWork;
+}
+
+void FrameServer::workerDeinitializer(WorkerPoolWorker *worker, void *usrPtr) {
+	FrameServer *self = (FrameServer *)worker->ptr;
+	YerFace_MutexLock(self->myMutex);
+	for(auto callback : self->onFrameServerDrainedCallbacks) {
+		callback.callback(callback.userdata);
+	}
+	YerFace_MutexUnlock(self->myMutex);
 }
 
 }; //namespace YerFace

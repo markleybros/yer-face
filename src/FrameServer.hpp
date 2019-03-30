@@ -5,6 +5,7 @@
 #include "Status.hpp"
 #include "Utilities.hpp"
 #include "FFmpegDriver.hpp"
+#include "WorkerPool.hpp"
 
 #include <list>
 
@@ -20,6 +21,8 @@ namespace YerFace {
 #define YERFACE_FRAMESERVER_MAX_QUEUEDEPTH 200
 
 class VideoFrame;
+class WorkerPool;
+class WorkerPoolWorker;
 
 #define FRAME_STATUS_MAX 9
 enum WorkingFrameStatus: unsigned int {
@@ -72,13 +75,13 @@ public:
 	void insertNewFrame(VideoFrame *videoFrame);
 	WorkingFrame *getWorkingFrame(FrameNumber frameNumber);
 	void setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, WorkingFrameStatus status, string checkpointKey);
-
 private:
 	bool isDrained(void);
 	void destroyFrame(FrameNumber frameNumber);
 	void setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameStatus newStatus);
 	void checkStatusValue(WorkingFrameStatus status);
-	static int frameHerderLoop(void *ptr);
+	static bool workerHandler(WorkerPoolWorker *worker);
+	static void workerDeinitializer(WorkerPoolWorker *worker, void *usrPtr);
 
 	Status *status;
 	bool lowLatency;
@@ -87,12 +90,9 @@ private:
 	double detectionScaleFactor;
 	Logger *logger;
 	SDL_mutex *myMutex;
-	SDL_cond *myCond;
 	Metrics *metrics;
 	Size frameSize;
 	bool frameSizeSet;
-
-	SDL_Thread *herderThread;
 
 	unordered_map<FrameNumber, WorkingFrame *> frameStore;
 
@@ -100,6 +100,8 @@ private:
 	std::vector<string> statusCheckpoints[FRAME_STATUS_MAX + 1];
 
 	std::vector<FrameServerDrainedEventCallback> onFrameServerDrainedCallbacks;
+
+	WorkerPool *workerPool;
 };
 
 }; //namespace YerFace
