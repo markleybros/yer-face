@@ -35,6 +35,10 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 		throw invalid_argument("resultGoodForSeconds cannot be less than zero.");
 	}
 	faceDetectionModelFileName = config["YerFace"]["FaceDetector"]["dlibFaceDetector"];
+	faceBoxSizeAdjustment = config["YerFace"]["FaceDetector"]["faceBoxSizeAdjustment"];
+	if(faceBoxSizeAdjustment < 0.0) {
+		throw invalid_argument("faceBoxSizeAdjustment cannot be less than zero.");
+	}
 
 	if(faceDetectionModelFileName.length() > 0) {
 		usingDNNFaceDetection = true;
@@ -141,29 +145,28 @@ void FaceDetector::doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask ta
 		faces = worker->frontalFaceDetector(dlibDetectionFrame);
 	}
 
-	int bestFace = -1;
+	bool bestFaceSet = false;
 	int bestFaceArea = -1;
-	Rect2d tempBox, tempBoxNormalSize, bestFaceBox, bestFaceBoxNormalSize;
-	int i = -1;
+	Size2d detectionFrameSize = task.detectionFrame.size();
+	Rect2d detectionFrameBox = Rect2d(0.0, 0.0, detectionFrameSize.width, detectionFrameSize.height);
+	Rect2d bestFaceBox, bestFaceBoxNormalSize;
 	for(dlib::rectangle face : faces) {
-		i++;
-		tempBox.x = face.left();
-		tempBox.y = face.top();
-		tempBox.width = face.right() - tempBox.x;
-		tempBox.height = face.bottom() - tempBox.y;
-		tempBoxNormalSize = Utilities::scaleRect(tempBox, 1.0 / task.myDetectionScaleFactor);
 		if((int)face.area() > bestFaceArea) {
-			bestFace = i;
+			bestFaceSet = true;
 			bestFaceArea = face.area();
-			bestFaceBox = tempBox;
-			bestFaceBoxNormalSize = tempBoxNormalSize;
+			bestFaceBox.x = face.left();
+			bestFaceBox.y = face.top();
+			bestFaceBox.width = face.right() - bestFaceBox.x;
+			bestFaceBox.height = face.bottom() - bestFaceBox.y;
+			bestFaceBox = Utilities::insetBox(bestFaceBox, faceBoxSizeAdjustment) & detectionFrameBox;
+			bestFaceBoxNormalSize = Utilities::scaleRect(bestFaceBox, 1.0 / task.myDetectionScaleFactor);
 		}
 	}
 	FacialDetectionBox detection;
 	detection.timestamps = task.myFrameTimestamps;
 	detection.run = true;
 	detection.set = false;
-	if(bestFace >= 0) {
+	if(bestFaceSet) {
 		detection.box = bestFaceBox;
 		detection.boxNormalSize = bestFaceBoxNormalSize;
 		detection.set = true;

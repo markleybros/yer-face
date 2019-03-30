@@ -73,7 +73,7 @@ private:
 	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);
 
 	string faceDetectionModelFileName;
-	double resultGoodForSeconds;
+	double resultGoodForSeconds, faceBoxSizeAdjustment;
 
 	bool usingDNNFaceDetection;
 

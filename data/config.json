@@ -4,6 +4,7 @@
       "numWorkersPerCPU": 0.0,
       "numWorkers": 1,
       "resultGoodForSeconds": 0.5,
+      "faceBoxSizeAdjustment": 1.2,
       "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
     },
     "FaceTracker": {
