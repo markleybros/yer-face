@@ -204,7 +204,6 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 	eventLogger->registerEventType(basisEvent);
 }
 
-// FIXME - event lifecycle
 void OutputDriver::handleNewBasisEvent(FrameNumber frameNumber) {
 	logger->verbose("Got a Basis Flag event for Frame #%lu. Handling...", frameNumber);
 	YerFace_MutexLock(workerMutex);

@@ -168,6 +168,7 @@ private:
 	static bool assignmentWorkerHandler(WorkerPoolWorker *worker);
 
 	string featureDetectionModelFileName, faceDetectionModelFileName;
+	bool useFullSizedFrameForLandmarkDetection;
 	Status *status;
 	SDLDriver *sdlDriver;
 	FrameServer *frameServer;

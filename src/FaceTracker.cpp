@@ -20,6 +20,7 @@ namespace YerFace {
 //  - https://github.com/severin-lemaignan/gazr/
 FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
+	useFullSizedFrameForLandmarkDetection = config["YerFace"]["FaceTracker"]["useFullSizedFrameForLandmarkDetection"];
 	previouslyReportedFacialPose.set = false;
 	facialCameraModel.set = false;
 
@@ -181,21 +182,21 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 		return;
 	}
 
-	// FIXME - Currently we're using the full sized frame as input to the Shape Predictor.
-	// This seems fine, and the performance is quite reasonable. However, workingFrame->detectionFrame
-	// is usually smaller, and Shape Predictor definitely runs faster on it, albiet at a
-	// noticeable reduction in quality. Ideally we should expose this choice to the user,
-	// although I'm not sure yet how.
-	Mat searchFrame = workingFrame->frame;
-	double searchFrameScaleFactor = 1.0; //workingFrame->detectionScaleFactor (see above)
-	Rect2d searchRect = facialDetection.boxNormalSize;
+	Mat searchFrame;
+	double searchFrameScaleFactor;
+	Rect2d searchRect;
+	if(useFullSizedFrameForLandmarkDetection) {
+		searchFrame = workingFrame->frame;
+		searchFrameScaleFactor = 1.0;
+		searchRect = facialDetection.boxNormalSize;
+	} else {
+		searchFrame = workingFrame->detectionFrame;
+		searchFrameScaleFactor = workingFrame->detectionScaleFactor;
+		searchRect = facialDetection.box;
+	}
 
 	dlib::cv_image<dlib::bgr_pixel> dlibSearchFrame = cv_image<bgr_pixel>(searchFrame);
-	dlib::rectangle dlibSearchBox = dlib::rectangle(
-		searchRect.x * searchFrameScaleFactor,
-		searchRect.y * searchFrameScaleFactor,
-		(searchRect.width + searchRect.x) * searchFrameScaleFactor,
-		(searchRect.height + searchRect.y) * searchFrameScaleFactor);
+	dlib::rectangle dlibSearchBox = dlib::rectangle(searchRect.x, searchRect.y, (searchRect.width + searchRect.x), (searchRect.height + searchRect.y));
 
 	full_object_detection result = innerWorker->shapePredictor(dlibSearchFrame, dlibSearchBox);
 
