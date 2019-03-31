@@ -246,6 +246,7 @@ void MarkerTracker::calculate3dMarkerPoint(FrameNumber frameNumber, MarkerPoint 
 	FacialPose facialPose = faceTracker->getFacialPose(frameNumber);
 	FacialCameraModel cameraModel = faceTracker->getFacialCameraModel();
 	if(!facialPose.set || !cameraModel.set) {
+		markerPoint->set = false;
 		return;
 	}
 	FacialPlane facialPlane = faceTracker->getCalculatedFacialPlaneForWorkingFacialPose(frameNumber, markerType);

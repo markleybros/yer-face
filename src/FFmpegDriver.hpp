@@ -3,6 +3,7 @@
 #include "Logger.hpp"
 #include "Utilities.hpp"
 #include "FrameServer.hpp"
+#include "WorkerPool.hpp"
 
 #include <string>
 #include <list>
@@ -23,6 +24,7 @@ namespace YerFace {
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
 
 class FrameServer;
+class WorkerPool;
 
 enum FFmpegDriverOutAudioChannelMap {
 	CHANNELMAP_NONE = 0,
@@ -108,6 +110,7 @@ public:
 	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
 	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
+	void setVideoCaptureWorkerPool(WorkerPool *workerPool);
 	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
@@ -141,6 +144,7 @@ private:
 	Status *status;
 	FrameServer *frameServer;
 	bool lowLatency;
+	WorkerPool *videoCaptureWorkerPool;
 
 	Logger *logger;
 

@@ -20,6 +20,7 @@ namespace YerFace {
 //  - https://github.com/severin-lemaignan/gazr/
 FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
 	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
+	useFullSizedFrameForLandmarkDetection = config["YerFace"]["FaceTracker"]["useFullSizedFrameForLandmarkDetection"];
 	previouslyReportedFacialPose.set = false;
 	facialCameraModel.set = false;
 
@@ -181,21 +182,21 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 		return;
 	}
 
-	// FIXME - Currently we're using the full sized frame as input to the Shape Predictor.
-	// This seems fine, and the performance is quite reasonable. However, workingFrame->detectionFrame
-	// is usually smaller, and Shape Predictor definitely runs faster on it, albiet at a
-	// noticeable reduction in quality. Ideally we should expose this choice to the user,
-	// although I'm not sure yet how.
-	Mat searchFrame = workingFrame->frame;
-	double searchFrameScaleFactor = 1.0; //workingFrame->detectionScaleFactor (see above)
-	Rect2d searchRect = facialDetection.boxNormalSize;
+	Mat searchFrame;
+	double searchFrameScaleFactor;
+	Rect2d searchRect;
+	if(useFullSizedFrameForLandmarkDetection) {
+		searchFrame = workingFrame->frame;
+		searchFrameScaleFactor = 1.0;
+		searchRect = facialDetection.boxNormalSize;
+	} else {
+		searchFrame = workingFrame->detectionFrame;
+		searchFrameScaleFactor = workingFrame->detectionScaleFactor;
+		searchRect = facialDetection.box;
+	}
 
 	dlib::cv_image<dlib::bgr_pixel> dlibSearchFrame = cv_image<bgr_pixel>(searchFrame);
-	dlib::rectangle dlibSearchBox = dlib::rectangle(
-		searchRect.x * searchFrameScaleFactor,
-		searchRect.y * searchFrameScaleFactor,
-		(searchRect.width + searchRect.x) * searchFrameScaleFactor,
-		(searchRect.height + searchRect.y) * searchFrameScaleFactor);
+	dlib::rectangle dlibSearchBox = dlib::rectangle(searchRect.x, searchRect.y, (searchRect.width + searchRect.x), (searchRect.height + searchRect.y));
 
 	full_object_detection result = innerWorker->shapePredictor(dlibSearchFrame, dlibSearchBox);
 
@@ -378,47 +379,30 @@ void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, Work
 	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
 	tempPose.translationVectorInternal = tempPose.translationVector.clone();
 	if(previouslyReportedFacialPose.set) {
-		int i;
-		double delta;
-
-		// Do the de-noising thing first for the externally-facing matrices
-		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrix);
+		// Do de-noising (low motion rejection) first for the externally-facing matrices
 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 
-		for(i = 0; i < 3; i++) {
-			delta = angles[i] - prevAngles[i];
-			if(fabs(delta) <= scaledRotationThreshold) {
-				angles[i] = prevAngles[i];
-			}
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
+		if(degreesDifference < scaledRotationThreshold) {
+			tempPose.rotationMatrix = previouslyReportedFacialPose.rotationMatrix.clone();
 		}
-		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
-
-		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVector.at<double>(i) - previouslyReportedFacialPose.translationVector.at<double>(i);
-			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVector.at<double>(i) = previouslyReportedFacialPose.translationVector.at<double>(i);
-			}
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(previouslyReportedFacialPose.translationVector));
+		if(distance < scaledTranslationThreshold) {
+			tempPose.translationVector = previouslyReportedFacialPose.translationVector.clone();
 		}
 
-		// Do the de-noising thing again, but for the internally-facing matrices
-		prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrixInternal);
+		// Do de-noising (low motion rejection) again, but for the internally-facing matrices
 		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
 
-		for(i = 0; i < 3; i++) {
-			delta = angles[i] - prevAngles[i];
-			if(fabs(delta) <= scaledRotationThreshold) {
-				angles[i] = prevAngles[i];
-			}
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrixInternal, tempPose.rotationMatrixInternal);
+		if(degreesDifference < scaledRotationThreshold) {
+			tempPose.rotationMatrixInternal = previouslyReportedFacialPose.rotationMatrixInternal.clone();
 		}
-		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
-
-		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVectorInternal.at<double>(i) - previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVectorInternal.at<double>(i) = previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-			}
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVectorInternal), Point3d(previouslyReportedFacialPose.translationVectorInternal));
+		if(distance < scaledTranslationThreshold) {
+			tempPose.translationVectorInternal = previouslyReportedFacialPose.translationVectorInternal.clone();
 		}
 	}
 
@@ -431,7 +415,7 @@ void FaceTracker::doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, Work
 		return;
 	}
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
-	planeNormalMat = output->facialPose.rotationMatrix * planeNormalMat;
+	planeNormalMat = output->facialPose.rotationMatrixInternal * planeNormalMat;
 	output->facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
 
@@ -600,10 +584,10 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumbe
 	}
 
 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
-	translationOffset = facialPose.rotationMatrix * translationOffset;
+	translationOffset = facialPose.rotationMatrixInternal * translationOffset;
 
 	FacialPlane facialPlane;
-	Mat translationVector = facialPose.translationVector + translationOffset;
+	Mat translationVector = facialPose.translationVectorInternal + translationOffset;
 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
 	facialPlane.planeNormal = facialPose.facialPlaneNormal;
 
