@@ -378,47 +378,30 @@ void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, Work
 	tempPose.rotationMatrixInternal = tempPose.rotationMatrix.clone();
 	tempPose.translationVectorInternal = tempPose.translationVector.clone();
 	if(previouslyReportedFacialPose.set) {
-		int i;
-		double delta;
-
-		// Do the de-noising thing first for the externally-facing matrices
-		Vec3d prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrix);
+		// Do de-noising (low motion rejection) first for the externally-facing matrices
 		scaledRotationThreshold = poseRotationLowRejectionThreshold * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThreshold * timeScale;
 
-		for(i = 0; i < 3; i++) {
-			delta = angles[i] - prevAngles[i];
-			if(fabs(delta) <= scaledRotationThreshold) {
-				angles[i] = prevAngles[i];
-			}
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
+		if(degreesDifference < scaledRotationThreshold) {
+			tempPose.rotationMatrix = previouslyReportedFacialPose.rotationMatrix.clone();
 		}
-		tempPose.rotationMatrix = Utilities::eulerAnglesToRotationMatrix(angles);
-
-		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVector.at<double>(i) - previouslyReportedFacialPose.translationVector.at<double>(i);
-			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVector.at<double>(i) = previouslyReportedFacialPose.translationVector.at<double>(i);
-			}
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(previouslyReportedFacialPose.translationVector));
+		if(distance < scaledTranslationThreshold) {
+			tempPose.translationVector = previouslyReportedFacialPose.translationVector.clone();
 		}
 
-		// Do the de-noising thing again, but for the internally-facing matrices
-		prevAngles = Utilities::rotationMatrixToEulerAngles(previouslyReportedFacialPose.rotationMatrixInternal);
+		// Do de-noising (low motion rejection) again, but for the internally-facing matrices
 		scaledRotationThreshold = poseRotationLowRejectionThresholdInternal * timeScale;
 		scaledTranslationThreshold = poseTranslationLowRejectionThresholdInternal * timeScale;
 
-		for(i = 0; i < 3; i++) {
-			delta = angles[i] - prevAngles[i];
-			if(fabs(delta) <= scaledRotationThreshold) {
-				angles[i] = prevAngles[i];
-			}
+		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrixInternal, tempPose.rotationMatrixInternal);
+		if(degreesDifference < scaledRotationThreshold) {
+			tempPose.rotationMatrixInternal = previouslyReportedFacialPose.rotationMatrixInternal.clone();
 		}
-		tempPose.rotationMatrixInternal = Utilities::eulerAnglesToRotationMatrix(angles);
-
-		for(i = 0; i < 3; i++) {
-			delta = tempPose.translationVectorInternal.at<double>(i) - previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-			if(fabs(delta) <= scaledTranslationThreshold) {
-				tempPose.translationVectorInternal.at<double>(i) = previouslyReportedFacialPose.translationVectorInternal.at<double>(i);
-			}
+		distance = Utilities::lineDistance(Point3d(tempPose.translationVectorInternal), Point3d(previouslyReportedFacialPose.translationVectorInternal));
+		if(distance < scaledTranslationThreshold) {
+			tempPose.translationVectorInternal = previouslyReportedFacialPose.translationVectorInternal.clone();
 		}
 	}
 
@@ -431,7 +414,7 @@ void FaceTracker::doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, Work
 		return;
 	}
 	Mat planeNormalMat = (Mat_<double>(3, 1) << 0.0, 0.0, -1.0);
-	planeNormalMat = output->facialPose.rotationMatrix * planeNormalMat;
+	planeNormalMat = output->facialPose.rotationMatrixInternal * planeNormalMat;
 	output->facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
 
@@ -600,10 +583,10 @@ FacialPlane FaceTracker::getCalculatedFacialPlaneForWorkingFacialPose(FrameNumbe
 	}
 
 	Mat translationOffset = (Mat_<double>(3,1) << 0.0, 0.0, depth);
-	translationOffset = facialPose.rotationMatrix * translationOffset;
+	translationOffset = facialPose.rotationMatrixInternal * translationOffset;
 
 	FacialPlane facialPlane;
-	Mat translationVector = facialPose.translationVector + translationOffset;
+	Mat translationVector = facialPose.translationVectorInternal + translationOffset;
 	facialPlane.planePoint = Point3d(translationVector.at<double>(0), translationVector.at<double>(1), translationVector.at<double>(2));
 	facialPlane.planeNormal = facialPose.facialPlaneNormal;
 

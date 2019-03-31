@@ -11,13 +11,13 @@
       "numWorkersPerCPU": 0.1375,
       "numWorkers": 0,
       "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
-      "poseSmoothingOverSeconds": 0.5,
+      "poseSmoothingOverSeconds": 0.25,
       "poseSmoothingExponent": 3,
       "poseRotationLowRejectionThreshold": 2.0,
-      "poseTranslationLowRejectionThreshold": 7.0,
       "poseRotationLowRejectionThresholdInternal": 1.25,
-      "poseTranslationLowRejectionThresholdInternal": 3.0,
       "poseRotationHighRejectionThreshold": 13,
+      "poseTranslationLowRejectionThreshold": 7.0,
+      "poseTranslationLowRejectionThresholdInternal": 3.0,
       "poseTranslationHighRejectionThreshold": 210,
       "poseTranslationMaxX": 125,
       "poseTranslationMinX": -125,
@@ -62,7 +62,7 @@
     },
     "MarkerTracker": {
       "pointSmoothingOverSeconds": 0.25,
-      "pointSmoothingExponent": 1.25,
+      "pointSmoothingExponent": 2.0,
       "pointMotionLowRejectionThreshold": 1.25,
       "pointMotionHighRejectionThreshold": 30.0,
       "markerRejectionResetAfterSeconds": 0.1
@@ -142,7 +142,7 @@
     "PreviewHUD": {
       "numWorkersPerCPU": 0.5,
       "numWorkers": 0,
-      "initialPreviewDisplayDensity": 4,
+      "initialPreviewDisplayDensity": 1,
       "previewRatio": 1.25,
       "previewWidthPercentage": 0.2,
       "previewCenterHeightPercentage": 0.2
