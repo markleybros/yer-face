@@ -20,6 +20,7 @@
 #include "EventLogger.hpp"
 #include "ImageSequence.hpp"
 #include "PreviewHUD.hpp"
+#include "WorkerPool.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -61,7 +62,7 @@ json config = NULL;
 
 SDLWindowRenderer sdlWindowRenderer;
 bool windowInitializationFailed;
-SDL_Thread *workerThread;
+WorkerPool *videoCaptureWorkerPool;
 
 Status *status = NULL;
 Logger *logger = NULL;
@@ -99,7 +100,9 @@ unordered_map<FrameNumber, MetricsTick> frameMetricsTicks;
 SDL_mutex *frameMetricsMutex;
 //END VARIABLES PROTECTED BY frameMetricsMutex
 
-static int runCaptureLoop(void *ptr);
+void videoCaptureInitializer(WorkerPoolWorker *worker, void *ptr);
+bool videoCaptureHandler(WorkerPoolWorker *worker);
+void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr);
 void parseConfigFile(void);
 void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 void handleFrameServerDrainedEvent(void *userdata);
@@ -231,7 +234,6 @@ int main(int argc, const char** argv) {
 	//Register preview renderers.
 	previewHUD->registerPreviewHUDRenderer(renderPreviewHUD);
 
-
 	//Hook into the frame lifecycle.
 	FrameServerDrainedEventCallback frameServerDrainedCallback;
 	frameServerDrainedCallback.userdata = NULL;
@@ -252,9 +254,15 @@ int main(int argc, const char** argv) {
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
 	//Create worker thread.
-	if((workerThread = SDL_CreateThread(runCaptureLoop, "CaptureLoop", (void *)NULL)) == NULL) {
-		throw runtime_error("Failed spawning worker thread!");
-	}
+	WorkerPoolParameters workerPoolParameters;
+	workerPoolParameters.name = "Main.VideoCapture";
+	workerPoolParameters.numWorkers = 1;
+	workerPoolParameters.numWorkersPerCPU = 0.0;
+	workerPoolParameters.initializer = videoCaptureInitializer;
+	workerPoolParameters.deinitializer = videoCaptureDeinitializer;
+	workerPoolParameters.usrPtr = NULL;
+	workerPoolParameters.handler = videoCaptureHandler;
+	videoCaptureWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
 	//Launch event / rendering loop.
 	bool myDrained = false;
@@ -318,7 +326,7 @@ int main(int argc, const char** argv) {
 	}
 
 	//Join worker thread.
-	SDL_WaitThread(workerThread, NULL);
+	delete videoCaptureWorkerPool;
 
 	//Cleanup.
 	if(imageSequence != NULL) {
@@ -348,40 +356,43 @@ int main(int argc, const char** argv) {
 	return 0;
 }
 
-int runCaptureLoop(void *ptr) {
-	VideoFrame videoFrame;
-
+void videoCaptureInitializer(WorkerPoolWorker *worker, void *ptr) {
+	ffmpegDriver->setVideoCaptureWorkerPool(videoCaptureWorkerPool);
 	ffmpegDriver->rollDemuxerThreads();
+}
 
-	bool didSetFrameSizeValid = false;
-	while(status->getIsRunning()) {
-		if(!status->getIsPaused()) {
-			if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
-				logger->info("FFmpeg Demuxer thread finished.");
-				status->setIsRunning(false);
-				continue;
+bool videoCaptureHandler(WorkerPoolWorker *worker) {
+	VideoFrame videoFrame;
+	bool didWork = false;
+	static bool didSetFrameSizeValid = false;
+	
+	if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
+		logger->info("FFmpeg Demuxer thread finished.");
+		status->setIsRunning(false);
+	} else {
+		if(!didSetFrameSizeValid) {
+			YerFace_MutexLock(frameSizeMutex);
+			if(!frameSizeValid) {
+				frameSize = videoFrame.frameCV.size();
+				frameSizeValid = true;
+				didSetFrameSizeValid = true;
 			}
-
-			if(!didSetFrameSizeValid) {
-				YerFace_MutexLock(frameSizeMutex);
-				if(!frameSizeValid) {
-					frameSize = videoFrame.frameCV.size();
-					frameSizeValid = true;
-					didSetFrameSizeValid = true;
-				}
-				YerFace_MutexUnlock(frameSizeMutex);
-			}
-
-			frameServer->insertNewFrame(&videoFrame);
-			ffmpegDriver->releaseVideoFrame(videoFrame);
-
-			while(status->getIsPaused() && status->getIsRunning()) {
-				SDL_Delay(100);
-			}
+			YerFace_MutexUnlock(frameSizeMutex);
 		}
-		SDL_Delay(0); //FIXME - CPU Starvation?
+		frameServer->insertNewFrame(&videoFrame);
+		ffmpegDriver->releaseVideoFrame(videoFrame);
+		didWork = true;
 	}
 
+	if(!status->getIsRunning()) {
+		videoCaptureWorkerPool->stopWorkerNow();
+		didWork = true;
+	}
+
+	return didWork;
+}
+
+void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 	frameServer->setDraining();
 
 	bool myDrained = false;
@@ -394,8 +405,6 @@ int runCaptureLoop(void *ptr) {
 
 	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
-
-	return 0;
 }
 
 void parseConfigFile(void) {

@@ -43,6 +43,7 @@ FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool my
 	newestVideoFrameEstimatedEndTimestamp = 0.0;
 	newestAudioFrameTimestamp = 0.0;
 	audioCallbacksOkay = true;
+	videoCaptureWorkerPool = NULL;
 
 	av_log_set_flags(AV_LOG_SKIP_REPEATED);
 	av_log_set_level(AV_LOG_INFO);
@@ -259,6 +260,10 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 	av_dump_format(context->formatContext, 0, inFile.c_str(), 0);
 }
 
+void FFmpegDriver::setVideoCaptureWorkerPool(WorkerPool *workerPool) {
+	videoCaptureWorkerPool = workerPool;
+}
+
 void FFmpegDriver::openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type) {
 	int myStreamIndex, ret;
 	AVStream *stream;
@@ -459,6 +464,10 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			}
 			readyVideoFrameBuffer.push_front(videoFrame);
 			YerFace_MutexUnlock(videoFrameBufferMutex);
+
+			if(videoCaptureWorkerPool != NULL) {
+				videoCaptureWorkerPool->sendWorkerSignal();
+			}
 
 			av_frame_unref(context->frame);
 		}
