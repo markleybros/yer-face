@@ -37,7 +37,7 @@ That said:
 OpenCV
 ------
 
-You will probably need to build OpenCV from scratch. :( **FIXME:** Now that we only require OpenCV modules `core` and `calib3d`, is this _really_ still necessary??
+You will probably need to build OpenCV from scratch. :( **FIXME:** When OpenCV 4+ is available in the repositories, this will no longer be necessary.
 
 ```
 # Clone the OpenCV and OpenCV Contrib Modules projects. Make sure you clone them into these exact directories!
@@ -50,13 +50,13 @@ mkdir build
 cd build
 
 # Configure the source tree. (See below for CMAKE NOTES.)
-cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D BUILD_opencv_cudacodec=OFF -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
+cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D BUILD_LIST=core,calib3d,cudev,imgcodecs -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
 
 # Compile with a sufficient number of threads.
-make -j 8
+cmake --build . --config Release -- -j 8
 
 # Install on the system.
-sudo make install
+sudo cmake --build . --config Release --target install
 ```
 
 **CMAKE NOTES:**
@@ -64,6 +64,7 @@ sudo make install
 _NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes:
 - core
 - calib3d
+- imgcodecs
 
 
 Dlib
@@ -87,16 +88,17 @@ Then download the latest version of Dlib from:
 
 ```
 # Configure the source tree.
-cmake .. -DUSE_AVX_INSTRUCTIONS=ON
+cmake .. -D USE_AVX_INSTRUCTIONS=ON
 
 # Compile in release mode.
 cmake --build . --config Release -- -j 8
 
 # Install on the system.
-sudo make install
+sudo cmake --build . --config Release --target install
 ```
 
 **CMAKE NOTES:** If you are running into a problem with cmake complaining about `cublas_device`, make sure you are running the latest version of cmake. See: https://github.com/davisking/dlib/issues/1490
+
 
 FFmpeg
 ------
