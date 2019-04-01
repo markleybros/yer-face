@@ -3,7 +3,9 @@ project (yer-face LANGUAGES CXX)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
 
-set(EXECUTABLE_OUTPUT_PATH "bin")
+set(YERFACE_SEARCH_PATH ":usr/local:usr:/usr/local:/usr")
+set(YERFACE_DATA_DIR "share/yer-face")
+add_compile_definitions(YERFACE_SEARCH_PATH="${YERFACE_SEARCH_PATH}" YERFACE_DATA_DIR="${YERFACE_DATA_DIR}")
 
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS_DEBUG "-g")
@@ -48,6 +50,7 @@ download_project(PROJ	websocketpp
 # Prevent GoogleTest from overriding our compiler/linker options
 # when building with Visual Studio
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "Enable installation of googletest.")
 
 add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
@@ -76,11 +79,34 @@ target_link_libraries( yer-face ${OpenCV_LIBS} dlib::dlib ${_STRIPPED_SDL2_LIBRA
 target_compile_features( yer-face PUBLIC cxx_std_11 )
 
 #Adapted from http://qrikko.blogspot.com/2016/05/cmake-and-how-to-copy-resources-during.html
-set (source "${CMAKE_SOURCE_DIR}/data")
-set (destination "${CMAKE_CURRENT_BINARY_DIR}/data")
+set (YERFACE_DATA_SOURCE "${CMAKE_SOURCE_DIR}/data")
+set (YERFACE_DATA_DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/${YERFACE_DATA_DIR}")
+get_filename_component ( YERFACE_DATA_DESTINATION_DIR ${YERFACE_DATA_DESTINATION} DIRECTORY )
 add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E create_symlink ${source} ${destination}
-	DEPENDS ${destination}
-	COMMENT "symbolic link data folder from ${source} => ${destination}"
+	COMMAND ${CMAKE_COMMAND} -E make_directory ${YERFACE_DATA_DESTINATION_DIR}
+	COMMENT "make data folder containing directory: ${YERFACE_DATA_DESTINATION_DIR}"
+)
+add_custom_command(
+	TARGET ${PROJECT_NAME} POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E create_symlink ${YERFACE_DATA_SOURCE} ${YERFACE_DATA_DESTINATION}
+	DEPENDS ${YERFACE_DATA_DESTINATION_DIR}
+	COMMENT "symbolic link data folder: ${YERFACE_DATA_SOURCE} => ${YERFACE_DATA_DESTINATION}"
+)
+
+install(TARGETS yer-face RUNTIME
+	PERMISSIONS
+		OWNER_READ OWNER_WRITE OWNER_EXECUTE
+		GROUP_READ GROUP_EXECUTE
+		WORLD_READ WORLD_EXECUTE
+)
+install(DIRECTORY data/ doc DESTINATION "${YERFACE_DATA_DIR}"
+	FILE_PERMISSIONS
+		OWNER_READ OWNER_WRITE
+		GROUP_READ
+		WORLD_READ
+	DIRECTORY_PERMISSIONS
+		OWNER_READ OWNER_WRITE OWNER_EXECUTE
+		GROUP_READ GROUP_EXECUTE
+		WORLD_READ WORLD_EXECUTE
 )

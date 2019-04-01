@@ -24,8 +24,8 @@ PrestonBlairPhonemes::PrestonBlairPhonemes(void) {
 }
 
 SphinxDriver::SphinxDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, PreviewHUD *myPreviewHUD, bool myLowLatency) {
-	hiddenMarkovModel = config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"];
-	allPhoneLM = config["YerFace"]["SphinxDriver"]["allPhoneLM"];
+	hiddenMarkovModel = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"]);
+	allPhoneLM = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["allPhoneLM"]);
 	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
 	lipFlappingResponseThreshold = config["YerFace"]["SphinxDriver"]["lipFlapping"]["responseThreshold"];
 	lipFlappingNonLinearResponse = config["YerFace"]["SphinxDriver"]["lipFlapping"]["nonLinearResponse"];

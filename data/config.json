@@ -5,12 +5,12 @@
       "numWorkers": 1,
       "resultGoodForSeconds": 0.5,
       "faceBoxSizeAdjustment": 1.2,
-      "dlibFaceDetector": "data/dlib-models/mmod_human_face_detector.dat"
+      "dlibFaceDetector": "dlib-models/mmod_human_face_detector.dat"
     },
     "FaceTracker": {
       "numWorkersPerCPU": 0.1375,
       "numWorkers": 0,
-      "dlibFaceLandmarks": "data/dlib-models/shape_predictor_68_face_landmarks.dat",
+      "dlibFaceLandmarks": "dlib-models/shape_predictor_68_face_landmarks.dat",
       "useFullSizedFrameForLandmarkDetection": true,
       "poseSmoothingOverSeconds": 0.25,
       "poseSmoothingExponent": 3,
@@ -77,8 +77,8 @@
       "websocketServerPort": 9002
     },
     "SphinxDriver": {
-      "hiddenMarkovModel": "data/sphinx-models/en-us/en-us",
-      "allPhoneLM": "data/sphinx-models/en-us/en-us-phone.lm.bin",
+      "hiddenMarkovModel": "sphinx-models/en-us/en-us",
+      "allPhoneLM": "sphinx-models/en-us/en-us-phone.lm.bin",
       "lipFlapping": {
         "targetPhoneme": "AI",
         "responseThreshold": 0.075,
