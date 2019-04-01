@@ -1,8 +1,6 @@
 #pragma once
 
 #include <string>
-#include "opencv2/objdetect.hpp"
-#include "opencv2/tracking.hpp"
 
 #include "dlib/opencv.h"
 #include "dlib/dnn.h"

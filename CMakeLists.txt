@@ -57,7 +57,7 @@ include_directories("src" "${asio_SOURCE_DIR}/asio/include")
 
 include_directories("src" "${websocketpp_SOURCE_DIR}")
 
-find_package( OpenCV 4 REQUIRED COMPONENTS core calib3d )
+find_package( OpenCV 4 REQUIRED COMPONENTS core calib3d imgcodecs )
 find_package( dlib REQUIRED )
 find_package( SDL2 REQUIRED )
 find_package( FFmpeg REQUIRED )
