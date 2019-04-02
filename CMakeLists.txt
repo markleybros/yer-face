@@ -3,9 +3,8 @@ project (yer-face LANGUAGES CXX)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
 
-set(YERFACE_SEARCH_PATH ":usr/local:usr:/usr/local:/usr")
 set(YERFACE_DATA_DIR "share/yer-face")
-add_compile_definitions(YERFACE_SEARCH_PATH="${YERFACE_SEARCH_PATH}" YERFACE_DATA_DIR="${YERFACE_DATA_DIR}")
+add_compile_definitions(YERFACE_DATA_DIR="${YERFACE_DATA_DIR}")
 
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS_DEBUG "-g")

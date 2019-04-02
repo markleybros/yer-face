@@ -107,7 +107,7 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{configFile C|search|Required configuration file. (Indicate the full or relative path to the config.json file, or 'search' to search common locations.)}"
+		"{configFile C|search|Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file, or 'search' to search common locations.)}"
 		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is pre-recorded!)}"
 		"{inVideo|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{inVideoFormat||Tell libav to use a specific format to interpret the inVideo. Leave blank for auto-detection.}"
@@ -396,7 +396,7 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 
 void parseConfigFile(void) {
 	if(configFile == "search") {
-		configFile = Utilities::fileValidPathOrDie("config.json", true);
+		configFile = Utilities::fileValidPathOrDie("yer-face-config.json", true);
 	} else {
 		configFile = Utilities::fileValidPathOrDie(configFile);
 	}

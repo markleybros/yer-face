@@ -76,6 +76,7 @@ public:
 	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
 	static json JSONArrayFromScalarColor(cv::Scalar color);
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
+	static bool stringEndMatches(string haystack, string needle);
 	static bool fileExists(string filePath);
 	static string fileSearchInCommonLocations(string filePath);
 	static string fileValidPathOrDie(string filePath, bool searchOnly = false);

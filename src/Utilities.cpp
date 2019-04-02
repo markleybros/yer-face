@@ -266,6 +266,17 @@ cv::Point3d Utilities::Point3dFromJSONArray(json jsonArray) {
 	return Point3d(jsonArray[0], jsonArray[1], jsonArray[2]);
 }
 
+bool Utilities::stringEndMatches(string haystack, string needle) {
+	int start = haystack.length() - needle.length();
+	if(start < 0) {
+		return false;
+	}
+	if(haystack.substr(start, string::npos) == needle) {
+		return true;
+	}
+	return false;
+}
+
 bool Utilities::fileExists(string filePath) {
 	struct stat buf;
 	logger->verbose("Checking if \"%s\" exists.", filePath.c_str());
@@ -273,33 +284,41 @@ bool Utilities::fileExists(string filePath) {
 }
 
 string Utilities::fileSearchInCommonLocations(string filePath) {
-	string pathSeparator = "/";
-	string searchPaths = YERFACE_SEARCH_PATH;
-	string relativeDataPath = YERFACE_DATA_DIR;
 	if(sdlDataPath == NULL) {
 		sdlDataPath = SDL_GetBasePath();
 	}
-	std::regex delimiter(":");
-	const std::sregex_token_iterator end;
-	for(auto it = sregex_token_iterator(searchPaths.begin(), searchPaths.end(), delimiter, -1); it != end; ++it) {
-		string searchPath = *it;
-		string searchPathWithSeparator = "";
-		if(searchPath.length() > 0) {
-			searchPathWithSeparator = searchPath + pathSeparator;
+
+	vector<string> searchBases;
+	searchBases.push_back("./");
+	if(sdlDataPath != NULL) {
+		string sdlDataPathStr = (string)sdlDataPath;
+		vector<string> baseTrims = {
+			"usr/local/bin/",
+			"usr/bin/",
+			"bin/"
+		};
+		for(string baseTrim : baseTrims) {
+			if(stringEndMatches(sdlDataPathStr, baseTrim)) {
+				searchBases.push_back(sdlDataPathStr.substr(0, sdlDataPathStr.length() - baseTrim.length()));
+			}
 		}
-		string testPath;
-		string testPathSuffix = searchPathWithSeparator + relativeDataPath + pathSeparator + filePath;
-		if(testPathSuffix.at(0) == '/') {
-			if(fileExists(testPathSuffix)) {
-				return testPathSuffix;
-			}
-		} else {
-			testPath = "./" + testPathSuffix;
-			if(fileExists(testPath)) {
-				return testPath;
-			}
-			if(sdlDataPath != NULL) {
-				testPath = (string)sdlDataPath + testPathSuffix;
+	}
+	searchBases.push_back("/");
+
+	vector<string> searchSecondComponents = {
+		"usr/local/",
+		"usr/",
+		""
+	};
+
+	vector<string> searchThirdComponents = {
+		YERFACE_DATA_DIR "/",
+		""
+	};
+	for(string searchBase : searchBases) {
+		for(string searchSecondComponent : searchSecondComponents) {
+			for(string searchThirdComponent : searchThirdComponents) {
+				string testPath = searchBase + searchSecondComponent + searchThirdComponent + filePath;
 				if(fileExists(testPath)) {
 					return testPath;
 				}
