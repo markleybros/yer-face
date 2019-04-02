@@ -85,7 +85,7 @@ Then download the latest version of Dlib from:
 
 ```
 # Configure the source tree.
-cmake .. -D USE_AVX_INSTRUCTIONS=ON
+cmake -D USE_AVX_INSTRUCTIONS=ON ..
 
 # Compile in release mode.
 cmake --build . --config Release -- -j 8
