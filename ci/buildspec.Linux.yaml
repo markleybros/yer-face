@@ -1,0 +1,18 @@
+version: 0.2
+
+env:
+  variables:
+    DOCKER_BUILD_IMAGE: 317674571703.dkr.ecr.us-east-2.amazonaws.com/yer-face-ci:latest
+
+phases:
+  pre_build:
+    commands:
+      # We use Git LFS to store important files within our project.
+      # These files are not automatically checked out, so we need to take additional measures to pull them.
+      - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && apt-get -y --no-install-recommends install git-lfs && git lfs pull
+      # Log into ECR so we can pull our docker build image.
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+  build:
+    commands:
+      # The actual build process runs inside the build docker image.
+      - docker run --rm -v $(pwd):/root/build/yer-face "${DOCKER_BUILD_IMAGE}" /root/build/yer-face/ci/build.Linux.sh
