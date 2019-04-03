@@ -1,10 +1,21 @@
 cmake_minimum_required (VERSION 3.8 FATAL_ERROR)
 project (yer-face LANGUAGES CXX)
 
+execute_process(COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/ci/version.sh
+	RESULT_VARIABLE YERFACE_VERSION_RESULT
+	OUTPUT_VARIABLE YERFACE_VERSION
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT ${YERFACE_VERSION_RESULT} EQUAL 0)
+	message(FATAL_ERROR "Package version string failed to be resolved!")
+endif()
+message("Package version string: ${YERFACE_VERSION}")
+
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
 
 set(YERFACE_DATA_DIR "share/yer-face")
-add_definitions(-DYERFACE_DATA_DIR="${YERFACE_DATA_DIR}")
+
+add_definitions(-DYERFACE_DATA_DIR="${YERFACE_DATA_DIR}" -DYERFACE_VERSION="${YERFACE_VERSION}")
 
 set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS_DEBUG "-g")

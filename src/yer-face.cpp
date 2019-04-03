@@ -125,9 +125,13 @@ int main(int argc, const char** argv) {
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{headless||If set, all video and audio output is disabled. Intended to be suitable for jobs running in the terminal.}"
+		"{version||Emit the version string to STDOUT and exit.}"
 		);
-
-	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
+	parser.about("YerFace! A stupid facial performance capture engine for cartoon animation. (" YERFACE_VERSION ")");
+	if(parser.get<bool>("version")) {
+		fprintf(stdout, "%s\n", YERFACE_VERSION);
+		return 0;
+	}
 	if(parser.get<bool>("help")) {
 		parser.printMessage();
 		return 1;
