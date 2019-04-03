@@ -9,7 +9,7 @@ phases:
   pre_build:
     commands:
       - ci/version.sh
-      - git show -s --pretty=%D HEAD
+      - git show -s --pretty=%D HEAD || true
       - git status
       - git log --decorate=full | head -n 100
       # We use Git LFS to store important files within our project.
