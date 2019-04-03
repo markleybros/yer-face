@@ -9,11 +9,6 @@ function _log() {
 	echo build.Linux.sh: "${@}" 1>&2
 }
 
-function _die() {
-	_log FATAL: "${@}"
-	exit 1
-}
-
 
 _log "Starting up..."
 _log "Base path is: ${BASEPATH}"

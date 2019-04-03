@@ -3,6 +3,7 @@ version: 0.2
 env:
   variables:
     DOCKER_BUILD_IMAGE: 317674571703.dkr.ecr.us-east-2.amazonaws.com/yer-face-ci:latest
+    DEBIAN_FRONTEND: noninteractive
 
 phases:
   pre_build:
@@ -16,3 +17,8 @@ phases:
     commands:
       # The actual build process runs inside the build docker image.
       - docker run --rm -v $(pwd):/root/build/yer-face "${DOCKER_BUILD_IMAGE}" /root/build/yer-face/ci/build.Linux.sh
+
+artifacts:
+  files:
+    - 'build/yer-face*.AppImage'
+  discard-paths: yes
