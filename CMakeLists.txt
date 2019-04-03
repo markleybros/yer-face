@@ -34,26 +34,33 @@ set(UPDATE_DISCONNECTED_IF_AVAILABLE "UPDATE_DISCONNECTED 1")
 
 include(CMakeModules/DownloadProject.cmake)
 download_project(PROJ	googletest
-	GIT_REPOSITORY	https://github.com/google/googletest.git
-	GIT_TAG	master
+	URL https://github.com/google/googletest/archive/release-1.8.1.tar.gz
+	URL_HASH SHA256=9bf1fe5182a604b4135edc1a425ae356c9ad15e9b23f9f12a02e80184c3a249c
+	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	jsoncpp
-	GIT_REPOSITORY	https://github.com/nlohmann/json.git
-	GIT_TAG	master
+	URL https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp
+	URL_HASH SHA256=d2eeb25d2e95bffeb08ebb7704cdffd2e8fca7113eba9a0b38d60a5c391ea09a
+	DOWNLOAD_NO_PROGRESS TRUE
+	DOWNLOAD_NO_EXTRACT TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	asio
-	GIT_REPOSITORY	https://github.com/chriskohlhoff/asio.git
-	GIT_TAG	asio-1-12-2
+#	URL https://github.com/chriskohlhoff/asio/archive/asio-1-13-0.tar.gz
+#	URL_HASH SHA256=54a1208d20f2104dbd6b7a04a9262f5ab649f4b7a9faf7eac4c2294e9e104c06
+	URL https://github.com/chriskohlhoff/asio/archive/asio-1-12-2.tar.gz
+	URL_HASH SHA256=1de23266b956674e766cd0b6c929a11259f2284ea8e96b765cc8c67b1689e0fd
+	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	websocketpp
-	GIT_REPOSITORY	https://github.com/zaphoyd/websocketpp.git
-	GIT_TAG	master
+	URL https://github.com/zaphoyd/websocketpp/archive/0.8.1.tar.gz
+	URL_HASH SHA256=178899de48c02853b55b1ea8681599641cedcdfce59e56beaff3dd0874bf0286
+	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
@@ -64,7 +71,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "Enable installation of googletest.")
 
 add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
-include_directories("src" "${jsoncpp_SOURCE_DIR}/single_include/nlohmann")
+include_directories("src" "${jsoncpp_DOWNLOAD_DIR}")
 
 include_directories("src" "${asio_SOURCE_DIR}/asio/include")
 

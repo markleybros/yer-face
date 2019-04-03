@@ -140,8 +140,12 @@ function(download_project)
     if (NOT DL_ARGS_BINARY_DIR)
         set(DL_ARGS_BINARY_DIR "${DL_ARGS_PREFIX}/${DL_ARGS_PROJ}-build")
     endif()
+    if (NOT DL_ARGS_DOWNLOAD_DIR)
+        set(DL_ARGS_DOWNLOAD_DIR "${DL_ARGS_PREFIX}/${DL_ARGS_PROJ}-download")
+    endif()
     set(${DL_ARGS_PROJ}_SOURCE_DIR "${DL_ARGS_SOURCE_DIR}" PARENT_SCOPE)
     set(${DL_ARGS_PROJ}_BINARY_DIR "${DL_ARGS_BINARY_DIR}" PARENT_SCOPE)
+    set(${DL_ARGS_PROJ}_DOWNLOAD_DIR "${DL_ARGS_DOWNLOAD_DIR}" PARENT_SCOPE)
 
     # The way that CLion manages multiple configurations, it causes a copy of
     # the CMakeCache.txt to be copied across due to it not expecting there to

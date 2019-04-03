@@ -13,6 +13,11 @@ function _log() {
 _log "Starting up..."
 _log "Base path is: ${BASEPATH}"
 cd "${BASEPATH}"
+
+VERSION_STRING="$("${BASEPATH}/ci/version.sh")"
+_log "Resolved version string: ${VERSION_STRING}"
+
+_log "Setting up build directory..."
 rm -rf build
 mkdir -p build
 cd build
@@ -33,6 +38,7 @@ chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-checkrt-x86_64.sh
 _log "Running packaging script..."
 rm AppDir/usr/local/bin/yer-face
 export PATH=".:${PATH}"
+export OUTPUT="${VERSION_STRING}-x86_64.AppImage"
 squashfs-root/AppRun --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
 
 _log "All done."

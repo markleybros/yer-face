@@ -14,6 +14,9 @@ function _die() {
 }
 
 
+VERSION_STRING="yer-face"
+
+### Calculate the version, validate via git tag.
 PACKAGE_VERSION=$(cat "${BASEPATH}/VERSION")
 VERSION_EXACT=false
 GIT_TAG=$(git describe --tags --exact-match 2> /dev/null)
@@ -24,14 +27,21 @@ if [ -n "${GIT_TAG}" ]; then
 	PACKAGE_VERSION="${GIT_TAG}"
 	VERSION_EXACT=true
 fi
-VERSION_STRING="${PACKAGE_VERSION}"
+VERSION_STRING="${VERSION_STRING}-${PACKAGE_VERSION}"
 
+### If we don't exactly match a tag, append more information to the version string.
 if [ "${VERSION_EXACT}" != "true" ]; then
-	GIT_BRANCH=$(git symbolic-ref -q --short HEAD)
+	### Figure out what branch we're associated with.
+	GIT_BRANCH=$(git show -s --pretty=%D HEAD | rev | cut -d, -f 1 | rev | sed -E 's/^[ ]*(.*\/)?//')
 	if [ -n "${GIT_BRANCH}" ]; then
 		VERSION_STRING="${VERSION_STRING}-${GIT_BRANCH}"
 	fi
 
+	### Append the current date.
+	BUILD_DATE=$(date '+%Y%m%d')
+	VERSION_STRING="${VERSION_STRING}-${BUILD_DATE}"
+
+	### Append the short commit hash.
 	GIT_COMMIT=$(git rev-parse --short HEAD)
 	VERSION_STRING="${VERSION_STRING}-${GIT_COMMIT}"
 fi
