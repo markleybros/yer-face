@@ -8,6 +8,10 @@ env:
 phases:
   pre_build:
     commands:
+      - ci/version.sh
+      - git show -s --pretty=%D HEAD
+      - git status
+      - git log --decorate=full | head -n 100
       # We use Git LFS to store important files within our project.
       # These files are not automatically checked out, so we need to take additional measures to pull them.
       - curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash && apt-get -y --no-install-recommends install git-lfs && git lfs pull
