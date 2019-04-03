@@ -22,3 +22,4 @@ artifacts:
   files:
     - 'build/yer-face*.AppImage'
   discard-paths: yes
+  name: yer-face-$(date +%Y%m%d)
