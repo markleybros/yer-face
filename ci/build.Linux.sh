@@ -29,17 +29,11 @@ cmake --build . --config Release -- -j 8
 _log "Staging installation..."
 make install DESTDIR=AppDir
 
-_log "Fetching linuxdeploy for packaging..."
-wget 'https://github.com/TheAssassin/linuxdeploy-plugin-checkrt/releases/download/continuous/linuxdeploy-plugin-checkrt-x86_64.sh'
-wget 'https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage'
-chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-checkrt-x86_64.sh
-./linuxdeploy-x86_64.AppImage --appimage-extract
-
 _log "Running packaging script..."
 rm AppDir/usr/local/bin/yer-face
 export PATH=".:${PATH}"
 export OUTPUT="${VERSION_STRING}-x86_64.AppImage"
-squashfs-root/AppRun --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
+linuxdeploy --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
 
 _log "All done."
 exit 0
