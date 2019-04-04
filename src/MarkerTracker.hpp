@@ -4,9 +4,6 @@
 #include <cstdlib>
 #include <list>
 
-#include "opencv2/objdetect.hpp"
-#include "opencv2/tracking.hpp"
-
 #include "Logger.hpp"
 #include "SDLDriver.hpp"
 #include "MarkerType.hpp"

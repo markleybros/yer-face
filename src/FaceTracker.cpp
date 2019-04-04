@@ -3,7 +3,6 @@
 #include "Utilities.hpp"
 
 #include "opencv2/calib3d.hpp"
-#include "opencv2/highgui.hpp"
 
 #include <exception>
 #include <cmath>
@@ -19,7 +18,7 @@ namespace YerFace {
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
-	featureDetectionModelFileName = config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"];
+	featureDetectionModelFileName = Utilities::fileValidPathOrDie(config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"]);
 	useFullSizedFrameForLandmarkDetection = config["YerFace"]["FaceTracker"]["useFullSizedFrameForLandmarkDetection"];
 	previouslyReportedFacialPose.set = false;
 	facialCameraModel.set = false;

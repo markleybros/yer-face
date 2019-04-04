@@ -39,7 +39,7 @@ class SDLDriver {
 public:
 	SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver();
-	SDLWindowRenderer createPreviewWindow(int width, int height);
+	SDLWindowRenderer createPreviewWindow(int width, int height, string windowTitle);
 	SDLWindowRenderer getPreviewWindow(void);
 	SDL_Texture *getPreviewTexture(Size textureSize);
 	void doRenderPreviewFrame(Mat previewFrame);
@@ -61,6 +61,7 @@ private:
 	Logger *logger;
 
 	SDLWindowRenderer previewWindow;
+	string previewWindowTitle;
 	SDL_Texture *previewTexture;
 
 	SDLAudioDevice audioDevice;

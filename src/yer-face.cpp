@@ -1,10 +1,4 @@
 
-#include "opencv2/objdetect.hpp"
-#include "opencv2/videoio.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/imgproc.hpp"
-#include "opencv2/tracking.hpp"
-
 #include "Logger.hpp"
 #include "Status.hpp"
 #include "SDLDriver.hpp"
@@ -55,8 +49,6 @@ bool headless = false;
 bool audioPreview = false;
 bool tryAudioInVideo = false;
 bool openInputAudio = false;
-
-String window_name = "Yer Face: A Stupid Facial Performance Capture Engine";
 
 json config = NULL;
 
@@ -115,7 +107,7 @@ int main(int argc, const char** argv) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{configFile C|data/config.json|Required configuration file.}"
+		"{configFile C|search|Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file, or 'search' to search common locations.)}"
 		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is pre-recorded!)}"
 		"{inVideo|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{inVideoFormat||Tell libav to use a specific format to interpret the inVideo. Leave blank for auto-detection.}"
@@ -133,9 +125,13 @@ int main(int argc, const char** argv) {
 		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
 		"{headless||If set, all video and audio output is disabled. Intended to be suitable for jobs running in the terminal.}"
+		"{version||Emit the version string to STDOUT and exit.}"
 		);
-
-	parser.about("Yer Face: The butt of all the jokes. (A stupid facial performance capture engine for cartoon animation.)");
+	parser.about("YerFace! A stupid facial performance capture engine for cartoon animation. (" YERFACE_VERSION ")");
+	if(parser.get<bool>("version")) {
+		fprintf(stdout, "%s\n", YERFACE_VERSION);
+		return 0;
+	}
 	if(parser.get<bool>("help")) {
 		parser.printMessage();
 		return 1;
@@ -146,12 +142,7 @@ int main(int argc, const char** argv) {
 		return 1;
 	}
 	configFile = parser.get<string>("configFile");
-	try {
-		parseConfigFile();
-	} catch(exception &e) {
-		logger->error("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
-		return 1;
-	}
+	parseConfigFile();
 	inVideo = parser.get<string>("inVideo");
 	if(inVideo == "-") {
 		inVideo = "pipe:0";
@@ -275,7 +266,7 @@ int main(int argc, const char** argv) {
 				continue;
 			}
 			try {
-				sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height);
+				sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height, "YerFace! Preview Window");
 			} catch(exception &e) {
 				windowInitializationFailed = true;
 				logger->error("Uh oh, failed to create a preview window! Got exception: %s", e.what());
@@ -408,14 +399,24 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 }
 
 void parseConfigFile(void) {
-	logger->verbose("Opening and parsing config file: \"%s\"", configFile.c_str());
-	std::ifstream fileStream = std::ifstream(configFile);
-	if(fileStream.fail()) {
-		throw invalid_argument("Specified config file failed to open.");
+	if(configFile == "search") {
+		configFile = Utilities::fileValidPathOrDie("yer-face-config.json", true);
+	} else {
+		configFile = Utilities::fileValidPathOrDie(configFile);
 	}
-	std::stringstream ssBuffer;
-	ssBuffer << fileStream.rdbuf();
-	config = json::parse(ssBuffer.str());
+	try {
+		logger->verbose("Opening and parsing config file: \"%s\"", configFile.c_str());
+		std::ifstream fileStream = std::ifstream(configFile);
+		if(fileStream.fail()) {
+			throw invalid_argument("Specified config file failed to open.");
+		}
+		std::stringstream ssBuffer;
+		ssBuffer << fileStream.rdbuf();
+		config = json::parse(ssBuffer.str());
+	} catch(exception &e) {
+		logger->error("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
+		throw;
+	}
 }
 
 void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {

@@ -139,7 +139,7 @@ SDLDriver::~SDLDriver() {
 	delete logger;
 }
 
-SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height) {
+SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height, string windowTitle) {
 	if(headless) {
 		logger->verbose("SDLDriver::createPreviewWindow() called, but we're running in headless mode. This is an NOP.");
 		return previewWindow;
@@ -147,8 +147,9 @@ SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height) {
 	if(previewWindow.window != NULL || previewWindow.renderer != NULL) {
 		throw logic_error("SDL Driver asked to create a preview window, but one already exists!");
 	}
-	logger->info("Creating Preview SDL Window <%dx%d>", width, height);
-	previewWindow.window = SDL_CreateWindow("YerFace! Preview", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
+	previewWindowTitle = windowTitle;
+	logger->info("Creating Preview SDL Window <%dx%d> \"%s\"", width, height, previewWindowTitle.c_str());
+	previewWindow.window = SDL_CreateWindow(previewWindowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
 	if(previewWindow.window == NULL) {
 		throw runtime_error("SDL Driver tried to create a preview window and failed.");
 	}

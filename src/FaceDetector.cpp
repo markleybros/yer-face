@@ -34,7 +34,7 @@ FaceDetector::FaceDetector(json config, Status *myStatus, FrameServer *myFrameSe
 	if(resultGoodForSeconds < 0.0) {
 		throw invalid_argument("resultGoodForSeconds cannot be less than zero.");
 	}
-	faceDetectionModelFileName = config["YerFace"]["FaceDetector"]["dlibFaceDetector"];
+	faceDetectionModelFileName = Utilities::fileValidPathOrDie(config["YerFace"]["FaceDetector"]["dlibFaceDetector"]);
 	faceBoxSizeAdjustment = config["YerFace"]["FaceDetector"]["faceBoxSizeAdjustment"];
 	if(faceBoxSizeAdjustment < 0.0) {
 		throw invalid_argument("faceBoxSizeAdjustment cannot be less than zero.");

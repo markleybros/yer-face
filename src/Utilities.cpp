@@ -2,6 +2,8 @@
 #include "Utilities.hpp"
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <sys/stat.h>
+#include <regex>
 
 using namespace std;
 using namespace cv;
@@ -46,13 +48,13 @@ Point2d Utilities::averagePoint(vector<Point2d> points) {
 }
 
 double Utilities::lineDistance(Point2d a, Point2d b) {
-    Point2d d = a - b;
-    return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
+	Point2d d = a - b;
+	return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
 }
 
 double Utilities::lineDistance(Point3d a, Point3d b) {
 	Point3d d = a - b;
-    return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0) + std::pow(d.z, 2.0));
+	return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0) + std::pow(d.z, 2.0));
 }
 
 TimeIntervalComparison Utilities::timeIntervalCompare(double startTimeA, double endTimeA, double startTimeB, double endTimeB) {
@@ -105,7 +107,7 @@ double Utilities::radiansToDegrees(double radians, bool normalize) {
 }
 
 Vec3d Utilities::rotationMatrixToEulerAngles(Mat &R, bool returnDegrees, bool degreesReflectAroundZero) {
-	double sy = std::sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0));
+	double sy = std::sqrt(R.at<double>(0,0) * R.at<double>(0,0) + R.at<double>(1,0) * R.at<double>(1,0));
 
 	double x, y, z;
 	if(sy > 0.0) {
@@ -263,5 +265,84 @@ cv::Point3d Utilities::Point3dFromJSONArray(json jsonArray) {
 	}
 	return Point3d(jsonArray[0], jsonArray[1], jsonArray[2]);
 }
+
+bool Utilities::stringEndMatches(string haystack, string needle) {
+	int start = haystack.length() - needle.length();
+	if(start < 0) {
+		return false;
+	}
+	if(haystack.substr(start, string::npos) == needle) {
+		return true;
+	}
+	return false;
+}
+
+bool Utilities::fileExists(string filePath) {
+	struct stat buf;
+	logger->verbose("Checking if \"%s\" exists.", filePath.c_str());
+	return (stat(filePath.c_str(), &buf) == 0);
+}
+
+string Utilities::fileSearchInCommonLocations(string filePath) {
+	if(sdlDataPath == NULL) {
+		sdlDataPath = SDL_GetBasePath();
+	}
+
+	vector<string> searchBases;
+	searchBases.push_back("./");
+	if(sdlDataPath != NULL) {
+		string sdlDataPathStr = (string)sdlDataPath;
+		vector<string> baseTrims = {
+			"usr/local/bin/",
+			"usr/bin/",
+			"bin/"
+		};
+		for(string baseTrim : baseTrims) {
+			if(stringEndMatches(sdlDataPathStr, baseTrim)) {
+				searchBases.push_back(sdlDataPathStr.substr(0, sdlDataPathStr.length() - baseTrim.length()));
+			}
+		}
+	}
+	searchBases.push_back("/");
+
+	vector<string> searchSecondComponents = {
+		"usr/local/",
+		"usr/",
+		""
+	};
+
+	vector<string> searchThirdComponents = {
+		YERFACE_DATA_DIR "/",
+		""
+	};
+	for(string searchBase : searchBases) {
+		for(string searchSecondComponent : searchSecondComponents) {
+			for(string searchThirdComponent : searchThirdComponents) {
+				string testPath = searchBase + searchSecondComponent + searchThirdComponent + filePath;
+				if(fileExists(testPath)) {
+					return testPath;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+string Utilities::fileValidPathOrDie(string filePath, bool searchOnly) {
+	if(!searchOnly) {
+		if(fileExists(filePath)) {
+			return filePath;
+		}
+	}
+	string result = Utilities::fileSearchInCommonLocations(filePath);
+	if(result == "") {
+		logger->error("Could not find \"%s\"!", filePath.c_str());
+		throw runtime_error("File or directory does not exist.");
+	}
+	return result;
+}
+
+Logger *Utilities::logger = new Logger("Utilities");
+char *Utilities::sdlDataPath = NULL;
 
 }; //namespace YerFace

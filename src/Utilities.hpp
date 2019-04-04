@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Logger.hpp"
+
 #include "SDL.h"
 #include "opencv2/imgproc.hpp"
 #include "json.hpp"
@@ -74,6 +76,14 @@ public:
 	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
 	static json JSONArrayFromScalarColor(cv::Scalar color);
 	static cv::Point3d Point3dFromJSONArray(json jsonArray);
+	static bool stringEndMatches(string haystack, string needle);
+	static bool fileExists(string filePath);
+	static string fileSearchInCommonLocations(string filePath);
+	static string fileValidPathOrDie(string filePath, bool searchOnly = false);
+
+private:
+	static Logger *logger;
+	static char *sdlDataPath;
 };
 
 typedef intmax_t FrameNumber;
