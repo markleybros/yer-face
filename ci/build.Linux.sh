@@ -25,7 +25,7 @@ cd build
 _log "Configuring..."
 cmake ..
 _log "Compiling..."
-cmake --build . --config Release
+cmake --build . --config Release -- -j 8
 _log "Staging installation..."
 make install DESTDIR=AppDir
 
