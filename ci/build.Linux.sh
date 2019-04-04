@@ -33,6 +33,7 @@ _log "Running packaging script..."
 rm AppDir/usr/local/bin/yer-face
 export PATH=".:${PATH}"
 export OUTPUT="${VERSION_STRING}-x86_64.AppImage"
+export VERSION="${VERSION_STRING}"
 linuxdeploy --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
 
 _log "All done."
