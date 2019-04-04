@@ -3,6 +3,8 @@ version: 0.2
 env:
   variables:
     DOCKER_BUILD_IMAGE: 317674571703.dkr.ecr.us-east-2.amazonaws.com/yer-face-ci:latest
+    ARTIFACT_BASES3: s3://build-artifacts.yerface.live/yer-face/binaries
+    ARTIFACT_BASEURL: https://s3-us-east-2.amazonaws.com/build-artifacts.yerface.live/yer-face/binaries
     DEBIAN_FRONTEND: noninteractive
 
 phases:
@@ -17,9 +19,6 @@ phases:
     commands:
       # The actual build process runs inside the build docker image.
       - docker run --rm -v $(pwd):/root/build/yer-face "${DOCKER_BUILD_IMAGE}" /root/build/yer-face/ci/build.Linux.sh
-
-artifacts:
-  files:
-    - 'build/yer-face*.AppImage'
-  discard-paths: yes
-  name: $(date +%Y%m%d)
+  post_build:
+    commands:
+      - ci/upload.Linux.sh

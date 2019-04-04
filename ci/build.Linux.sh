@@ -14,9 +14,6 @@ _log "Starting up..."
 _log "Base path is: ${BASEPATH}"
 cd "${BASEPATH}"
 
-VERSION_STRING="$("${BASEPATH}/ci/version.sh")"
-_log "Resolved version string: ${VERSION_STRING}"
-
 _log "Setting up build directory..."
 rm -rf build
 mkdir -p build
@@ -24,6 +21,8 @@ cd build
 
 _log "Configuring..."
 cmake ..
+VERSION_STRING="$(cat "${BASEPATH}/build/VersionString")"
+_log "Resolved version string: ${VERSION_STRING}"
 _log "Compiling..."
 cmake --build . --config Release -- -j 8
 _log "Staging installation..."
@@ -35,6 +34,9 @@ export PATH=".:${PATH}"
 export OUTPUT="${VERSION_STRING}-x86_64.AppImage"
 export VERSION="${VERSION_STRING}"
 linuxdeploy --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
+
+_log "Creating SHA256SUM file..."
+sha256sum "${OUTPUT}" > "${VERSION_STRING}".SHA256SUMS
 
 _log "All done."
 exit 0

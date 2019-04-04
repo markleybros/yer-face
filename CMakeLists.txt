@@ -10,6 +10,7 @@ if(NOT ${YERFACE_VERSION_RESULT} EQUAL 0)
 	message(FATAL_ERROR "Package version string failed to be resolved!")
 endif()
 message("Package version string: ${YERFACE_VERSION}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/VersionString" "${YERFACE_VERSION}")
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules)
 
