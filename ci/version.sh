@@ -15,6 +15,7 @@ function _die() {
 
 
 VERSION_STRING="yer-face"
+cd "${BASEPATH}" || _die "Uh oh."
 
 ### Calculate the version, validate via git tag.
 PACKAGE_VERSION=$(cat "${BASEPATH}/VERSION")
@@ -32,7 +33,7 @@ VERSION_STRING="${VERSION_STRING}-${PACKAGE_VERSION}"
 ### If we don't exactly match a tag, append more information to the version string.
 if [ "${VERSION_EXACT}" != "true" ]; then
 	### Figure out what branch we're associated with.
-	GIT_BRANCH=$(git show -s --pretty=%D HEAD | rev | cut -d, -f 1 | rev | sed -E 's/^[ ]*(.*\/)?//')
+	GIT_BRANCH=$("${BASEPATH}"/ci/branch.sh)
 	if [ -n "${GIT_BRANCH}" ]; then
 		VERSION_STRING="${VERSION_STRING}-${GIT_BRANCH}"
 	fi
