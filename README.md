@@ -5,14 +5,20 @@ A stupid facial performance capture engine for cartoon animation.
 ![CodeBuild Status](https://codebuild.us-east-2.amazonaws.com/badges?uuid=eyJlbmNyeXB0ZWREYXRhIjoibGNhelk3UzRNMVRybUtrUHkyK285aDl1Q29PWmNlQnQ1MlA3ZlJ4c1M3VVlYSEI0a29tVWR2N3pPZ25wK2cxSjhPcjBOSGxKODl4ZmM3dkphMW9tR0RJPSIsIml2UGFyYW1ldGVyU3BlYyI6Im5iNGp2YzI2ZWpKK0NUeDIiLCJtYXRlcmlhbFNldFNlcmlhbCI6MX0%3D&branch=master)
 
 
+Downloads
+---------
+
+Project downloads are hosted [on our website at yerface.live](https://yerface.live/download/).
+
+
 Documentation
 -------------
 
 All of the documentation is in [the documentation folder](doc/) so please check that out for instructions on how to get _YerFace_ running on your system as well as how to use it.
 
 
-Resources
----------
+Other Resources
+---------------
 
 You will find...
 - ...the _main web site_ and _blog [at yerface.live](https://yerface.live/)_.
