@@ -23,7 +23,7 @@ export OUTPUT_APPIMAGE_FILE="${VERSION_STRING}-x86_64.AppImage"
 export OUTPUT_HASH_FILE="${VERSION_STRING}.SHA256SUMS"
 
 aws s3 cp build/"${OUTPUT_APPIMAGE_FILE}" "${ARTIFACT_BASES3}"/Linux/ --acl public-read --content-type application/octet-stream --content-disposition attachment --no-progress || _die "Failed uploading binary."
-aws s3 cp build/"${OUTPUT_HASH_FILE}" "${ARTIFACT_BASES3}"/Linux/ --acl public-read --content-type text/plain --content-disposition inline --no-progress || _die "Failed uploading hash file."
+aws s3 cp build/"${OUTPUT_HASH_FILE}" "${ARTIFACT_BASES3}"/Linux/ --acl public-read --content-type text/plain --content-disposition attachment --no-progress || _die "Failed uploading hash file."
 
 GIT_BRANCH=$("${BASEPATH}"/ci/branch.sh) || _die "Failed resolving branch."
 if [ "${GIT_BRANCH}" != "master" ]; then
