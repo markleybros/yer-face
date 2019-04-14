@@ -2,12 +2,6 @@
 
 #include <string>
 
-#include "dlib/opencv.h"
-#include "dlib/dnn.h"
-#include "dlib/image_processing/frontal_face_detector.h"
-#include "dlib/image_processing/render_face_detections.h"
-#include "dlib/image_processing.h"
-
 #include "Logger.hpp"
 #include "Status.hpp"
 #include "SDLDriver.hpp"
@@ -19,9 +13,10 @@
 #include "WorkerPool.hpp"
 
 using namespace std;
-using namespace cv;
 
 namespace YerFace {
+
+class DlibPointPointer;
 
 enum DlibFeatureIndexes {
 	IDX_JAWLINE_0 = 0, //Uppermost right side.
@@ -87,49 +82,42 @@ enum DlibFeatureIndexes {
 	IDX_MOUTHIN_RIGHT_BOTTOM = 67
 };
 
-class FaceTracker;
-
 class FacialPose {
 public:
-	Mat translationVector, rotationMatrix;
-	Mat translationVectorInternal, rotationMatrixInternal;
-	Vec3d facialPlaneNormal;
+	cv::Mat translationVector, rotationMatrix;
+	cv::Mat translationVectorInternal, rotationMatrixInternal;
+	cv::Vec3d facialPlaneNormal;
 	double timestamp;
 	bool set;
 };
 
 class FacialPlane {
 public:
-	Point3d planePoint;
-	Vec3d planeNormal;
+	cv::Point3d planePoint;
+	cv::Vec3d planeNormal;
 };
 
 class FacialFeatures {
 public:
-	std::vector<Point2d> features;
+	std::vector<cv::Point2d> features;
 	bool set;
 };
 
 class FacialFeaturesInternal {
 public:
-	std::vector<Point2d> features;
-	std::vector<Point3d> features3D;
+	std::vector<cv::Point2d> features;
+	std::vector<cv::Point3d> features3D;
 	FacialFeatures featuresExposed;
 	bool set;
 };
 
 class FacialCameraModel {
 public:
-	Mat cameraMatrix, distortionCoefficients;
+	cv::Mat cameraMatrix, distortionCoefficients;
 	bool set;
 };
 
-class FaceTrackerWorker {
-public:
-	FaceTracker *self;
-
-	dlib::shape_predictor shapePredictor;
-};
+class FaceTrackerWorker;
 
 class FaceTrackerOutput {
 public:
@@ -149,7 +137,7 @@ class FaceTracker {
 public:
 	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
 	~FaceTracker() noexcept(false);
-	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
 	FacialFeatures getFacialFeatures(FrameNumber frameNumber);
 	FacialCameraModel getFacialCameraModel(void);
 	FacialPose getFacialPose(FrameNumber frameNumber);
@@ -159,7 +147,7 @@ private:
 	void doInitializeCameraModel(WorkingFrame *workingFrame);
 	void doCalculateFacialTransformation(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
 	void doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, WorkingFrame *workingFrame, FaceTrackerOutput *output);
-	bool doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor);
+	bool doConvertLandmarkPointToImagePoint(DlibPointPointer pointPointer, cv::Point2d *dst, double detectionScaleFactor);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static void predictorWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
 	static bool predictorWorkerHandler(WorkerPoolWorker *worker);
@@ -189,14 +177,14 @@ private:
 	double poseRotationPlusMinusX;
 	double poseRotationPlusMinusY;
 	double poseRotationPlusMinusZ;
-	Point3d vertexNoseSellion;
-	Point3d vertexEyeRightOuterCorner;
-	Point3d vertexEyeLeftOuterCorner;
-	Point3d vertexRightEar;
-	Point3d vertexLeftEar;
-	Point3d vertexNoseTip;
-	Point3d vertexMenton;
-	Point3d vertexStommion;
+	cv::Point3d vertexNoseSellion;
+	cv::Point3d vertexEyeRightOuterCorner;
+	cv::Point3d vertexEyeLeftOuterCorner;
+	cv::Point3d vertexRightEar;
+	cv::Point3d vertexLeftEar;
+	cv::Point3d vertexNoseTip;
+	cv::Point3d vertexMenton;
+	cv::Point3d vertexStommion;
 	double depthSliceA, depthSliceB, depthSliceC, depthSliceD, depthSliceE, depthSliceF, depthSliceG, depthSliceH;
 
 	Logger *logger;

@@ -2,6 +2,12 @@
 #include "FaceTracker.hpp"
 #include "Utilities.hpp"
 
+#include "dlib/opencv.h"
+#include "dlib/dnn.h"
+#include "dlib/image_processing/frontal_face_detector.h"
+#include "dlib/image_processing/render_face_detections.h"
+#include "dlib/image_processing.h"
+
 #include "opencv2/calib3d.hpp"
 
 #include <exception>
@@ -11,8 +17,22 @@
 
 using namespace std;
 using namespace dlib;
+using namespace cv;
 
 namespace YerFace {
+
+class DlibPointPointer {
+public:
+	dlib::point *ptr;
+};
+
+class FaceTrackerWorker {
+public:
+	FaceTracker *self;
+
+	dlib::shape_predictor shapePredictor;
+};
+
 
 // Pose recovery approach largely informed by the following sources:
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
@@ -204,11 +224,13 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 
 	output->facialFeatures.features.clear();
 	output->facialFeatures.features3D.clear();
+	DlibPointPointer partPointer;
 	dlib::point part;
 	Point2d partPoint;
 	for(unsigned long featureIndex = 0; featureIndex < result.num_parts(); featureIndex++) {
 		part = result.part(featureIndex);
-		if(!doConvertLandmarkPointToImagePoint(&part, &partPoint, searchFrameScaleFactor)) {
+		partPointer.ptr = &part;
+		if(!doConvertLandmarkPointToImagePoint(partPointer, &partPoint, searchFrameScaleFactor)) {
 			return;
 		}
 
@@ -252,13 +274,15 @@ void FaceTracker::doIdentifyFeatures(WorkerPoolWorker *worker, WorkingFrame *wor
 
 	//Stommion needs a little extra help.
 	part = result.part(IDX_MOUTHIN_CENTER_TOP);
+	partPointer.ptr = &part;
 	Point2d mouthTop;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthTop, searchFrameScaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(partPointer, &mouthTop, searchFrameScaleFactor)) {
 		return;
 	}
 	part = result.part(IDX_MOUTHIN_CENTER_BOTTOM);
+	partPointer.ptr = &part;
 	Point2d mouthBottom;
-	if(!doConvertLandmarkPointToImagePoint(&part, &mouthBottom, searchFrameScaleFactor)) {
+	if(!doConvertLandmarkPointToImagePoint(partPointer, &mouthBottom, searchFrameScaleFactor)) {
 		return;
 	}
 	partPoint = (mouthTop + mouthTop + mouthBottom) / 3.0;
@@ -418,7 +442,8 @@ void FaceTracker::doPrecalculateFacialPlaneNormal(WorkerPoolWorker *worker, Work
 	output->facialPose.facialPlaneNormal = Vec3d(planeNormalMat.at<double>(0), planeNormalMat.at<double>(1), planeNormalMat.at<double>(2));
 }
 
-bool FaceTracker::doConvertLandmarkPointToImagePoint(dlib::point *src, Point2d *dst, double detectionScaleFactor) {
+bool FaceTracker::doConvertLandmarkPointToImagePoint(DlibPointPointer pointPointer, Point2d *dst, double detectionScaleFactor) {
+	dlib::point *src = pointPointer.ptr;
 	if(*src == OBJECT_PART_NOT_PRESENT) {
 		return false;
 	}

@@ -41,8 +41,8 @@ public:
 	~SDLDriver();
 	SDLWindowRenderer createPreviewWindow(int width, int height, string windowTitle);
 	SDLWindowRenderer getPreviewWindow(void);
-	SDL_Texture *getPreviewTexture(Size textureSize);
-	void doRenderPreviewFrame(Mat previewFrame);
+	SDL_Texture *getPreviewTexture(cv::Size textureSize);
+	void doRenderPreviewFrame(cv::Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);

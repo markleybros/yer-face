@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 using namespace std;
+using namespace cv;
 
 namespace YerFace {
 
@@ -120,7 +121,7 @@ FFmpegDriver::~FFmpegDriver() {
 	delete logger;
 }
 
-void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio) {
+void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string outAudioChannelMap, bool tryAudio) {
 	int ret;
 	if(inFile.length() < 1) {
 		throw invalid_argument("specified input video/audio file must be a valid input filename");
@@ -227,7 +228,7 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, String i
 			audioStreamTimeBase = (double)context->audioStream->time_base.num / (double)context->audioStream->time_base.den;
 			// logger->verbose("Audio Stream open with... Time Base: %.08lf (%d/%d) seconds per unit", audioStreamTimeBase, context->audioStream->time_base.num, context->audioStream->time_base.den);
 		} catch(exception &e) {
-			logger->warn("Failed to open audio stream in %s!", inFile.c_str());
+			logger->warn("Failed to open audio stream in %s! Exception: %s", inFile.c_str(), e.what());
 		}
 	}
 
@@ -364,7 +365,7 @@ void FFmpegDriver::registerAudioFrameCallback(AudioFrameCallback audioFrameCallb
 	YerFace_MutexUnlock(videoContext.demuxerMutex);
 }
 
-void FFmpegDriver::logAVErr(String msg, int err) {
+void FFmpegDriver::logAVErr(string msg, int err) {
 	char errbuf[128];
 	av_strerror(err, errbuf, 128);
 	logger->error("%s AVERROR: (%d) %s", msg.c_str(), err, errbuf);
@@ -487,7 +488,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 			YerFace_MutexUnlock(audioStreamMutex);
 			for(AudioFrameHandler *handler : audioFrameHandlers) {
 				if(handler->resampler.swrContext == NULL) {
-					int inputChannelLayout = context->audioStream->codecpar->channel_layout;
+					int64_t inputChannelLayout = context->audioStream->codecpar->channel_layout;
 					if(inputChannelLayout == 0) {
 						if(context->audioStream->codecpar->channels == 1) {
 							inputChannelLayout = AV_CH_LAYOUT_MONO;
@@ -528,7 +529,7 @@ bool FFmpegDriver::decodePacket(MediaContext *context, const AVPacket *packet, i
 				audioFrameBacking.timestamp = timestamp;
 				audioFrameBacking.bufferArray = NULL;
 				//bufferSamples represents the expected number of samples produced by swr_convert() *PER CHANNEL*
-				audioFrameBacking.bufferSamples = av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + context->frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
+				audioFrameBacking.bufferSamples = (int)av_rescale_rnd(swr_get_delay(handler->resampler.swrContext, context->audioStream->codecpar->sample_rate) + context->frame->nb_samples, handler->audioFrameCallback.sampleRate, context->audioStream->codecpar->sample_rate, AV_ROUND_UP);
 
 				if(av_samples_alloc_array_and_samples(&audioFrameBacking.bufferArray, &bufferLineSize, handler->resampler.numChannels, audioFrameBacking.bufferSamples, handler->audioFrameCallback.sampleFormat, 1) < 0) {
 					throw runtime_error("Failed allocating audio buffer!");

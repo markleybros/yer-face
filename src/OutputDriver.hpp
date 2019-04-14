@@ -10,9 +10,6 @@
 #include "Status.hpp"
 #include "WorkerPool.hpp"
 
-#define ASIO_STANDALONE
-#include <websocketpp/config/asio_no_tls.hpp>
-#include <websocketpp/server.hpp>
 #include <set>
 
 #include <fstream>
@@ -22,6 +19,8 @@ using namespace std;
 namespace YerFace {
 
 class EventLogger;
+
+class OutputDriverWebSocketServer;
 
 class OutputFrameContainer {
 public:
@@ -34,26 +33,23 @@ public:
 };
 
 class OutputDriver {
+friend class OutputDriverWebSocketServer;
+
 public:
-	OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
+	OutputDriver(json config, string myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver);
 	~OutputDriver() noexcept(false);
 	void setEventLogger(EventLogger *myEventLogger);
 	void registerFrameData(string key);
 	void insertFrameData(string key, json value, FrameNumber frameNumber);
 private:
 	void handleNewBasisEvent(FrameNumber frameNumber);
-	static int launchWebSocketServer(void* data);
-	void serverOnOpen(websocketpp::connection_hdl handle);
-	void serverOnClose(websocketpp::connection_hdl handle);
-	void serverOnTimer(websocketpp::lib::error_code const &ec);
 	void handleOutputFrame(OutputFrameContainer *outputFrame);
-	void serverSetQuitPollTimer(void);
 	void outputNewFrame(json frame);
 	static bool workerHandler(WorkerPoolWorker *worker);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static void handleFrameServerDrainedEvent(void *userdata);
 
-	String outputFilename;
+	string outputFilename;
 	Status *status;
 	FrameServer *frameServer;
 	FaceTracker *faceTracker;
@@ -63,14 +59,8 @@ private:
 
 	ofstream outputFilestream;
 
-	SDL_mutex *websocketMutex;
-	int websocketServerPort;
-	bool websocketServerEnabled;
-	websocketpp::server<websocketpp::config::asio> server;
-	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
-	bool websocketServerRunning;
+	OutputDriverWebSocketServer *webSocketServer;
 
-	SDL_Thread *serverThread;
 
 	SDL_mutex *basisMutex;
 	bool autoBasisTransmitted;

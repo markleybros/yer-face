@@ -13,14 +13,13 @@
 #include "Utilities.hpp"
 
 using namespace std;
-using namespace cv;
 
 namespace YerFace {
 
 class MarkerPoint {
 public:
-	Point2d point;
-	Point3d point3d;
+	cv::Point2d point;
+	cv::Point3d point3d;
 	FrameTimestamps timestamp;
 	bool set;
 };
@@ -33,7 +32,7 @@ public:
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	void processFrame(FrameNumber frameNumber);
-	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
 	void frameStatusNew(FrameNumber frameNumber);
 	void frameStatusGone(FrameNumber frameNumber);
 	MarkerPoint getMarkerPoint(FrameNumber frameNumber);

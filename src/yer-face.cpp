@@ -25,25 +25,25 @@ using namespace std;
 using namespace cv;
 using namespace YerFace;
 
-String configFile;
+string configFile;
 
-String inVideo;
-String inVideoFormat;
-String inVideoSize;
-String inVideoRate;
-String inVideoCodec;
+string inVideo;
+string inVideoFormat;
+string inVideoSize;
+string inVideoRate;
+string inVideoCodec;
 
-String inAudio;
-String inAudioFormat;
-String inAudioChannels;
-String inAudioRate;
-String inAudioCodec;
+string inAudio;
+string inAudioFormat;
+string inAudioChannels;
+string inAudioRate;
+string inAudioCodec;
 
-String outAudioChannelMap;
+string outAudioChannelMap;
 
-String inEvents;
-String outData;
-String previewImgSeq;
+string inEvents;
+string outData;
+string previewImgSeq;
 bool lowLatency = false;
 bool headless = false;
 bool audioPreview = false;
@@ -92,6 +92,7 @@ unordered_map<FrameNumber, MetricsTick> frameMetricsTicks;
 SDL_mutex *frameMetricsMutex;
 //END VARIABLES PROTECTED BY frameMetricsMutex
 
+int yerface(int argc, char *argv[]);
 void videoCaptureInitializer(WorkerPoolWorker *worker, void *ptr);
 bool videoCaptureHandler(WorkerPoolWorker *worker);
 void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr);
@@ -100,7 +101,16 @@ void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, Frame
 void handleFrameServerDrainedEvent(void *userdata);
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
 
-int main(int argc, const char** argv) {
+int main(int argc, char *argv[]) {
+	try {
+		return yerface(argc, argv);
+	} catch(exception &e) {
+		fprintf(stderr, "Uncaught exception: %s\n", e.what());
+	}
+	return 1;
+}
+
+int yerface(int argc, char *argv[]) {
 	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
 	logger = new Logger("YerFace");
 

@@ -5,6 +5,7 @@
 #include <cmath>
 
 using namespace std;
+using namespace cv;
 using namespace PocketSphinx;
 
 namespace YerFace {
@@ -259,6 +260,7 @@ bool SphinxDriver::processPhonemeBreakdown(SphinxVideoFrame *videoFrame) {
 				try {
 					currentPercent = videoFrame->phonemes.percent.at(phonemeBuffer.back().pbPhoneme);
 				} catch(exception &e) {
+					logger->warn("Caught exception during phoneme mapping! %s", e.what());
 					throw logic_error("Preston Blair mapping returned an unrecognized phoneme!");
 				}
 				double divisor = videoFrame->timestamps.estimatedEndTimestamp - videoFrame->timestamps.startTimestamp;
@@ -309,7 +311,7 @@ void SphinxDriver::processUtteranceHypothesis(void) {
 			phonemeBuffer.push_front(phoneme);
 			addedPhonemes = true;
 		} catch(nlohmann::detail::out_of_range &e) {
-			// logger->verbose("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
+			logger->warn("Sphinx reported a phoneme (%s) which we don't have in our mapping. Error was: %s", symbol.c_str(), e.what());
 		}
 
 		segmentIterator = ps_seg_next(segmentIterator);

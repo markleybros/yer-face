@@ -18,6 +18,10 @@ _log "Starting up..."
 _log "Base path is: ${BASEPATH}"
 cd "${BASEPATH}" || _die "Uh oh."
 
+if [ -z "${ARTIFACT_BASES3}" -o -z "${ARTIFACT_BASEURL}" ]; then
+	_die "Missing one or more buildspec environment variables."
+fi
+
 VERSION_STRING="$(cat build/VersionString)"
 export OUTPUT_APPIMAGE_FILE="${VERSION_STRING}-x86_64.AppImage"
 export OUTPUT_HASH_FILE="${VERSION_STRING}.SHA256SUMS"
