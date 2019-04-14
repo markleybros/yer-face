@@ -6,6 +6,11 @@
 #include <cstring>
 #include <streambuf>
 
+#define _WEBSOCKETPP_CPP11_STRICT_
+#define ASIO_STANDALONE
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+
 using namespace cv;
 
 using namespace websocketpp;
@@ -15,6 +20,26 @@ using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
 namespace YerFace {
+
+class OutputDriverWebSocketServer {
+public:
+	static int launchWebSocketServer(void* data);
+	void serverOnOpen(websocketpp::connection_hdl handle);
+	void serverOnClose(websocketpp::connection_hdl handle);
+	void serverOnTimer(websocketpp::lib::error_code const &ec);
+	void serverSetQuitPollTimer(void);
+
+	OutputDriver *parent;
+
+	SDL_mutex *websocketMutex;
+	int websocketServerPort;
+	bool websocketServerEnabled;
+	websocketpp::server<websocketpp::config::asio> server;
+	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
+	bool websocketServerRunning;
+
+	SDL_Thread *serverThread;
+};
 
 bool OutputFrameContainer::isReady(void) {
 	if(!frameIsDraining) {
@@ -29,8 +54,7 @@ bool OutputFrameContainer::isReady(void) {
 	return true;
 }
 
-OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
-	serverThread = NULL;
+OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	outputFilename = myOutputFilename;
 	newestFrameTimestamps.frameNumber = -1;
 	newestFrameTimestamps.startTimestamp = -1.0;
@@ -55,17 +79,9 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatu
 	if((basisMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((websocketMutex = SDL_CreateMutex()) == NULL) {
-		throw runtime_error("Failed creating mutex!");
-	}
 	if((workerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	websocketServerPort = config["YerFace"]["OutputDriver"]["websocketServerPort"];
-	if(websocketServerPort < 1 || websocketServerPort > 65535) {
-		throw runtime_error("Server port is invalid");
-	}
-	websocketServerEnabled = config["YerFace"]["OutputDriver"]["websocketServerEnabled"];
 
 	//We need to know when the frame server has drained.
 	frameServerDrained = false;
@@ -97,16 +113,30 @@ OutputDriver::OutputDriver(json config, String myOutputFilename, Status *myStatu
 	});
 	logger = new Logger("OutputDriver");
 
-	//Constrain websocket server logs a bit for sanity.
-	server.get_alog().clear_channels(log::alevel::all);
-	server.get_alog().set_channels(log::alevel::connect | log::alevel::disconnect | log::alevel::app | log::alevel::http | log::alevel::fail);
-	server.get_elog().clear_channels(log::elevel::all);
-	server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
+	webSocketServer = new OutputDriverWebSocketServer();
+	webSocketServer->parent = this;
 
-	if(websocketServerEnabled) {
-		websocketServerRunning = true;
+	webSocketServer->serverThread = NULL;
+	webSocketServer->websocketServerRunning = false;
+	if((webSocketServer->websocketMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
+	webSocketServer->websocketServerPort = config["YerFace"]["OutputDriver"]["websocketServerPort"];
+	if(webSocketServer->websocketServerPort < 1 || webSocketServer->websocketServerPort > 65535) {
+		throw runtime_error("Server port is invalid");
+	}
+	webSocketServer->websocketServerEnabled = config["YerFace"]["OutputDriver"]["websocketServerEnabled"];
+
+	//Constrain websocket server logs a bit for sanity.
+	webSocketServer->server.get_alog().clear_channels(log::alevel::all);
+	webSocketServer->server.get_alog().set_channels(log::alevel::connect | log::alevel::disconnect | log::alevel::app | log::alevel::http | log::alevel::fail);
+	webSocketServer->server.get_elog().clear_channels(log::elevel::all);
+	webSocketServer->server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
+
+	if(webSocketServer->websocketServerEnabled) {
+		webSocketServer->websocketServerRunning = true;
 		//Create worker thread.
-		if((serverThread = SDL_CreateThread(OutputDriver::launchWebSocketServer, "HTTPServer", (void *)this)) == NULL) {
+		if((webSocketServer->serverThread = SDL_CreateThread(OutputDriverWebSocketServer::launchWebSocketServer, "HTTPServer", (void *)webSocketServer)) == NULL) {
 			throw runtime_error("Failed spawning worker thread!");
 		}
 	}
@@ -156,15 +186,15 @@ OutputDriver::~OutputDriver() noexcept(false) {
 	}
 	YerFace_MutexUnlock(workerMutex);
 
-	if(websocketServerEnabled && serverThread) {
-		YerFace_MutexLock(websocketMutex);
-		websocketServerRunning = false;
-		YerFace_MutexUnlock(websocketMutex);
-		SDL_WaitThread(serverThread, NULL);
+	if(webSocketServer->websocketServerEnabled && webSocketServer->serverThread) {
+		YerFace_MutexLock(webSocketServer->websocketMutex);
+		webSocketServer->websocketServerRunning = false;
+		YerFace_MutexUnlock(webSocketServer->websocketMutex);
+		SDL_WaitThread(webSocketServer->serverThread, NULL);
 	}
 
 	SDL_DestroyMutex(basisMutex);
-	SDL_DestroyMutex(websocketMutex);
+	SDL_DestroyMutex(webSocketServer->websocketMutex);
 	SDL_DestroyMutex(workerMutex);
 
 	if(outputFilename.length() > 0 && outputFilestream.is_open()) {
@@ -172,6 +202,7 @@ OutputDriver::~OutputDriver() noexcept(false) {
 	}
 
 	delete logger;
+	delete webSocketServer;
 }
 
 void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
@@ -209,60 +240,6 @@ void OutputDriver::handleNewBasisEvent(FrameNumber frameNumber) {
 	YerFace_MutexLock(workerMutex);
 	pendingFrames[frameNumber].frame["meta"]["basis"] = true;
 	YerFace_MutexUnlock(workerMutex);
-}
-
-int OutputDriver::launchWebSocketServer(void *data) {
-	OutputDriver *self = (OutputDriver *)data;
-	self->logger->verbose("WebSocket Server Thread Alive!");
-
-	self->server.init_asio();
-	self->server.set_reuse_addr(true);
-	self->server.set_open_handler(bind(&OutputDriver::serverOnOpen,self,::_1));
-	self->server.set_close_handler(bind(&OutputDriver::serverOnClose,self,::_1));
-	self->serverSetQuitPollTimer();
-
-	self->server.listen(self->websocketServerPort);
-	self->server.start_accept();
-	self->server.run();
-
-	self->logger->verbose("WebSocket Server Thread Terminating.");
-	return 0;
-}
-
-void OutputDriver::serverOnOpen(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->basisMutex);
-	string jsonString = lastBasisFrame.dump(-1, ' ', true);
-	YerFace_MutexUnlock(this->basisMutex);
-
-	YerFace_MutexLock(this->websocketMutex);
-	logger->verbose("WebSocket Connection Opened.");
-	server.send(handle, jsonString, websocketpp::frame::opcode::text);
-	connectionList.insert(handle);
-	YerFace_MutexUnlock(this->websocketMutex);
-}
-
-void OutputDriver::serverOnClose(websocketpp::connection_hdl handle) {
-	YerFace_MutexLock(this->websocketMutex);
-	connectionList.erase(handle);
-	logger->verbose("WebSocket Connection Closed.");
-	YerFace_MutexUnlock(this->websocketMutex);
-}
-
-void OutputDriver::serverOnTimer(websocketpp::lib::error_code const &ec) {
-	if(ec) {
-		logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
-		throw runtime_error("WebSocket server error!");
-	}
-	bool continueTimer = true;
-	YerFace_MutexLock(websocketMutex);
-	if(!websocketServerRunning) {
-		server.stop();
-		continueTimer = false;
-	}
-	YerFace_MutexUnlock(websocketMutex);
-	if(continueTimer) {
-		serverSetQuitPollTimer();
-	}
 }
 
 void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
@@ -337,29 +314,25 @@ void OutputDriver::insertFrameData(string key, json value, FrameNumber frameNumb
 	YerFace_MutexUnlock(workerMutex);
 }
 
-void OutputDriver::serverSetQuitPollTimer(void) {
-	server.set_timer(100, websocketpp::lib::bind(&OutputDriver::serverOnTimer,this,::_1));
-}
-
 void OutputDriver::outputNewFrame(json frame) {
 	if(frame["meta"]["basis"]) {
-		YerFace_MutexLock(this->basisMutex);
+		YerFace_MutexLock(basisMutex);
 		lastBasisFrame = frame;
-		YerFace_MutexUnlock(this->basisMutex);
+		YerFace_MutexUnlock(basisMutex);
 	}
 
 	std::string jsonString;
 	jsonString = frame.dump(-1, ' ', true);
 
-	YerFace_MutexLock(this->websocketMutex);
+	YerFace_MutexLock(webSocketServer->websocketMutex);
 	try {
-		for(auto handle : connectionList) {
-			server.send(handle, jsonString, websocketpp::frame::opcode::text);
+		for(auto handle : webSocketServer->connectionList) {
+			webSocketServer->server.send(handle, jsonString, websocketpp::frame::opcode::text);
 		}
 	} catch (websocketpp::exception const &e) {
 		logger->warn("Got a websocket exception: %s", e.what());
 	}
-	YerFace_MutexUnlock(this->websocketMutex);
+	YerFace_MutexUnlock(webSocketServer->websocketMutex);
 
 	if(outputFilename.length() > 0) {
 		outputFilestream << jsonString << "\n";
@@ -463,6 +436,64 @@ void OutputDriver::handleFrameServerDrainedEvent(void *userdata) {
 	YerFace_MutexLock(self->workerMutex);
 	self->frameServerDrained = true;
 	YerFace_MutexUnlock(self->workerMutex);
+}
+
+int OutputDriverWebSocketServer::launchWebSocketServer(void *data) {
+	OutputDriverWebSocketServer *self = (OutputDriverWebSocketServer *)data;
+	self->parent->logger->verbose("WebSocket Server Thread Alive!");
+
+	self->server.init_asio();
+	self->server.set_reuse_addr(true);
+	self->server.set_open_handler(bind(&OutputDriverWebSocketServer::serverOnOpen,self,::_1));
+	self->server.set_close_handler(bind(&OutputDriverWebSocketServer::serverOnClose,self,::_1));
+	self->serverSetQuitPollTimer();
+
+	self->server.listen(self->websocketServerPort);
+	self->server.start_accept();
+	self->server.run();
+
+	self->parent->logger->verbose("WebSocket Server Thread Terminating.");
+	return 0;
+}
+
+void OutputDriverWebSocketServer::serverOnOpen(websocketpp::connection_hdl handle) {
+	YerFace_MutexLock(parent->basisMutex);
+	string jsonString = parent->lastBasisFrame.dump(-1, ' ', true);
+	YerFace_MutexUnlock(parent->basisMutex);
+
+	YerFace_MutexLock(websocketMutex);
+	parent->logger->verbose("WebSocket Connection Opened.");
+	server.send(handle, jsonString, websocketpp::frame::opcode::text);
+	connectionList.insert(handle);
+	YerFace_MutexUnlock(websocketMutex);
+}
+
+void OutputDriverWebSocketServer::serverOnClose(websocketpp::connection_hdl handle) {
+	YerFace_MutexLock(websocketMutex);
+	connectionList.erase(handle);
+	parent->logger->verbose("WebSocket Connection Closed.");
+	YerFace_MutexUnlock(websocketMutex);
+}
+
+void OutputDriverWebSocketServer::serverOnTimer(websocketpp::lib::error_code const &ec) {
+	if(ec) {
+		parent->logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
+		throw runtime_error("WebSocket server error!");
+	}
+	bool continueTimer = true;
+	YerFace_MutexLock(websocketMutex);
+	if(!websocketServerRunning) {
+		server.stop();
+		continueTimer = false;
+	}
+	YerFace_MutexUnlock(websocketMutex);
+	if(continueTimer) {
+		serverSetQuitPollTimer();
+	}
+}
+
+void OutputDriverWebSocketServer::serverSetQuitPollTimer(void) {
+	server.set_timer(100, websocketpp::lib::bind(&OutputDriverWebSocketServer::serverOnTimer,this,::_1));
 }
 
 }; //namespace YerFace

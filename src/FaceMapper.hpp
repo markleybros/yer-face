@@ -10,7 +10,6 @@
 #include "PreviewHUD.hpp"
 
 using namespace std;
-using namespace cv;
 
 namespace YerFace {
 
@@ -27,7 +26,7 @@ class FaceMapper {
 public:
 	FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, PreviewHUD *myPreviewHUD);
 	~FaceMapper() noexcept(false);
-	void renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
 	FrameServer *getFrameServer(void);
 	FaceTracker *getFaceTracker(void);
 private:

@@ -12,14 +12,14 @@ using namespace std;
 
 namespace YerFace {
 
-typedef function<void(Mat previewFrame, FrameNumber frameNumber, int density)> PreviewHUDRenderer;
+typedef function<void(cv::Mat previewFrame, FrameNumber frameNumber, int density)> PreviewHUDRenderer;
 
 class PreviewHUD {
 public:
 	PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer);
 	~PreviewHUD() noexcept(false);
 	void registerPreviewHUDRenderer(PreviewHUDRenderer renderer);
-	void createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, Point2d *previewCenter);
+	void createPreviewHUDRectangle(cv::Size frameSize, cv::Rect2d *previewRect, cv::Point2d *previewCenter);
 private:
 	static bool workerHandler(WorkerPoolWorker *worker);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);

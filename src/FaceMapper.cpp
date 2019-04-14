@@ -142,10 +142,10 @@ void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densit
 		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(20, 20, 20), FILLED);
 		if(density > 4) {
-			for(int x = previewRect.x; x < previewRect.x + previewRect.width; x = x + gridIncrement) {
+			for(int x = (int)previewRect.x; x < (int)(previewRect.x + previewRect.width); x = x + gridIncrement) {
 				cv::line(frame, Point2d(x, previewRect.y), Point2d(x, previewRect.y + previewRect.height), Scalar(75, 75, 75));
 			}
-			for(int y = previewRect.y; y < previewRect.y + previewRect.height; y = y + gridIncrement) {
+			for(int y = (int)previewRect.y; y < (int)(previewRect.y + previewRect.height); y = y + gridIncrement) {
 				cv::line(frame, Point2d(previewRect.x, y), Point2d(previewRect.x + previewRect.width, y), Scalar(75, 75, 75));
 			}
 		}

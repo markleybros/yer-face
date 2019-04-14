@@ -100,11 +100,12 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 
 		self->frameServer->setWorkingFrameStatusCheckpoint(outputFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "imageSequence.written");
 
-		int filenameLength = self->outputPrefix.length() + 32;
-		char filename[filenameLength];
+		size_t filenameLength = self->outputPrefix.length() + 32;
+		char *filename = new char[filenameLength];
 		snprintf(filename, filenameLength, "%s-%06" YERFACE_FRAMENUMBER_FORMATINNER ".png", self->outputPrefix.c_str(), outputFrameNumber);
 		self->logger->verbose("Thread #%d writing preview frame #" YERFACE_FRAMENUMBER_FORMAT " to file: %s ", worker->num, outputFrameNumber, filename);
 		imwrite(filename, previewFrameCopy);
+		delete filename;
 
 		self->metrics->endClock(tick);
 

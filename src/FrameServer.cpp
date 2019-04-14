@@ -5,6 +5,7 @@
 #include <cstdio>
 
 using namespace std;
+using namespace cv;
 
 namespace YerFace {
 
@@ -196,6 +197,7 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 	try {
 		frame = getWorkingFrame(frameNumber);
 	} catch(exception &e) {
+		logger->warn("Caught exception: %s ... Rethrowing!", e.what());
 		YerFace_MutexUnlock(myMutex);
 		throw;
 	}

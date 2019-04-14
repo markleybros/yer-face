@@ -33,7 +33,7 @@ Rect2d Utilities::insetBox(Rect2d originalBox, double scale) {
 }
 
 Point2d Utilities::centerRect(Rect2d rect) {
-	Point2d center = Point(rect.width / 2.0, rect.height / 2.0);
+	Point2d center = Point2d(rect.width / 2.0, rect.height / 2.0);
 	return rect.tl() + center;
 }
 
@@ -226,7 +226,7 @@ void Utilities::drawX(Mat frame, Point2d markerPoint, Scalar color, int lineLeng
 	line(frame, a, b, color, thickness);
 }
 
-cv::Scalar Utilities::scalarColorFromJSONArray(String jsonArrayString) {
+cv::Scalar Utilities::scalarColorFromJSONArray(string jsonArrayString) {
 	json j = json::parse(jsonArrayString);
 	return Utilities::scalarColorFromJSONArray(j);
 }
@@ -267,7 +267,7 @@ cv::Point3d Utilities::Point3dFromJSONArray(json jsonArray) {
 }
 
 bool Utilities::stringEndMatches(string haystack, string needle) {
-	int start = haystack.length() - needle.length();
+	int start = (int)haystack.length() - (int)needle.length();
 	if(start < 0) {
 		return false;
 	}
@@ -286,39 +286,50 @@ bool Utilities::fileExists(string filePath) {
 string Utilities::fileSearchInCommonLocations(string filePath) {
 	if(sdlDataPath == NULL) {
 		sdlDataPath = SDL_GetBasePath();
+		// logger->verbose("SDL Reports Data Path: %s", sdlDataPath);
 	}
 
 	vector<string> searchBases;
-	searchBases.push_back("./");
 	if(sdlDataPath != NULL) {
 		string sdlDataPathStr = (string)sdlDataPath;
 		vector<string> baseTrims = {
-			"usr/local/bin/",
-			"usr/bin/",
-			"bin/"
+			"usr" YERFACE_PATH_SEP "local" YERFACE_PATH_SEP "bin" YERFACE_PATH_SEP,
+			"usr" YERFACE_PATH_SEP "bin" YERFACE_PATH_SEP,
+			"bin" YERFACE_PATH_SEP
 		};
 		for(string baseTrim : baseTrims) {
 			if(stringEndMatches(sdlDataPathStr, baseTrim)) {
 				searchBases.push_back(sdlDataPathStr.substr(0, sdlDataPathStr.length() - baseTrim.length()));
 			}
 		}
+		searchBases.push_back(sdlDataPathStr);
 	}
-	searchBases.push_back("/");
+	searchBases.push_back("." YERFACE_PATH_SEP);
+	#ifndef WIN32
+	searchBases.push_back(YERFACE_PATH_SEP);
+	#endif
 
 	vector<string> searchSecondComponents = {
-		"usr/local/",
-		"usr/",
+		"usr" YERFACE_PATH_SEP "local" YERFACE_PATH_SEP,
+		"usr" YERFACE_PATH_SEP,
 		""
 	};
 
 	vector<string> searchThirdComponents = {
-		YERFACE_DATA_DIR "/",
+		YERFACE_DATA_DIR YERFACE_PATH_SEP,
 		""
 	};
 	for(string searchBase : searchBases) {
+		// logger->verbose("=== Searching BASE: %s", searchBase.c_str());
 		for(string searchSecondComponent : searchSecondComponents) {
+			// logger->verbose("== Searching 2nd: %s", searchSecondComponent.c_str());
 			for(string searchThirdComponent : searchThirdComponents) {
+				// logger->verbose("= Searching 3rd: %s", searchThirdComponent.c_str());
 				string testPath = searchBase + searchSecondComponent + searchThirdComponent + filePath;
+				#ifdef WIN32
+				testPath = std::regex_replace(testPath, std::regex("/"), "\\");
+				#endif
+				// logger->verbose("TEST PATH: %s", testPath.c_str());
 				if(fileExists(testPath)) {
 					return testPath;
 				}

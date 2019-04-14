@@ -14,7 +14,6 @@
 #include "opencv2/imgproc.hpp"
 
 using namespace std;
-using namespace cv;
 
 namespace YerFace {
 
@@ -40,10 +39,10 @@ enum WorkingFrameStatus: unsigned int {
 
 class WorkingFrame {
 public:
-	Mat frame; //BGR format, at the native resolution of the input.
-	Mat detectionFrame; //BGR, scaled down to DetectionScaleFactor.
+	cv::Mat frame; //BGR format, at the native resolution of the input.
+	cv::Mat detectionFrame; //BGR, scaled down to DetectionScaleFactor.
 	double detectionScaleFactor;
-	Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
+	cv::Mat previewFrame; //BGR, same as the input frame, but possibly with some HUD stuff scribbled onto it.
 	SDL_mutex *previewFrameMutex; //IMPORTANT - make sure you lock previewFrameMutex before WRITING TO or READING FROM previewFrame.
 	FrameTimestamps frameTimestamps;
 
@@ -91,7 +90,7 @@ private:
 	Logger *logger;
 	SDL_mutex *myMutex;
 	Metrics *metrics;
-	Size frameSize;
+	cv::Size frameSize;
 	bool frameSizeSet;
 
 	unordered_map<FrameNumber, WorkingFrame *> frameStore;

@@ -11,6 +11,7 @@
 #include "SDL.h"
 
 using namespace std;
+using namespace cv;
 
 namespace YerFace {
 

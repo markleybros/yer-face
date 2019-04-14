@@ -69,7 +69,7 @@ class VideoFrame {
 public:
 	FrameTimestamps timestamp;
 	VideoFrameBacking *frameBacking;
-	Mat frameCV;
+	cv::Mat frameCV;
 };
 
 class AudioFrameCallback {
@@ -109,7 +109,7 @@ class FFmpegDriver {
 public:
 	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
-	void openInputMedia(string inFile, enum AVMediaType type, String inFormat, String inSize, String inChannels, String inRate, String inCodec, String outAudioChannelMap, bool tryAudio);
+	void openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string outAudioChannelMap, bool tryAudio);
 	void setVideoCaptureWorkerPool(WorkerPool *workerPool);
 	void rollDemuxerThreads(void);
 	bool getIsAudioInputPresent(void);
@@ -120,7 +120,7 @@ public:
 	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
 	void stopAudioCallbacksNow(void);
 private:
-	void logAVErr(String msg, int err);
+	void logAVErr(string msg, int err);
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);

@@ -8,46 +8,24 @@
 
 #include <list>
 
-#include "dlib/opencv.h"
-#include "dlib/dnn.h"
-#include "dlib/image_processing/frontal_face_detector.h"
-#include "dlib/image_processing/render_face_detections.h"
-#include "dlib/image_processing.h"
-
 using namespace std;
 
 namespace YerFace {
-
-class FaceDetector;
-
-template <long num_filters, typename SUBNET> using con5d = dlib::con<num_filters,5,5,2,2,SUBNET>;
-template <long num_filters, typename SUBNET> using con5  = dlib::con<num_filters,5,5,1,1,SUBNET>;
-
-template <typename SUBNET> using downsampler  = dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<32, dlib::relu<dlib::affine<con5d<16,SUBNET>>>>>>>>>;
-template <typename SUBNET> using rcon5  = dlib::relu<dlib::affine<con5<45,SUBNET>>>;
-
-using FaceDetectionModel = dlib::loss_mmod<dlib::con<1,9,9,1,1,rcon5<rcon5<rcon5<downsampler<dlib::input_rgb_image_pyramid<dlib::pyramid_down<6>>>>>>>>;
 
 class FaceDetectionTask {
 public:
 	FrameNumber myFrameNumber;
 	FrameTimestamps myFrameTimestamps;
 	double myDetectionScaleFactor;
-	Mat detectionFrame;
+	cv::Mat detectionFrame;
 };
 
-class FaceDetectorWorker {
-public:
-	FaceDetector *self;
-
-	dlib::frontal_face_detector frontalFaceDetector;
-	FaceDetectionModel faceDetectionModel;
-};
+class FaceDetectorWorker;
 
 class FacialDetectionBox {
 public:
-	Rect2d box;
-	Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
+	cv::Rect2d box;
+	cv::Rect2d boxNormalSize; //This is the scaled-up version to fit the native resolution of the frame.
 	FrameTimestamps timestamps; //The timestamp (including frame number) to which this detection belongs.
 	bool run; //Did the detector run?
 	bool set; //Is the box valid?
@@ -64,7 +42,7 @@ public:
 	FaceDetector(json config, Status *myStatus, FrameServer *myFrameServer);
 	~FaceDetector() noexcept(false);
 	FacialDetectionBox getFacialDetection(FrameNumber frameNumber);
-	void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber, int density);
 private:
 	void doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask task);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
