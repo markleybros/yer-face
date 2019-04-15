@@ -115,7 +115,7 @@ _log "TEMP Folder is: ${myTemp}"
 _refreshEnvironmentComeHellOrHighWater
 # $env:PKG_CONFIG_PATH = "C:\installroot\lib\pkgconfig;C:\MSYS2\usr\lib\pkgconfig"
 $env:PKG_CONFIG_PATH = "/c/installroot/lib/pkgconfig:/c/MSYS2/usr/lib/pkgconfig"
-$env:PATH = "${env:PATH};C:\Program Files (x86)\Windows Kits\10\Redist\10.0.17763.0\ucrt\DLLs\x64\;C:\installroot\bin\;C:\installroot\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\bin\;C:\installroot\x64\vc15\bin\"
+$env:PATH = "${env:PATH};C:\Program Files (x86)\Windows Kits\10\Redist\10.0.17763.0\ucrt\DLLs\x64\;C:\installroot\bin\;C:\installroot\lib;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\bin\;C:\installroot\x64\vc16\bin\"
 
 _log "=== CMake Configuring... ==="
 Set-Location "${myBase}"
