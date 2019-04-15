@@ -16,6 +16,8 @@ function _die() {
 cd "${BASEPATH}" || _die "Uh oh."
 
 ### Figure out what branch we're associated with.
+GIT_SHOW=$(git show -s --pretty=%D HEAD)
+_log "Git Show: ${GIT_SHOW}"
 # GIT_BRANCH=$(git show -s --pretty=%D HEAD | rev | cut -d, -f 1 | cut -d" " -f 1 | rev | sed -E 's/^[ ]*(.*\/)?//')
 GIT_BRANCH=$(git show -s --pretty=%D HEAD | cut -d, -f 1 | rev | cut -d" " -f 1 | rev | sed -E 's/^[ ]*(.*\/)?//')
 _log "Resolved branch: ${GIT_BRANCH}"
