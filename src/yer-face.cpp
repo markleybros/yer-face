@@ -117,9 +117,9 @@ int yerface(int argc, char *argv[]) {
 	//Command line options.
 	CommandLineParser parser(argc, argv,
 		"{help h||Usage message.}"
-		"{configFile C|search|Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file, or 'search' to search common locations.)}"
+		"{configFile C||Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file. Omit to search common locations.)}"
 		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is pre-recorded!)}"
-		"{inVideo|/dev/video0|Video file, URL, or device to open. (Or '-' for STDIN.)}"
+		"{inVideo||Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{inVideoFormat||Tell libav to use a specific format to interpret the inVideo. Leave blank for auto-detection.}"
 		"{inVideoSize||Tell libav to attempt a specific resolution when interpreting inVideo. Leave blank for auto-detection.}"
 		"{inVideoRate||Tell libav to attempt a specific framerate when interpreting inVideo. Leave blank for auto-detection.}"
@@ -138,6 +138,10 @@ int yerface(int argc, char *argv[]) {
 		"{version||Emit the version string to STDOUT and exit.}"
 		);
 	parser.about("YerFace! A stupid facial performance capture engine for cartoon animation. (" YERFACE_VERSION ")");
+	if(argc <= 1) {
+		parser.printMessage();
+		return 0;
+	}
 	if(parser.get<bool>("version")) {
 		fprintf(stdout, "%s\n", YERFACE_VERSION);
 		return 0;
@@ -147,13 +151,17 @@ int yerface(int argc, char *argv[]) {
 		return 1;
 	}
 	if(parser.check()) {
-		parser.printMessage();
 		parser.printErrors();
+		parser.printMessage();
 		return 1;
 	}
 	configFile = parser.get<string>("configFile");
-	parseConfigFile();
 	inVideo = parser.get<string>("inVideo");
+	if(inVideo.length() < 1) {
+		logger->error("--inVideo is required!");
+		parser.printMessage();
+		return 1;
+	}
 	if(inVideo == "-") {
 		inVideo = "pipe:0";
 	}
@@ -206,6 +214,9 @@ int yerface(int argc, char *argv[]) {
 	if((frameMetricsMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+
+	//Initialize configuration.
+	parseConfigFile();
 
 	//Instantiate our classes.
 	status = new Status(lowLatency);
@@ -409,7 +420,7 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 }
 
 void parseConfigFile(void) {
-	if(configFile == "search") {
+	if(configFile.length() < 1) {
 		configFile = Utilities::fileValidPathOrDie("yer-face-config.json", true);
 	} else {
 		configFile = Utilities::fileValidPathOrDie(configFile);
