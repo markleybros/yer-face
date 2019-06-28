@@ -85,6 +85,9 @@ public:
 	static bool fileExists(string filePath);
 	static string fileSearchInCommonLocations(string filePath);
 	static string fileValidPathOrDie(string filePath, bool searchOnly = false);
+	static string stringTrim(std::string str);
+	static string stringTrimLeft(std::string str);
+	static string stringTrimRight(std::string str);
 
 private:
 	static Logger *logger;

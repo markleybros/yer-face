@@ -38,6 +38,9 @@ public:
 //  - https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 //  - https://github.com/severin-lemaignan/gazr/
 FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector) {
+	predictorWorkerPool = NULL;
+	assignmentWorkerPool = NULL;
+
 	featureDetectionModelFileName = Utilities::fileValidPathOrDie(config["YerFace"]["FaceTracker"]["dlibFaceLandmarks"]);
 	useFullSizedFrameForLandmarkDetection = config["YerFace"]["FaceTracker"]["useFullSizedFrameForLandmarkDetection"];
 	previouslyReportedFacialPose.set = false;
@@ -165,26 +168,26 @@ FaceTracker::FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, 
 	workerPoolParameters.handler = assignmentWorkerHandler;
 	assignmentWorkerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("FaceTracker object constructed and ready to go!");
+	logger->debug1("FaceTracker object constructed and ready to go!");
 }
 
 FaceTracker::~FaceTracker() noexcept(false) {
-	logger->debug("FaceTracker object destructing...");
+	logger->debug1("FaceTracker object destructing...");
 
 	delete predictorWorkerPool;
 
 	YerFace_MutexLock(myMutex);
 	if(pendingPredictionFrameNumbers.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+		logger->err("Frames are still pending! Woe is me!");
 	}
 	if(outputFrames.size() > 0) {
-		logger->error("Outputs are still pending! Woe is me!");
+		logger->err("Outputs are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
 	YerFace_MutexLock(myAssignmentMutex);
 	if(pendingAssignmentFrameNumbers.size() > 0) {
-		logger->error("Assignment Frames are still pending! Woe is me!");
+		logger->err("Assignment Frames are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myAssignmentMutex);
 
@@ -338,26 +341,26 @@ void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, Work
 		degreesDifference = Utilities::degreesDifferenceBetweenTwoRotationMatrices(previouslyReportedFacialPose.rotationMatrix, tempPose.rotationMatrix);
 		distance = Utilities::lineDistance(Point3d(tempPose.translationVector), Point3d(previouslyReportedFacialPose.translationVector));
 		if(degreesDifference > scaledRotationThreshold || distance > scaledTranslationThreshold) {
-			logger->warn("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
+			logger->info("Dropping facial pose due to high rotation (%.02lf) or high motion (%.02lf)!", degreesDifference, distance);
 			reportNewPose = false;
 		}
 	}
 	if(tempPose.translationVector.at<double>(0) < poseTranslationMinX || tempPose.translationVector.at<double>(0) > poseTranslationMaxX ||
 	  tempPose.translationVector.at<double>(1) < poseTranslationMinY || tempPose.translationVector.at<double>(1) > poseTranslationMaxY ||
 	  tempPose.translationVector.at<double>(2) < poseTranslationMinZ || tempPose.translationVector.at<double>(2) > poseTranslationMaxZ) {
-		logger->warn("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+		logger->info("Dropping facial pose due to out of bounds translation: <%.02f, %.02f, %.02f>", tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 		reportNewPose = false;
 	}
 	Vec3d angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
 
 	if(fabs(angles[0]) > poseRotationPlusMinusX || fabs(angles[1]) > poseRotationPlusMinusY || fabs(angles[2]) > poseRotationPlusMinusZ) {
-		logger->warn("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
+		logger->info("Dropping facial pose due to out of bounds angle: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2]);
 		reportNewPose = false;
 	}
 	if(!reportNewPose) {
 		if(previouslyReportedFacialPose.set) {
 			if(tempPose.timestamp - previouslyReportedFacialPose.timestamp >= poseRejectionResetAfterSeconds) {
-				logger->warn("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - previouslyReportedFacialPose.timestamp);
+				logger->notice("Facial pose has come back bad consistantly for %.02lf seconds! Unsetting the face pose completely.", tempPose.timestamp - previouslyReportedFacialPose.timestamp);
 				previouslyReportedFacialPose.set = false;
 			}
 			output->facialPose = previouslyReportedFacialPose;
@@ -395,7 +398,7 @@ void FaceTracker::doCalculateFacialTransformation(WorkerPoolWorker *worker, Work
 
 	tempPose.set = true;
 	angles = Utilities::rotationMatrixToEulerAngles(tempPose.rotationMatrix);
-	// logger->verbose("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
+	logger->debug3("Facial Pose Angle: <%.02f, %.02f, %.02f>; Translation: <%.02f, %.02f, %.02f>", angles[0], angles[1], angles[2], tempPose.translationVector.at<double>(0), tempPose.translationVector.at<double>(1), tempPose.translationVector.at<double>(2));
 
 	//// REJECT NOISY SOLUTIONS ////
 
@@ -641,11 +644,13 @@ void FaceTracker::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 			YerFace_MutexUnlock(self->myAssignmentMutex);
 			break;
 		case FRAME_STATUS_TRACKING:
-			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrameNumbers.size());
+			self->logger->debug4("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingPredictionFrameNumbers.size());
 			YerFace_MutexLock(self->myMutex);
 			self->pendingPredictionFrameNumbers.push_back(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
-			self->predictorWorkerPool->sendWorkerSignal();
+			if(self->predictorWorkerPool != NULL) {
+				self->predictorWorkerPool->sendWorkerSignal();
+			}
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->myMutex);
@@ -700,7 +705,9 @@ bool FaceTracker::predictorWorkerHandler(WorkerPoolWorker *worker) {
 		YerFace_MutexLock(self->myAssignmentMutex);
 		self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment = true;
 		YerFace_MutexUnlock(self->myAssignmentMutex);
-		self->assignmentWorkerPool->sendWorkerSignal();
+		if(self->assignmentWorkerPool != NULL) {
+			self->assignmentWorkerPool->sendWorkerSignal();
+		}
 
 		self->metricsPredictor->endClock(tick);
 		didWork = true;
@@ -724,7 +731,7 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 		}
 	}
 	if(myFrameNumber > 0 && !self->pendingAssignmentFrameNumbers[myFrameNumber].readyForAssignment) {
-		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
+		self->logger->debug4("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 		myFrameNumber = -1;
 	}
 	if(myFrameNumber > 0) {
@@ -741,7 +748,7 @@ bool FaceTracker::assignmentWorkerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		// self->logger->verbose("Face Tracker Assignment Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
+		self->logger->debug4("Face Tracker Assignment Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, myFrameNumber);
 		if(myFrameNumber <= lastFrameNumber) {
 			throw logic_error("FaceTracker handling frames out of order!");
 		}

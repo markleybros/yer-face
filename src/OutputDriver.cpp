@@ -14,12 +14,119 @@
 using namespace cv;
 
 using namespace websocketpp;
+using namespace websocketpp::log;
 using websocketpp::connection_hdl;
 using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
 namespace YerFace {
+
+Logger *wsppLogger = new Logger("WebSockets");
+
+enum CustomWebsocketServerLoggerType: unsigned int {
+	CUSTOMER_LOGGER_TYPE_ELOG = 1,
+	CUSTOMER_LOGGER_TYPE_ALOG = 2
+};
+
+//// Custom logging class for websocketpp which sends log messages to our logger.
+template <typename concurrency, typename names, CustomWebsocketServerLoggerType loggerType> class CustomWebsocketServerLogger : public basic<concurrency, names> {
+public:
+	typedef basic<concurrency, names> base;
+	using base::base; //Inherit parent's constructors.
+
+	// Write a message in std::string format to the given channel
+	void write(level channel, std::string const &msg) {
+		write(channel, msg.c_str());
+	}
+
+	// Write a message in c_str() format to the given channel
+	void write(level channel, char const *msg) {
+		//Filter messages which are disabled at the websocket logger level.
+		if(!this->dynamic_test(channel)) {
+			return;
+		}
+
+		//Map message severity.
+		LogMessageSeverity severity = LOG_SEVERITY_INFO;
+		if(loggerType == CUSTOMER_LOGGER_TYPE_ELOG) {
+			switch(channel) {
+				case elevel::devel:
+					severity = LOG_SEVERITY_DEBUG4;
+					break;
+				case elevel::library:
+					severity = LOG_SEVERITY_DEBUG1;
+					break;
+				case elevel::info:
+					severity = LOG_SEVERITY_INFO;
+					break;
+				case elevel::warn:
+					severity = LOG_SEVERITY_WARNING;
+					break;
+				case elevel::rerror:
+					severity = LOG_SEVERITY_ERR;
+					break;
+				case elevel::fatal:
+					severity = LOG_SEVERITY_CRIT;
+					break;
+			}
+		} else if(loggerType == CUSTOMER_LOGGER_TYPE_ALOG) {
+			switch(channel) {
+				default:
+					severity = LOG_SEVERITY_DEBUG4;
+					break;
+				case alevel::connect:
+					severity = LOG_SEVERITY_INFO;
+					break;
+				case alevel::disconnect:
+					severity = LOG_SEVERITY_INFO;
+					break;
+				case alevel::http:
+					severity = LOG_SEVERITY_INFO;
+					break;
+				case alevel::fail:
+					severity = LOG_SEVERITY_WARNING;
+					break;
+			}
+		}
+
+		//Output log line.
+		std::string msgTrim = Utilities::stringTrim((string)msg);
+		wsppLogger->log(severity, "[%s] %s", names::channel_name(channel), msgTrim.c_str());
+	}
+};
+
+//// Extend websocketpp::config::asio to create our own custom config.
+struct CustomWebsocketServerConfig : public websocketpp::config::asio {
+	typedef asio type;
+	typedef websocketpp::config::asio base;
+
+	typedef base::concurrency_type concurrency_type;
+
+	typedef base::request_type request_type;
+	typedef base::response_type response_type;
+
+	typedef base::message_type message_type;
+	typedef base::con_msg_manager_type con_msg_manager_type;
+	typedef base::endpoint_msg_manager_type endpoint_msg_manager_type;
+
+	typedef CustomWebsocketServerLogger<base::concurrency_type, websocketpp::log::alevel, CUSTOMER_LOGGER_TYPE_ALOG> alog_type;
+	typedef CustomWebsocketServerLogger<base::concurrency_type, websocketpp::log::elevel, CUSTOMER_LOGGER_TYPE_ELOG> elog_type;
+
+	typedef base::rng_type rng_type;
+
+	struct transport_config : public base::transport_config {
+		typedef type::concurrency_type concurrency_type;
+		typedef type::alog_type alog_type;
+		typedef type::elog_type elog_type;
+		typedef type::request_type request_type;
+		typedef type::response_type response_type;
+		typedef websocketpp::transport::asio::basic_socket::endpoint socket_type;
+	};
+
+	typedef websocketpp::transport::asio::endpoint<transport_config>
+	transport_type;
+};
 
 class OutputDriverWebSocketServer {
 public:
@@ -34,7 +141,7 @@ public:
 	SDL_mutex *websocketMutex;
 	int websocketServerPort;
 	bool websocketServerEnabled;
-	websocketpp::server<websocketpp::config::asio> server;
+	websocketpp::server<CustomWebsocketServerConfig> server;
 	std::set<websocketpp::connection_hdl,std::owner_less<websocketpp::connection_hdl>> connectionList;
 	bool websocketServerRunning;
 
@@ -55,6 +162,7 @@ bool OutputFrameContainer::isReady(void) {
 }
 
 OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
+	workerPool = NULL;
 	outputFilename = myOutputFilename;
 	newestFrameTimestamps.frameNumber = -1;
 	newestFrameTimestamps.startTimestamp = -1.0;
@@ -107,7 +215,7 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 			}
 		}
 		if(!eventHandled) {
-			this->logger->warn("Discarding user basis event because frame status is already drained. (Or similar bad state.)");
+			this->logger->err("Discarding user basis event because frame status is already drained. (Or similar bad state.)");
 		}
 		YerFace_MutexUnlock(this->workerMutex);
 	});
@@ -130,8 +238,7 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 	//Constrain websocket server logs a bit for sanity.
 	webSocketServer->server.get_alog().clear_channels(log::alevel::all);
 	webSocketServer->server.get_alog().set_channels(log::alevel::connect | log::alevel::disconnect | log::alevel::app | log::alevel::http | log::alevel::fail);
-	webSocketServer->server.get_elog().clear_channels(log::elevel::all);
-	webSocketServer->server.get_elog().set_channels(log::elevel::info | log::elevel::warn | log::elevel::rerror | log::elevel::fatal);
+	webSocketServer->server.get_elog().set_channels(log::elevel::all);
 
 	if(webSocketServer->websocketServerEnabled) {
 		webSocketServer->websocketServerRunning = true;
@@ -172,17 +279,17 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("OutputDriver object constructed and ready to go!");
+	logger->debug1("OutputDriver object constructed and ready to go!");
 };
 
 OutputDriver::~OutputDriver() noexcept(false) {
-	logger->debug("OutputDriver object destructing...");
+	logger->debug1("OutputDriver object destructing...");
 
 	delete workerPool;
 
 	YerFace_MutexLock(workerMutex);
 	if(pendingFrames.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+		logger->err("Frames are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(workerMutex);
 
@@ -215,10 +322,10 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 	basisEvent.name = "basis";
 	basisEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
 		if(eventName != "basis" || (bool)eventPayload != true) {
-			this->logger->warn("Got an unsupported replay event!");
+			this->logger->err("Got an unsupported replay event!");
 			return false;
 		}
-		this->logger->verbose("Received replayed Basis Flag event. Rebroadcasting...");
+		this->logger->info("Received replayed Basis Flag event. Rebroadcasting...");
 		if((double)sourcePacket["meta"]["startTime"] < 0.0 || (FrameNumber)sourcePacket["meta"]["frameNumber"] < 0) {
 			sourcePacket["meta"]["frameNumber"] = -1;
 			sourcePacket["meta"]["startTime"] = -1.0;
@@ -236,7 +343,7 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 }
 
 void OutputDriver::handleNewBasisEvent(FrameNumber frameNumber) {
-	logger->verbose("Got a Basis Flag event for Frame #%lu. Handling...", frameNumber);
+	logger->debug1("Got a Basis Flag event for Frame #%lu. Handling...", frameNumber);
 	YerFace_MutexLock(workerMutex);
 	pendingFrames[frameNumber].frame["meta"]["basis"] = true;
 	YerFace_MutexUnlock(workerMutex);
@@ -330,7 +437,7 @@ void OutputDriver::outputNewFrame(json frame) {
 			webSocketServer->server.send(handle, jsonString, websocketpp::frame::opcode::text);
 		}
 	} catch (websocketpp::exception const &e) {
-		logger->warn("Got a websocket exception: %s", e.what());
+		logger->err("Got a websocket exception: %s", e.what());
 	}
 	YerFace_MutexUnlock(webSocketServer->websocketMutex);
 
@@ -360,7 +467,7 @@ bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 		outputFrame = &self->pendingFrames[myFrameNumber];
 	}
 	if(outputFrame != NULL && !outputFrame->isReady()) {
-		// self->logger->verbose("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
+		self->logger->debug4("BLOCKED on frame " YERFACE_FRAMENUMBER_FORMAT " because it is not ready!", myFrameNumber);
 		myFrameNumber = -1;
 		outputFrame = NULL;
 	}
@@ -368,7 +475,7 @@ bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(outputFrame != NULL) {
-		// self->logger->verbose("Output Worker Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, outputFrame->frameTimestamps.frameNumber);
+		self->logger->debug4("Output Worker Thread handling frame #" YERFACE_FRAMENUMBER_FORMAT, outputFrame->frameTimestamps.frameNumber);
 
 		if(outputFrame->frameTimestamps.frameNumber <= lastFrameNumber) {
 			throw logic_error("OutputDriver handling frames out of order!");
@@ -396,7 +503,7 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
 		case FRAME_STATUS_NEW:
-			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " appearing as new! Queue depth is now %lu", frameNumber, self->pendingFrames.size());
+			self->logger->debug4("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " appearing as new! Queue depth is now %lu", frameNumber, self->pendingFrames.size());
 			newOutputFrame.frame = json::object();
 			newOutputFrame.outputProcessed = false;
 			newOutputFrame.frameIsDraining = false;
@@ -414,10 +521,12 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 			break;
 		case FRAME_STATUS_DRAINING:
 			YerFace_MutexLock(self->workerMutex);
-			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrames.size());
+			self->logger->debug4("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " waiting on me. Queue depth is now %lu", frameNumber, self->pendingFrames.size());
 			self->pendingFrames[frameNumber].frameIsDraining = true;
 			YerFace_MutexUnlock(self->workerMutex);
-			self->workerPool->sendWorkerSignal();
+			if(self->workerPool != NULL) {
+				self->workerPool->sendWorkerSignal();
+			}
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->workerMutex);
@@ -432,7 +541,7 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 
 void OutputDriver::handleFrameServerDrainedEvent(void *userdata) {
 	OutputDriver *self = (OutputDriver *)userdata;
-	// self->logger->verbose("Got notification that FrameServer has drained!");
+	self->logger->debug2("Got notification that FrameServer has drained!");
 	YerFace_MutexLock(self->workerMutex);
 	self->frameServerDrained = true;
 	YerFace_MutexUnlock(self->workerMutex);
@@ -440,7 +549,7 @@ void OutputDriver::handleFrameServerDrainedEvent(void *userdata) {
 
 int OutputDriverWebSocketServer::launchWebSocketServer(void *data) {
 	OutputDriverWebSocketServer *self = (OutputDriverWebSocketServer *)data;
-	self->parent->logger->verbose("WebSocket Server Thread Alive!");
+	self->parent->logger->debug1("WebSocket Server Thread Alive!");
 
 	self->server.init_asio();
 	self->server.set_reuse_addr(true);
@@ -452,7 +561,7 @@ int OutputDriverWebSocketServer::launchWebSocketServer(void *data) {
 	self->server.start_accept();
 	self->server.run();
 
-	self->parent->logger->verbose("WebSocket Server Thread Terminating.");
+	self->parent->logger->debug1("WebSocket Server Thread Terminating.");
 	return 0;
 }
 
@@ -462,7 +571,7 @@ void OutputDriverWebSocketServer::serverOnOpen(websocketpp::connection_hdl handl
 	YerFace_MutexUnlock(parent->basisMutex);
 
 	YerFace_MutexLock(websocketMutex);
-	parent->logger->verbose("WebSocket Connection Opened.");
+	parent->logger->debug1("WebSocket Connection Opened.");
 	server.send(handle, jsonString, websocketpp::frame::opcode::text);
 	connectionList.insert(handle);
 	YerFace_MutexUnlock(websocketMutex);
@@ -471,13 +580,13 @@ void OutputDriverWebSocketServer::serverOnOpen(websocketpp::connection_hdl handl
 void OutputDriverWebSocketServer::serverOnClose(websocketpp::connection_hdl handle) {
 	YerFace_MutexLock(websocketMutex);
 	connectionList.erase(handle);
-	parent->logger->verbose("WebSocket Connection Closed.");
+	parent->logger->debug1("WebSocket Connection Closed.");
 	YerFace_MutexUnlock(websocketMutex);
 }
 
 void OutputDriverWebSocketServer::serverOnTimer(websocketpp::lib::error_code const &ec) {
 	if(ec) {
-		parent->logger->error("WebSocket Library Reported an Error: %s", ec.message().c_str());
+		parent->logger->err("WebSocket Library Reported an Error: %s", ec.message().c_str());
 		throw runtime_error("WebSocket server error!");
 	}
 	bool continueTimer = true;

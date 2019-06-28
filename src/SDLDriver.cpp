@@ -58,7 +58,8 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		}
 	}
 	if(SDL_Init(sdlInitFlags) != 0) {
-		logger->error("Unable to initialize SDL: %s", SDL_GetError());
+		logger->crit("Unable to initialize SDL: %s", SDL_GetError());
+		throw runtime_error("Unable to initialize SDL!");
 	}
 	atexit(SDL_Quit);
 
@@ -73,7 +74,7 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		audioDevice.desired.callback = SDLDriver::SDLAudioCallback;
 		audioDevice.deviceID = SDL_OpenAudioDevice(NULL, 0, &audioDevice.desired, &audioDevice.obtained, SDL_AUDIO_ALLOW_ANY_CHANGE);
 		if(audioDevice.deviceID == 0) {
-			logger->error("SDL error opening audio device: %s", SDL_GetError());
+			logger->err("SDL error opening audio device: %s", SDL_GetError());
 			throw runtime_error("failed opening audio device!");
 		}
 		audioDevice.opened = true;
@@ -110,11 +111,11 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	}
 
-	logger->debug("SDLDriver object constructed and ready to go!");
+	logger->debug1("SDLDriver object constructed and ready to go!");
 }
 
 SDLDriver::~SDLDriver() {
-	logger->debug("SDLDriver object destructing...");
+	logger->debug1("SDLDriver object destructing...");
 	if(audioDevice.opened) {
 		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
 		SDL_CloseAudioDevice(audioDevice.deviceID);
@@ -142,7 +143,7 @@ SDLDriver::~SDLDriver() {
 
 SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height, string windowTitle) {
 	if(headless) {
-		logger->verbose("SDLDriver::createPreviewWindow() called, but we're running in headless mode. This is an NOP.");
+		logger->warning("SDLDriver::createPreviewWindow() called, but we're running in headless mode. This is an NOP.");
 		return previewWindow;
 	}
 	if(previewWindow.window != NULL || previewWindow.renderer != NULL) {
@@ -154,7 +155,7 @@ SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height, string w
 	if(previewWindow.window == NULL) {
 		throw runtime_error("SDL Driver tried to create a preview window and failed.");
 	}
-	logger->verbose("Creating Preview SDL Renderer.");
+	logger->debug1("Creating Preview SDL Renderer.");
 	previewWindow.renderer = SDL_CreateRenderer(previewWindow.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if(previewWindow.renderer == NULL) {
 		throw runtime_error("SDL Driver tried to create a preview renderer and failed.");
@@ -168,14 +169,14 @@ SDLWindowRenderer SDLDriver::getPreviewWindow(void) {
 
 SDL_Texture *SDLDriver::getPreviewTexture(Size textureSize) {
 	if(headless) {
-		logger->verbose("SDLDriver::getPreviewTexture() called, but we're running in headless mode. This is an NOP.");
+		logger->warning("SDLDriver::getPreviewTexture() called, but we're running in headless mode. This is an NOP.");
 		return previewTexture;
 	}
 	if(previewTexture != NULL) {
 		int actualWidth, actualHeight;
 		SDL_QueryTexture(previewTexture, NULL, NULL, &actualWidth, &actualHeight);
 		if(actualWidth != textureSize.width || actualHeight != textureSize.height) {
-			logger->error("Requested texture size (%dx%d) does not match previous texture size (%dx%d)! Somebody has yanked the rug out from under us.", textureSize.width, textureSize.height, actualWidth, actualHeight);
+			logger->crit("Requested texture size (%dx%d) does not match previous texture size (%dx%d)! Somebody has yanked the rug out from under us.", textureSize.width, textureSize.height, actualWidth, actualHeight);
 			throw runtime_error("Requested vs. Actual texture size mismatch! Somebody has yanked the rug out from under us.");
 		}
 		return previewTexture;
@@ -183,7 +184,7 @@ SDL_Texture *SDLDriver::getPreviewTexture(Size textureSize) {
 	if(previewWindow.renderer == NULL) {
 		throw logic_error("SDLDriver::getPreviewTexture() was called, but there is no preview window renderer!");
 	}
-	logger->verbose("Creating Preview SDL Texture <%dx%d>", textureSize.width, textureSize.height);
+	logger->info("Creating Preview SDL Texture <%dx%d>", textureSize.width, textureSize.height);
 	previewTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, textureSize.width, textureSize.height);
 	if(previewTexture == NULL) {
 		throw runtime_error("SDL Driver was not able to create a preview texture!");
@@ -193,7 +194,7 @@ SDL_Texture *SDLDriver::getPreviewTexture(Size textureSize) {
 
 void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
 	if(headless) {
-		logger->verbose("SDLDriver::doRenderPreviewFrame() called, but we're running in headless mode. This is an NOP.");
+		logger->warning("SDLDriver::doRenderPreviewFrame() called, but we're running in headless mode. This is an NOP.");
 		return;
 	}
 	if(previewWindow.window == NULL || previewWindow.renderer == NULL) {
@@ -245,7 +246,7 @@ void SDLDriver::doHandleEvents(void) {
 						status->incrementPreviewDebugDensity();
 						break;
 					case SDLK_RETURN:
-						logger->verbose("Received Basis Flag keyboard event. Rebroadcasting...");
+						logger->info("Received Basis Flag keyboard event. Rebroadcasting...");
 						YerFace_MutexLock(onBasisFlagCallbacksMutex);
 						for(auto callback : onBasisFlagCallbacks) {
 							callback();
@@ -303,15 +304,15 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 	YerFace_MutexLock(self->audioFramesMutex);
 	int streamPos = 0;
 	int frameDiscards = 0, frameFills = 0;
-	// self->logger->verbose("Audio Callback Fired");
+	self->logger->debug4("SDL Audio Device Callback Fired");
 
 	while(len - streamPos > 0) {
 		int remaining = len - streamPos;
-		// self->logger->verbose("Audio Callback... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+		self->logger->debug4("Audio Callback Buffer Filling Loop... Length: %d, streamPos: %d, Remaining: %d, Frame Start: %lf, Frame End: %lf", len, streamPos, remaining, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 
 		double audioLateGraceTimestamp = frameTimestamps.startTimestamp - YERFACE_AUDIO_LATE_GRACE;
 		while(self->audioFrameQueue.size() > 0 && self->audioFrameQueue.back()->timestamp < audioLateGraceTimestamp) {
-			// self->logger->verbose("==== AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame. ====", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, YERFACE_AUDIO_LATE_GRACE);
+			self->logger->debug4("AUDIO IS LATE! (Video Frame Start Time: %.04lf, Audio Frame Start Time: %.04lf, Grace Period: %.04lf) Discarding one audio frame.", frameTimestamps.startTimestamp, self->audioFrameQueue.back()->timestamp, YERFACE_AUDIO_LATE_GRACE);
 			self->audioFrameQueue.back()->inUse = false;
 			self->audioFrameQueue.pop_back();
 			frameDiscards++;
@@ -335,11 +336,11 @@ void SDLDriver::SDLAudioCallback(void* userdata, Uint8* stream, int len) {
 			streamPos += consumeBytes;
 			frameFills++;
 		} else {
-			// self->logger->verbose("Out of audio frames! Filling the rest of the buffer with silence.");
+			self->logger->debug4("Ran out of audio frames! Filling the rest of the buffer with silence.");
 			memset(stream + streamPos, self->audioDevice.obtained.silence, remaining);
 			streamPos += remaining;
 			if(!frameFills && frameDiscards > 0) {
-				self->logger->warn("====== Discarded %d unsuitable input audio frames and used zero input audio frames! Audio preview buffer is full of silence! ======", frameDiscards);
+				self->logger->warning("Discarded %d unsuitable input audio frames and used zero input audio frames! Audio preview buffer is full of silence!", frameDiscards);
 			}
 		}
 	}
@@ -351,7 +352,7 @@ void SDLDriver::FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int
 	if(self->audioFramesMutex == NULL) {
 		return;
 	}
-	// self->logger->verbose("AudioFrameCallback fired! Frame timestamp is %lf.", timestamp);
+	self->logger->debug4("FFmpegDriver passed us an audio frame! Frame timestamp is %lf.", timestamp);
 	YerFace_MutexLock(self->audioFramesMutex);
 	SDLAudioFrame *audioFrame = self->getNextAvailableAudioFrame(audioBytes);
 	memcpy(audioFrame->buf, buf, audioBytes);

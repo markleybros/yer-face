@@ -279,14 +279,14 @@ bool Utilities::stringEndMatches(string haystack, string needle) {
 
 bool Utilities::fileExists(string filePath) {
 	struct stat buf;
-	logger->verbose("Checking if \"%s\" exists.", filePath.c_str());
+	logger->debug2("Checking if \"%s\" exists.", filePath.c_str());
 	return (stat(filePath.c_str(), &buf) == 0);
 }
 
 string Utilities::fileSearchInCommonLocations(string filePath) {
 	if(sdlDataPath == NULL) {
 		sdlDataPath = SDL_GetBasePath();
-		// logger->verbose("SDL Reports Data Path: %s", sdlDataPath);
+		logger->debug3("SDL Reports Data Path: %s", sdlDataPath);
 	}
 
 	vector<string> searchBases;
@@ -320,16 +320,16 @@ string Utilities::fileSearchInCommonLocations(string filePath) {
 		""
 	};
 	for(string searchBase : searchBases) {
-		// logger->verbose("=== Searching BASE: %s", searchBase.c_str());
+		logger->debug3("=== Searching BASE: %s", searchBase.c_str());
 		for(string searchSecondComponent : searchSecondComponents) {
-			// logger->verbose("== Searching 2nd: %s", searchSecondComponent.c_str());
+			logger->debug3("== Searching 2nd: %s", searchSecondComponent.c_str());
 			for(string searchThirdComponent : searchThirdComponents) {
-				// logger->verbose("= Searching 3rd: %s", searchThirdComponent.c_str());
+				logger->debug3("= Searching 3rd: %s", searchThirdComponent.c_str());
 				string testPath = searchBase + searchSecondComponent + searchThirdComponent + filePath;
 				#ifdef WIN32
 				testPath = std::regex_replace(testPath, std::regex("/"), "\\");
 				#endif
-				// logger->verbose("TEST PATH: %s", testPath.c_str());
+				logger->debug4("TEST PATH: %s", testPath.c_str());
 				if(fileExists(testPath)) {
 					return testPath;
 				}
@@ -347,10 +347,36 @@ string Utilities::fileValidPathOrDie(string filePath, bool searchOnly) {
 	}
 	string result = Utilities::fileSearchInCommonLocations(filePath);
 	if(result == "") {
-		logger->error("Could not find \"%s\"!", filePath.c_str());
+		logger->err("Could not find \"%s\"!", filePath.c_str());
 		throw runtime_error("File or directory does not exist.");
 	}
 	return result;
+}
+
+string Utilities::stringTrim(std::string str) {
+	str = stringTrimLeft(str);
+	str = stringTrimRight(str);
+	return str;
+}
+
+string Utilities::stringTrimLeft(std::string str) {
+	//Trim whitespace from the beginning of the string.
+	auto first = str.begin();
+	auto last = std::find_if(str.begin(), str.end(), [](int ch) {
+        return !std::isspace(ch);
+    });
+    str.erase(first, last);
+	return str;
+}
+
+string Utilities::stringTrimRight(std::string str) {
+	//Trim whitespace from the end of the string.
+	auto first = std::find_if(str.rbegin(), str.rend(), [](int ch) {
+        return !std::isspace(ch);
+    }).base();
+	auto last = str.end();
+    str.erase(first, last);
+	return str;
 }
 
 Logger *Utilities::logger = new Logger("Utilities");

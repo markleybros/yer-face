@@ -44,7 +44,7 @@ public:
 	FacialDetectionBox getFacialDetection(FrameNumber frameNumber);
 	void renderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber, int density);
 private:
-	void doDetectFace(FaceDetectorWorker *worker, FaceDetectionTask task);
+	void doDetectFace(WorkerPoolWorker *worker, FaceDetectionTask task);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 	static void detectionWorkerInitializer(WorkerPoolWorker *worker, void *ptr);
 	static bool detectionWorkerHandler(WorkerPoolWorker *worker);

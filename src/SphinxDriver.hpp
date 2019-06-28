@@ -13,6 +13,7 @@
 namespace PocketSphinx {
 extern "C" {
 #include <pocketsphinx.h>
+#include <sphinxbase/err.h>
 }
 } //Namespace PocketSphinx
 
@@ -84,6 +85,7 @@ private:
 	static void recognitionWorkerDeinitializer(WorkerPoolWorker *worker, void *usrPtr);
 	static bool lipFlappingWorkerHandler(WorkerPoolWorker *worker);
 	static bool phonemeBreakdownWorkerHandler(WorkerPoolWorker *worker);
+	static void sphinxLogCallback(void *user_data, PocketSphinx::err_lvl_t level, const char *fmt, ...);
 	
 	string hiddenMarkovModel, allPhoneLM;
 	string lipFlappingTargetPhoneme;
@@ -106,8 +108,6 @@ private:
 	WorkerPool *recognitionWorkerPool;
 	SDL_mutex *recognitionMutex;
 	bool recognizerRunning, recognizerDrained;
-	double timestampOffset;
-	bool timestampOffsetSet;
 	list<SphinxAudioFrame *> audioFrameQueue;
 	list<SphinxAudioFrame *> audioFramesAllocated;
 	bool utteranceRestarted, inSpeech;
@@ -118,6 +118,9 @@ private:
 	WorkerPool *lipFlappingWorkerPool, *phonemeBreakdownWorkerPool;
 	SDL_mutex *workingVideoFramesMutex;
 	unordered_map<FrameNumber, SphinxVideoFrame *> workingVideoFrames;
+
+	Logger *sphinxLogger;
+	SDL_mutex *sphinxLoggerMutex;
 };
 
 }; //namespace YerFace

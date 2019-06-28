@@ -11,4 +11,4 @@ For best results, please make sure you have met the following hardware and softw
 - CUDA 10.1 compatible GPU
 - NVidia Proprietary Drivers (At least a version compatible with CUDA 10.1. If you're not sure, please see the CUDA documentation.)
 
-**Please note:** If these system requirements are not met, you **will not** have an acceptable experience with _YerFace!_
+**Please note:** If these system requirements are not met, you **will not** have a good experience with _YerFace!_

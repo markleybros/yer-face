@@ -6,6 +6,7 @@ using namespace std;
 namespace YerFace {
 
 EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
+	replayWorkerPool = NULL;
 	eventFilename = myEventFile;
 	status = myStatus;
 	if(status == NULL) {
@@ -28,7 +29,6 @@ EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, Outp
 	outputDriver->registerFrameData("events");
 
 	eventReplay = false;
-	replayWorkerPool = NULL;
 	frameEvents.clear();
 	pendingReplayFrames.clear();
 	if(eventFilename.length() > 0) {
@@ -65,11 +65,11 @@ EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, Outp
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 
-	logger->debug("EventLogger object constructed and ready to go!");
+	logger->debug1("EventLogger object constructed and ready to go!");
 }
 
 EventLogger::~EventLogger() noexcept(false) {
-	logger->debug("EventLogger object destructing...");
+	logger->debug1("EventLogger object destructing...");
 
 	if(replayWorkerPool) {
 		delete replayWorkerPool;
@@ -77,10 +77,10 @@ EventLogger::~EventLogger() noexcept(false) {
 
 	YerFace_MutexLock(myMutex);
 	if(pendingReplayFrames.size() > 0) {
-		logger->error("Frames are still pending for replay! Woe is me!");
+		logger->err("Frames are still pending for replay! Woe is me!");
 	}
 	if(frameEvents.size() > 0) {
-		logger->error("Frame events are still pending! Woe is me!");
+		logger->err("Frame events are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
@@ -115,7 +115,7 @@ void EventLogger::logEvent(string eventName, json payload, FrameTimestamps frame
 		}
 	}
 	if(!eventFound) {
-		logger->warn("Encountered unsupported event type [%s]! Are you using an old version of YerFace?", eventName.c_str());
+		logger->warning("Encountered unsupported event type [%s]! Are you using an old version of YerFace?", eventName.c_str());
 		YerFace_MutexUnlock(myMutex);
 		return;
 	}
@@ -145,7 +145,7 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 		// }
 		if(packetTime < frameEnd) {
 			if(packetTime >= 0.0 && packetTime < (frameStart - frameDurationHalf)) {
-				logger->warn("==== EVENT REPLAY PACKET VERY LATE! Processing anyway... [packetTime: %lf, currentFrameStart: %lf, currentFrameEnd: %lf] ====", packetTime, frameStart, frameEnd);
+				logger->err("EVENT REPLAY PACKET VERY LATE! Processing anyway... [packetTime: %lf, currentFrameStart: %lf, currentFrameEnd: %lf]", packetTime, frameStart, frameEnd);
 			}
 
 			// Based on timestamps, we've decided that this source event packet maps to "now" in the actual
@@ -194,7 +194,9 @@ void EventLogger::handleFrameStatusChange(void *userdata, WorkingFrameStatus new
 				YerFace_MutexLock(self->myMutex);
 				self->pendingReplayFrames[frameNumber].readyForReplay = true;
 				YerFace_MutexUnlock(self->myMutex);
-				self->replayWorkerPool->sendWorkerSignal();
+				if(self->replayWorkerPool != NULL) {
+					self->replayWorkerPool->sendWorkerSignal();
+				}
 			}
 			break;
 		case FRAME_STATUS_LATE_PROCESSING:

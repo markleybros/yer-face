@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <libavutil/imgutils.h>
+// #include <libavutil/timestamp.h>
 #include <libavformat/avformat.h>
 #include <libavdevice/avdevice.h>
 #include <libswscale/swscale.h>
@@ -23,39 +24,75 @@ namespace YerFace {
 #define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
 
+#define YERFACE_AVLOG_LEVELMAP_MIN 0		//Less than this gets dropped.
+#define YERFACE_AVLOG_LEVELMAP_ALERT 8		//Less than this (libav* defines 0-7 as PANIC) gets mapped to our LOG_SEVERITY_ALERT
+#define YERFACE_AVLOG_LEVELMAP_CRIT 16		//Less than this (libav* defines 8-15 as FATAL) gets mapped to our LOG_SEVERITY_CRIT
+#define YERFACE_AVLOG_LEVELMAP_ERR 24		//Less than this (libav* defines 16-23 as ERROR) gets mapped to our LOG_SEVERITY_ERR
+#define YERFACE_AVLOG_LEVELMAP_WARNING 32	//Less than this (libav* defines 24-31 as WARNING) gets mapped to our LOG_SEVERITY_WARNING
+#define YERFACE_AVLOG_LEVELMAP_INFO 40		//Less than this (libav* defines 32-39 as INFO) gets mapped to our LOG_SEVERITY_INFO
+#define YERFACE_AVLOG_LEVELMAP_MAX 32		//Greater than this gets dropped.
+
 class FrameServer;
 class WorkerPool;
 
-enum FFmpegDriverOutAudioChannelMap {
+enum FFmpegDriverInputAudioChannelMap {
 	CHANNELMAP_NONE = 0,
 	CHANNELMAP_LEFT_ONLY = 1,
 	CHANNELMAP_RIGHT_ONLY = 2
 };
 
-class MediaContext {
+class MediaInputOutputStreamPair {
 public:
-	MediaContext(void);
+	AVStream **in, **out;
+	int *outStreamIndex;
+};
 
-	FFmpegDriverOutAudioChannelMap outAudioChannelMap;
+class MediaInputContext {
+public:
+	MediaInputContext(void);
+
+	FFmpegDriverInputAudioChannelMap inputAudioChannelMap;
 	
 	AVFormatContext *formatContext;
 
+	AVPacket packet;
 	AVFrame *frame;
 	FrameNumber frameNumber;
 
 	int videoStreamIndex;
 	AVCodecContext *videoDecoderContext;
 	AVStream *videoStream;
+	int64_t videoStreamPTSOffset;
+	int64_t videoMuxLastPTS;
+	int64_t videoMuxLastDTS;
 
 	int audioStreamIndex;
 	AVCodecContext *audioDecoderContext;
 	AVStream *audioStream;
-
-	SDL_mutex *demuxerMutex;
-	SDL_Thread *demuxerThread;
-	bool demuxerRunning;
+	int64_t audioStreamPTSOffset;
+	int64_t audioMuxLastPTS;
+	int64_t audioMuxLastDTS;
 
 	bool demuxerDraining;
+
+	bool initialized;
+};
+
+class MediaOutputContext {
+public:
+	MediaOutputContext(void);
+
+	AVOutputFormat *outputFormat;
+	AVFormatContext *formatContext;
+
+	AVStream *videoStream;
+	int videoStreamIndex;
+	AVStream *audioStream;
+	int audioStreamIndex;
+
+	SDL_mutex *multiplexerMutex;
+
+	bool initialized;
 };
 
 class VideoFrameBacking {
@@ -67,6 +104,7 @@ public:
 
 class VideoFrame {
 public:
+	bool valid;
 	FrameTimestamps timestamp;
 	VideoFrameBacking *frameBacking;
 	cv::Mat frameCV;
@@ -109,13 +147,14 @@ class FFmpegDriver {
 public:
 	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions);
 	~FFmpegDriver();
-	void openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string outAudioChannelMap, bool tryAudio);
+	void openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string inputAudioChannelMap, bool tryAudio);
+	void openOutputMedia(string outFile);
 	void setVideoCaptureWorkerPool(WorkerPool *workerPool);
-	void rollDemuxerThreads(void);
+	void rollDemuxerThread(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
 	VideoFrame getNextVideoFrame(void);
-	bool waitForNextVideoFrame(VideoFrame *videoFrame);
+	bool pollForNextVideoFrame(VideoFrame *videoFrame);
 	void releaseVideoFrame(VideoFrame videoFrame);
 	void registerAudioFrameCallback(AudioFrameCallback audioFrameCallback);
 	void stopAudioCallbacksNow(void);
@@ -124,22 +163,20 @@ private:
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
-	bool decodePacket(MediaContext *context, const AVPacket *packet, int streamIndex);
-	void initializeDemuxerThread(MediaContext *context, enum AVMediaType type);
-	void rollDemuxerThread(MediaContext *context, enum AVMediaType type);
-	void destroyDemuxerThreads(void);
-	void destroyDemuxerThread(MediaContext *context, enum AVMediaType type);
-	static int runVideoDemuxerLoop(void *ptr);
-	static int runAudioDemuxerLoop(void *ptr);
-	int innerDemuxerLoop(MediaContext *context, enum AVMediaType type, bool includeAudio);
-	void pumpDemuxer(MediaContext *context, AVPacket *packet, enum AVMediaType type);
-	double calculateEstimatedEndTimestamp(double startTimestamp);
+	bool decodePacket(MediaInputContext *context, int streamIndex, bool drain);
+	void destroyDemuxerThread(void);
+	static int runOuterDemuxerLoop(void *ptr);
+	int innerDemuxerLoop(void);
+	void pumpDemuxer(MediaInputContext *context, enum AVMediaType type);
 	bool flushAudioHandlers(bool draining);
 	bool getIsAudioDraining(void);
 	bool getIsVideoDraining(void);
-	double resolveFrameTimestamp(MediaContext *context, AVFrame *frame, enum AVMediaType type);
+	FrameTimestamps resolveFrameTimestamp(MediaInputContext *context, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 	bool getIsAllocatedVideoFrameBackingsFull(void);
+	int64_t applyPTSOffset(int64_t pts, int64_t offset);
+	static void logAVCallback(void *ptr, int level, const char *fmt, va_list args);
+	static void logAVWrapper(int level, const char *fmt, ...);
 
 	Status *status;
 	FrameServer *frameServer;
@@ -150,24 +187,26 @@ private:
 
 	std::list<double> frameStartTimes;
 
-	MediaContext videoContext, audioContext;
+	MediaInputContext videoContext, audioContext;
+	MediaOutputContext outputContext;
 
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	struct SwsContext *swsContext;
 
+	SDL_Thread *demuxerThread;
+	SDL_mutex *demuxerThreadMutex;
+	bool demuxerThreadRunning;
+
 	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
-	double videoStreamInitialTimestamp;
-	bool videoStreamInitialTimestampSet;
 	double newestVideoFrameTimestamp;
 	double newestVideoFrameEstimatedEndTimestamp;
 
 	SDL_mutex *audioStreamMutex;
 	double audioStreamTimeBase;
-	double audioStreamInitialTimestamp;
-	bool audioStreamInitialTimestampSet;
 	double newestAudioFrameTimestamp;
+	double newestAudioFrameEstimatedEndTimestamp;
 
 	uint8_t *videoDestData[4];
 	int videoDestLineSize[4];
@@ -179,6 +218,9 @@ private:
 
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
 	bool audioCallbacksOkay;
+
+	static Logger *avLogger;
+	static SDL_mutex *avLoggerMutex;
 };
 
 }; //namespace YerFace
