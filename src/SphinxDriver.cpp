@@ -515,6 +515,7 @@ bool SphinxDriver::recognitionWorkerHandler(WorkerPoolWorker *worker) {
 		}
 		self->inSpeech = ps_get_in_speech(self->pocketSphinx);
 		SphinxRecognizerResult result;
+		result.maxAmplitude = 0.0;
 		result.inSpeech = self->inSpeech;
 		result.peak = false;
 		result.startTimestamp = self->audioFrameQueue.back()->timestamp;
