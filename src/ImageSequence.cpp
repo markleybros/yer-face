@@ -106,7 +106,7 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 		snprintf(filename, filenameLength, "%s-%06" YERFACE_FRAMENUMBER_FORMATINNER ".png", self->outputPrefix.c_str(), outputFrameNumber);
 		self->logger->debug1("Thread #%d writing preview frame #" YERFACE_FRAMENUMBER_FORMAT " to file: %s ", worker->num, outputFrameNumber, filename);
 		imwrite(filename, previewFrameCopy);
-		delete filename;
+		delete[] filename;
 
 		self->metrics->endClock(tick);
 

@@ -350,12 +350,12 @@ void FFmpegDriver::openOutputMedia(string outFile) {
 
 	int outputStreamIndex = 0;
 
-	for(MediaInputContext inputContext : {videoContext, audioContext }) {
+	for(MediaInputContext *inputContext : {&videoContext, &audioContext }) {
 		MediaInputOutputStreamPair videoPair, audioPair;
-		videoPair.in = &inputContext.videoStream;
+		videoPair.in = &inputContext->videoStream;
 		videoPair.out = &outputContext.videoStream;
 		videoPair.outStreamIndex = &outputContext.videoStreamIndex;
-		audioPair.in = &inputContext.audioStream;
+		audioPair.in = &inputContext->audioStream;
 		audioPair.out = &outputContext.audioStream;
 		audioPair.outStreamIndex = &outputContext.audioStreamIndex;
 		for(MediaInputOutputStreamPair streamPair : { videoPair, audioPair }) {
@@ -1075,7 +1075,7 @@ void FFmpegDriver::logAVCallback(void *ptr, int level, const char *fmt, va_list 
 
 	YerFace_MutexLock(avLoggerMutex);
 
-	LogMessageSeverity severity;
+	LogMessageSeverity severity = LOG_SEVERITY_INFO;
 	if(level < YERFACE_AVLOG_LEVELMAP_ALERT) {
 		severity = LOG_SEVERITY_ALERT;
 	} else if(level < YERFACE_AVLOG_LEVELMAP_CRIT) {
