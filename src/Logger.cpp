@@ -6,17 +6,19 @@
 #include <ctime>
 #include <chrono>
 
-#if WIN32
+#ifdef WIN32
 #include <windows.h>
 #include <wincon.h>
 #include <io.h>
 #define isatty _isatty
 #define fileno _fileno
 #define my_localtime(NOW, TM) localtime_s(TM, NOW)
+#define MILLIS_FORMAT "%03llu"
 #else
 #include <unistd.h>
 #include <sys/time.h>
-#define my_localtime(NOW, TM) localtime_s(NOW, TM)
+#define my_localtime(NOW, TM) localtime_r(NOW, TM)
+#define MILLIS_FORMAT "%03lu"
 #endif
 
 using namespace std;
@@ -168,7 +170,9 @@ void Logger::log(LogMessageSeverity severity, const char *fmt, ...) {
 }
 
 void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
+	#ifdef WIN32
 	HANDLE myWinConsole = NULL;
+	#endif
 	YerFace_MutexLock(staticMutex);
 	LogMessageSeverity mySeverityFilter = severityFilter;
 	FILE *myOutFile = outFile;
@@ -218,7 +222,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	char timeStringIntermediate[64];
 	strftime(timeStringIntermediate, sizeof(timeStringIntermediate), "%F %H:%M:%S", &myTm);
 	char timeStringC[128];
-	snprintf(timeStringC, sizeof(timeStringC), "%s.%03llu", timeStringIntermediate, millis);
+	snprintf(timeStringC, sizeof(timeStringC), "%s." MILLIS_FORMAT, timeStringIntermediate, millis);
 	std::string timeString = (string)timeStringC;
 
 	//Resolve severity to a string.
