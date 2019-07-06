@@ -274,7 +274,9 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 
 	//Assemble the final format string and send it to the output target.
 	string finalFormat = prefixFormat + originalFormat + suffixFormat;
+	YerFace_MutexLock(staticMutex);
 	vfprintf(myOutFile, finalFormat.c_str(), args);
+	YerFace_MutexUnlock(staticMutex);
 
 	#endif
 }

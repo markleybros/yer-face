@@ -327,6 +327,9 @@ bool FrameServer::workerHandler(WorkerPoolWorker *worker) {
 
 void FrameServer::workerDeinitializer(WorkerPoolWorker *worker, void *usrPtr) {
 	FrameServer *self = (FrameServer *)worker->ptr;
+	if(self->status->getEmergency()) {
+		return;
+	}
 	YerFace_MutexLock(self->myMutex);
 	for(auto callback : self->onFrameServerDrainedCallbacks) {
 		callback.callback(callback.userdata);

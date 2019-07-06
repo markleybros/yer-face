@@ -107,6 +107,10 @@ void WorkerPool::stopWorkerNow(void) {
 void WorkerPool::handleFrameServerDrainedEvent(void *userdata) {
 	WorkerPool *self = (WorkerPool *)userdata;
 	self->logger->debug2("Got notification that FrameServer has drained!");
+	if(!self->running) {
+		self->logger->debug2("frameServerDrainedEvent came in too late! We are no longer running...");
+		return;
+	}
 	YerFace_MutexLock(self->myMutex);
 	self->frameServerDrained = true;
 	SDL_CondBroadcast(self->myCond);
@@ -125,7 +129,7 @@ int WorkerPool::outerWorkerLoop(void *ptr) {
 
 		YerFace_MutexLock(self->myMutex);
 		while(!self->frameServerDrained && self->running) {
-			// self->logger->verbose("Thread #%d Top of Loop", worker->num);
+			// self->logger->debug4("Thread #%d Top of Loop", worker->num);
 
 			if(self->status->getIsPaused() && self->status->getIsRunning()) {
 				YerFace_MutexUnlock(self->myMutex);

@@ -479,6 +479,8 @@ bool videoCaptureHandler(WorkerPoolWorker *worker) {
 }
 
 void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
+	sdlDriver->stopAudioDriverNow();
+
 	if(status->getEmergency()) {
 		return;
 	}
@@ -493,7 +495,6 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 		YerFace_MutexUnlock(frameServerDrainedMutex);
 	} while(!myDrained);
 
-	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
 }
 

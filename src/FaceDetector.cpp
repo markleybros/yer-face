@@ -264,7 +264,6 @@ void FaceDetector::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 void FaceDetector::detectionWorkerInitializer(WorkerPoolWorker *worker, void *ptr) {
 	FaceDetector *self = (FaceDetector *)ptr;
 	FaceDetectorWorker *innerWorker = new FaceDetectorWorker();
-	throw runtime_error("experimental fatal exception");
 	innerWorker->self = self;
 	if(self->usingDNNFaceDetection) {
 		deserialize(self->faceDetectionModelFileName.c_str()) >> innerWorker->faceDetectionModel;
