@@ -479,6 +479,10 @@ bool videoCaptureHandler(WorkerPoolWorker *worker) {
 }
 
 void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
+	if(status->getEmergency()) {
+		return;
+	}
+
 	frameServer->setDraining();
 
 	bool myDrained = false;
