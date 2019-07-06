@@ -549,20 +549,26 @@ void OutputDriver::handleFrameServerDrainedEvent(void *userdata) {
 
 int OutputDriverWebSocketServer::launchWebSocketServer(void *data) {
 	OutputDriverWebSocketServer *self = (OutputDriverWebSocketServer *)data;
-	self->parent->logger->debug1("WebSocket Server Thread Alive!");
+	try {
+		self->parent->logger->debug1("WebSocket Server Thread Alive!");
 
-	self->server.init_asio();
-	self->server.set_reuse_addr(true);
-	self->server.set_open_handler(bind(&OutputDriverWebSocketServer::serverOnOpen,self,::_1));
-	self->server.set_close_handler(bind(&OutputDriverWebSocketServer::serverOnClose,self,::_1));
-	self->serverSetQuitPollTimer();
+		self->server.init_asio();
+		self->server.set_reuse_addr(true);
+		self->server.set_open_handler(bind(&OutputDriverWebSocketServer::serverOnOpen,self,::_1));
+		self->server.set_close_handler(bind(&OutputDriverWebSocketServer::serverOnClose,self,::_1));
+		self->serverSetQuitPollTimer();
 
-	self->server.listen(self->websocketServerPort);
-	self->server.start_accept();
-	self->server.run();
+		self->server.listen(self->websocketServerPort);
+		self->server.start_accept();
+		self->server.run();
 
-	self->parent->logger->debug1("WebSocket Server Thread Terminating.");
-	return 0;
+		self->parent->logger->debug1("WebSocket Server Thread Terminating.");
+		return 0;
+	} catch(std::exception &e) {
+		self->parent->logger->emerg("Uncaught exception in web socket server thread: %s\n", e.what());
+		self->parent->status->setEmergency();
+	}
+	return 1;
 }
 
 void OutputDriverWebSocketServer::serverOnOpen(websocketpp::connection_hdl handle) {

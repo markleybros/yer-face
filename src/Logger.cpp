@@ -4,21 +4,50 @@
 
 #include <string>
 #include <ctime>
-#include <sys/time.h> //FIXME - windows support?
+#include <chrono>
 
 #if WIN32
+#include <windows.h>
+#include <wincon.h>
 #include <io.h>
 #define isatty _isatty
 #define fileno _fileno
+#define my_localtime(NOW, TM) localtime_s(TM, NOW)
 #else
 #include <unistd.h>
+#include <sys/time.h>
+#define my_localtime(NOW, TM) localtime_s(NOW, TM)
 #endif
 
 using namespace std;
 
 namespace YerFace {
 
-// FIXME - windows console color support?
+#ifdef WIN32
+#define CONSOLE_COLOR_FOREGROUND_RED		(FOREGROUND_RED | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_GREEN		(FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_YELLOW		(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_BLUE		(FOREGROUND_BLUE | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_MAGENTA	(FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_CYAN		(FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY)
+#define CONSOLE_COLOR_FOREGROUND_WHITE		(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)
+#define CONSOLE_COLOR_FOREGROUND_LIGHTGRAY	(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)
+#define CONSOLE_COLOR_FOREGROUND_DARKGRAY	FOREGROUND_INTENSITY
+#define CONSOLE_COLOR_FOREGROUND_BLACK		0
+
+#define CONSOLE_COLOR_BACKGROUND_RED		(CONSOLE_COLOR_FOREGROUND_RED << 4)
+#define CONSOLE_COLOR_BACKGROUND_GREEN		(CONSOLE_COLOR_FOREGROUND_GREEN << 4)
+#define CONSOLE_COLOR_BACKGROUND_YELLOW		(CONSOLE_COLOR_FOREGROUND_YELLOW << 4)
+#define CONSOLE_COLOR_BACKGROUND_BLUE		(CONSOLE_COLOR_FOREGROUND_BLUE << 4)
+#define CONSOLE_COLOR_BACKGROUND_MAGENTA	(CONSOLE_COLOR_FOREGROUND_MAGENTA << 4)
+#define CONSOLE_COLOR_BACKGROUND_CYAN		(CONSOLE_COLOR_FOREGROUND_CYAN << 4)
+#define CONSOLE_COLOR_BACKGROUND_LIGHTGRAY	(CONSOLE_COLOR_FOREGROUND_LIGHTGRAY << 4)
+#define CONSOLE_COLOR_BACKGROUND_DARKGRAY	(CONSOLE_COLOR_FOREGROUND_DARKGRAY << 4)
+#define CONSOLE_COLOR_BACKGROUND_BLACK		(CONSOLE_COLOR_FOREGROUND_BLACK << 4)
+
+#define CONSOLE_FONT_UNDERLINE				COMMON_LVB_UNDERSCORE
+#define CONSOLE_FONT_REVERSE				COMMON_LVB_REVERSE_VIDEO
+#else
 #define CONSOLE_COLOR_RESETALL				"\x1B[0m"
 #define CONSOLE_COLOR_FOREGROUND_RED		"\x1B[91m"
 #define CONSOLE_COLOR_FOREGROUND_GREEN		"\x1B[92m"
@@ -28,6 +57,7 @@ namespace YerFace {
 #define CONSOLE_COLOR_FOREGROUND_CYAN		"\x1B[96m"
 #define CONSOLE_COLOR_FOREGROUND_LIGHTGRAY	"\x1B[37m"
 #define CONSOLE_COLOR_FOREGROUND_DARKGRAY	"\x1B[90m"
+#define CONSOLE_COLOR_FOREGROUND_BLACK		"\x1B[30m"
 #define CONSOLE_FONT_BOLD_ON				"\x1B[1m"
 #define CONSOLE_FONT_DIM_ON					"\x1B[2m"
 #define CONSOLE_FONT_UNDERLINE_ON			"\x1B[4m"
@@ -36,6 +66,7 @@ namespace YerFace {
 #define CONSOLE_FONT_DIM_OFF				"\x1B[22m"
 #define CONSOLE_FONT_UNDERLINE_OFF			"\x1B[24m"
 #define CONSOLE_FONT_REVERSE_OFF			"\x1B[27m"
+#endif
 
 LogMessageSeverity Logger::severityFilter = LOG_SEVERITY_FILTERDEFAULT;
 bool Logger::outFileOpened = false;
@@ -137,6 +168,7 @@ void Logger::log(LogMessageSeverity severity, const char *fmt, ...) {
 }
 
 void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
+	HANDLE myWinConsole = NULL;
 	YerFace_MutexLock(staticMutex);
 	LogMessageSeverity mySeverityFilter = severityFilter;
 	FILE *myOutFile = outFile;
@@ -144,7 +176,18 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	if(myColorMode == LOG_COLORS_AUTO) {
 		if(colorsEligible == LOG_COLORS_CONSOLE_ELIGIBILITY_UNKNOWN) {
 			if(isatty(fileno(myOutFile))) {
+				#ifdef WIN32
+				if(outFile == stderr) {
+					myWinConsole = GetStdHandle(STD_ERROR_HANDLE);
+				}
+				if(myWinConsole != NULL && myWinConsole != INVALID_HANDLE_VALUE) {
+					colorsEligible = LOG_COLORS_CONSOLE_ELIGIBLE;
+				} else {
+					colorsEligible = LOG_COLORS_CONSOLE_INELIGIBLE;
+				}
+				#else
 				colorsEligible = LOG_COLORS_CONSOLE_ELIGIBLE;
+				#endif
 			} else {
 				colorsEligible = LOG_COLORS_CONSOLE_INELIGIBLE;
 			}
@@ -165,20 +208,51 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	//Trim any leading or trailing whitespace from fmt.
 	string originalFormat = Utilities::stringTrim((string)fmt);
 
-	//Resolve a time string. (FIXME there is effectively zero chance this will work correctly on Windows.)
-	struct timeval myTimeVal;
-	gettimeofday(&myTimeVal, NULL);
+	//Resolve a time string. (Semi-portable.)
+	uint64_t now_milli = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	uint64_t now_sec = now_milli / 1000;
+	time_t now_time_t = (time_t)now_sec;
+	uint64_t millis = now_milli % 1000;
 	struct tm myTm;
-	localtime_r(&myTimeVal.tv_sec, &myTm); //If we want UTC, use gmtime_r()
+	my_localtime(&now_time_t, &myTm);
 	char timeStringIntermediate[64];
 	strftime(timeStringIntermediate, sizeof(timeStringIntermediate), "%F %H:%M:%S", &myTm);
 	char timeStringC[128];
-	int milli = myTimeVal.tv_usec / 1000;
-	snprintf(timeStringC, sizeof(timeStringC), "%s.%03d", timeStringIntermediate, milli); //If we're using UTC, add a "Z" to the end of the string
+	snprintf(timeStringC, sizeof(timeStringC), "%s.%03llu", timeStringIntermediate, millis);
 	std::string timeString = (string)timeStringC;
 
 	//Resolve severity to a string.
 	string severityString = getSeverityString(severity);
+
+	// Dump the line -- platform dependent
+	#ifdef WIN32
+	YerFace_MutexLock(staticMutex);
+
+	if(myColorMode == LOG_COLORS_ON) {
+		myWinConsole = GetStdHandle(STD_ERROR_HANDLE);
+	}
+
+	WORD resetColors = CONSOLE_COLOR_FOREGROUND_WHITE | CONSOLE_COLOR_BACKGROUND_BLACK;
+
+	if(myColorMode == LOG_COLORS_ON) {
+		SetConsoleTextAttribute(myWinConsole, resetColors);
+	}
+	fprintf(myOutFile, "%s", ("[" + timeString + "] ").c_str());
+
+	if(myColorMode == LOG_COLORS_ON) {
+		SetConsoleTextAttribute(myWinConsole, getSeverityStringConsoleCode(severity));
+	}
+	fprintf(myOutFile, "%s", (severityString + ": " + name + ": ").c_str());
+
+	vfprintf(myOutFile, originalFormat.c_str(), args);
+
+	if(myColorMode == LOG_COLORS_ON) {
+		SetConsoleTextAttribute(myWinConsole, resetColors);
+	}
+	fprintf(myOutFile, "\n");
+
+	YerFace_MutexUnlock(staticMutex);
+	#else
 
 	string colorCode = "";
 	if(myColorMode == LOG_COLORS_ON) {
@@ -197,6 +271,8 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	//Assemble the final format string and send it to the output target.
 	string finalFormat = prefixFormat + originalFormat + suffixFormat;
 	vfprintf(myOutFile, finalFormat.c_str(), args);
+
+	#endif
 }
 
 void Logger::setLoggingTarget(std::string filePath) {
@@ -283,32 +359,79 @@ std::string Logger::getSeverityString(LogMessageSeverity severity) {
 	return "?????";
 }
 
-std::string Logger::getSeverityStringConsoleCode(LogMessageSeverity severity) {
+LogConsoleCode Logger::getSeverityStringConsoleCode(LogMessageSeverity severity) {
+	LogConsoleCode ourCode;
+	#ifdef WIN32
+	ourCode = CONSOLE_COLOR_FOREGROUND_WHITE | CONSOLE_COLOR_BACKGROUND_BLACK;
+	#else
+	ourCode = "";
+	#endif
+
 	switch(severity) {
 		case LOG_SEVERITY_EMERG:
-			return CONSOLE_FONT_BOLD_ON CONSOLE_FONT_REVERSE_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_RED | CONSOLE_FONT_UNDERLINE | CONSOLE_FONT_REVERSE;
+			#else
+			ourCode = CONSOLE_FONT_BOLD_ON CONSOLE_FONT_REVERSE_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#endif
+			break;
 		case LOG_SEVERITY_ALERT:
-			return CONSOLE_FONT_BOLD_ON CONSOLE_FONT_REVERSE_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_RED | CONSOLE_FONT_UNDERLINE | CONSOLE_FONT_REVERSE;
+			#else
+			ourCode = CONSOLE_FONT_BOLD_ON CONSOLE_FONT_REVERSE_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#endif
+			break;
 		case LOG_SEVERITY_CRIT:
-			return CONSOLE_FONT_BOLD_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_RED | CONSOLE_FONT_UNDERLINE;
+			#else
+			ourCode = CONSOLE_FONT_BOLD_ON CONSOLE_COLOR_FOREGROUND_RED;
+			#endif
+			break;
 		case LOG_SEVERITY_ERR:
-			return CONSOLE_COLOR_FOREGROUND_RED;
+			ourCode = CONSOLE_COLOR_FOREGROUND_RED;
+			break;
 		case LOG_SEVERITY_WARNING:
-			return CONSOLE_COLOR_FOREGROUND_YELLOW;
+			ourCode = CONSOLE_COLOR_FOREGROUND_YELLOW;
+			break;
 		case LOG_SEVERITY_NOTICE:
-			return CONSOLE_COLOR_FOREGROUND_BLUE;
+			ourCode = CONSOLE_COLOR_FOREGROUND_BLUE;
+			break;
 		case LOG_SEVERITY_INFO:
-			return CONSOLE_COLOR_FOREGROUND_CYAN;
+			ourCode = CONSOLE_COLOR_FOREGROUND_CYAN;
+			break;
 		case LOG_SEVERITY_DEBUG1:
-			return "";
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_WHITE | FOREGROUND_INTENSITY;
+			#else
+			//// Default
+			#endif
+			break;
 		case LOG_SEVERITY_DEBUG2:
-			return CONSOLE_COLOR_FOREGROUND_LIGHTGRAY;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_WHITE;
+			#else
+			ourCode = CONSOLE_COLOR_FOREGROUND_LIGHTGRAY;
+			#endif
+			break;
 		case LOG_SEVERITY_DEBUG3:
-			return CONSOLE_FONT_DIM_ON;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_DARKGRAY;
+			#else
+			ourCode = CONSOLE_FONT_DIM_ON;
+			#endif
+			break;
 		case LOG_SEVERITY_DEBUG4:
-			return CONSOLE_FONT_DIM_ON CONSOLE_COLOR_FOREGROUND_LIGHTGRAY;
+			#ifdef WIN32
+			ourCode = CONSOLE_COLOR_FOREGROUND_DARKGRAY;
+			#else
+			ourCode = CONSOLE_FONT_DIM_ON CONSOLE_COLOR_FOREGROUND_LIGHTGRAY;
+			#endif
+			break;
 	}
-	return "";
+
+	return ourCode;
 }
 
 }; //namespace YerFace

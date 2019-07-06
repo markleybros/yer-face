@@ -40,12 +40,12 @@ fi
 export VERSION_STRING_HTML="$(echo "${VERSION_STRING}" | ci/util/htmlescape.py)"
 export DATE_STRING_HTML="$(date '+%B %-d, %Y' | ci/util/htmlescape.py)"
 
-export DOWNLOAD_URL="${ARTIFACT_BASEURL}/Windows/$(echo "${OUTPUT_APPIMAGE_FILE}" | ci/util/urlencode.py)"
+export DOWNLOAD_URL="${ARTIFACT_BASEURL}/Windows/$(echo "${OUTPUT_ZIP_FILE}" | ci/util/urlencode.py)"
 export DOWNLOAD_URL_HTML="$(echo "${DOWNLOAD_URL}" | ci/util/htmlescape.py)"
 
 export HASH_URL="${ARTIFACT_BASEURL}/Windows/$(echo "${OUTPUT_HASH_FILE}" | ci/util/urlencode.py)"
 export HASH_URL_HTML="$(echo "${HASH_URL}" | ci/util/htmlescape.py)"
-export SIZE_STRING_HTML="$(du -h build/"${OUTPUT_APPIMAGE_FILE}" | cut -f1 | ci/util/htmlescape.py)"
+export SIZE_STRING_HTML="$(du -h build/"${OUTPUT_ZIP_FILE}" | cut -f1 | ci/util/htmlescape.py)"
 _log "Templating latest.html..."
 envsubst < ci/data/latest.Windows.html > /tmp/latest.html || _die "Failed to envsubst the latest file."
 

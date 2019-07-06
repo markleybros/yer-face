@@ -116,53 +116,59 @@ void WorkerPool::handleFrameServerDrainedEvent(void *userdata) {
 int WorkerPool::outerWorkerLoop(void *ptr) {
 	WorkerPoolWorker *worker = (WorkerPoolWorker *)ptr;
 	WorkerPool *self = worker->pool;
-	self->logger->debug1("Worker Thread #%d Alive!", worker->num);
+	try {
+		self->logger->debug1("Worker Thread #%d Alive!", worker->num);
 
-	if(self->parameters.initializer != NULL) {
-		self->parameters.initializer(worker, self->parameters.usrPtr);
-	}
-
-	YerFace_MutexLock(self->myMutex);
-	while(!self->frameServerDrained && self->running) {
-		// self->logger->verbose("Thread #%d Top of Loop", worker->num);
-
-		if(self->status->getIsPaused() && self->status->getIsRunning()) {
-			YerFace_MutexUnlock(self->myMutex);
-			SDL_Delay(100);
-			YerFace_MutexLock(self->myMutex);
-			continue;
+		if(self->parameters.initializer != NULL) {
+			self->parameters.initializer(worker, self->parameters.usrPtr);
 		}
 
-		YerFace_MutexUnlock(self->myMutex);
-		bool didWork = self->parameters.handler(worker);
 		YerFace_MutexLock(self->myMutex);
+		while(!self->frameServerDrained && self->running) {
+			// self->logger->verbose("Thread #%d Top of Loop", worker->num);
 
-		//If there is no work available, go to sleep and wait.
-		if(!didWork) {
-			// self->logger->verbose("Thread #%d entering CondWait...", worker->num);
-			int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
-			if(result < 0) {
-				throw runtime_error("CondWaitTimeout() failed!");
-			} else if(result == SDL_MUTEX_TIMEDOUT) {
-				if(!self->status->getIsPaused() && !self->frameServerDrained) {
-					self->logger->warning("Thread #%d timed out waiting for Condition signal!", worker->num);
-				}
+			if(self->status->getIsPaused() && self->status->getIsRunning()) {
+				YerFace_MutexUnlock(self->myMutex);
+				SDL_Delay(100);
+				YerFace_MutexLock(self->myMutex);
+				continue;
 			}
-			// self->logger->verbose("Thread #%d left CondWait!", worker->num);
-		}
-		if(self->status->getEmergency()) {
-			self->logger->debug1("Thread #%d honoring emergency stop.", worker->num);
-			self->running = false;
-		}
-	}
-	YerFace_MutexUnlock(self->myMutex);
 
-	if(self->parameters.deinitializer != NULL) {
-		self->parameters.deinitializer(worker, self->parameters.usrPtr);
-	}
+			YerFace_MutexUnlock(self->myMutex);
+			bool didWork = self->parameters.handler(worker);
+			YerFace_MutexLock(self->myMutex);
 
-	self->logger->debug1("Thread #%d Done.", worker->num);
-	return 0;
+			//If there is no work available, go to sleep and wait.
+			if(!didWork) {
+				// self->logger->verbose("Thread #%d entering CondWait...", worker->num);
+				int result = SDL_CondWaitTimeout(self->myCond, self->myMutex, 1000);
+				if(result < 0) {
+					throw runtime_error("CondWaitTimeout() failed!");
+				} else if(result == SDL_MUTEX_TIMEDOUT) {
+					if(!self->status->getIsPaused() && !self->frameServerDrained) {
+						self->logger->warning("Thread #%d timed out waiting for Condition signal!", worker->num);
+					}
+				}
+				// self->logger->verbose("Thread #%d left CondWait!", worker->num);
+			}
+			if(self->status->getEmergency()) {
+				self->logger->debug1("Thread #%d honoring emergency stop.", worker->num);
+				self->running = false;
+			}
+		}
+		YerFace_MutexUnlock(self->myMutex);
+
+		if(self->parameters.deinitializer != NULL) {
+			self->parameters.deinitializer(worker, self->parameters.usrPtr);
+		}
+
+		self->logger->debug1("Thread #%d Done.", worker->num);
+		return 0;
+	} catch(exception &e) {
+		self->logger->emerg("Uncaught exception in worker thread: %s\n", e.what());
+		self->status->setEmergency();
+	}
+	return 1;
 }
 
 } //namespace YerFace

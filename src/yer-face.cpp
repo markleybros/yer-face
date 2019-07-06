@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
 	try {
 		return yerface(argc, argv);
 	} catch(exception &e) {
-		fprintf(stderr, "Uncaught exception: %s\n", e.what());
+		fprintf(stderr, "Uncaught exception in parent thread: %s\n", e.what());
 	}
 	return 1;
 }

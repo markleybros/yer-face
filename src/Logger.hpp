@@ -7,6 +7,12 @@
 
 namespace YerFace {
 
+#ifdef WIN32
+typedef unsigned short LogConsoleCode;
+#else
+typedef std::string LogConsoleCode;
+#endif
+
 // Log severity is loosely derived from RFC 5424.
 // The primary extension is that severity levels 7 and higher are various levels of debug verbosity.
 // Lower severity levels represent increasing levels of criticality.
@@ -76,7 +82,7 @@ public:
 	static void setLoggingFilter(LogMessageSeverity severity);
 	static std::string getSeverityString(LogMessageSeverity severity);
 private:
-	std::string getSeverityStringConsoleCode(LogMessageSeverity severity);
+	LogConsoleCode getSeverityStringConsoleCode(LogMessageSeverity severity);
 
 	std::string name;
 	static LogMessageSeverity severityFilter;

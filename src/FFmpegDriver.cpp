@@ -719,13 +719,19 @@ void FFmpegDriver::destroyDemuxerThread(void) {
 
 int FFmpegDriver::runOuterDemuxerLoop(void *ptr) {
 	FFmpegDriver *driver = (FFmpegDriver *)ptr;
-	driver->logger->debug1("Media Demuxer Thread alive!");
-	if(!driver->getIsAudioInputPresent()) {
-		driver->logger->notice("NO AUDIO STREAM IS PRESENT! We can still proceed, but mouth shapes won't be informed by audible speech.");
+	try {
+		driver->logger->debug1("Media Demuxer Thread alive!");
+		if(!driver->getIsAudioInputPresent()) {
+			driver->logger->notice("NO AUDIO STREAM IS PRESENT! We can still proceed, but mouth shapes won't be informed by audible speech.");
+		}
+		int ret = driver->innerDemuxerLoop();
+		driver->logger->debug1("Media Demuxer Thread quitting...");
+		return ret;
+	} catch(exception &e) {
+		driver->logger->emerg("Uncaught exception in worker thread: %s\n", e.what());
+		driver->status->setEmergency();
 	}
-	int ret = driver->innerDemuxerLoop();
-	driver->logger->debug1("Media Demuxer Thread quitting...");
-	return ret;
+	return 1;
 }
 
 int FFmpegDriver::innerDemuxerLoop(void) {
