@@ -38,8 +38,26 @@ namespace YerFace {
 
 #else
 
-#define YerFace_MutexLock(X) do { if(SDL_LockMutex(X) != 0) { throw runtime_error("Failed to lock mutex."); } } while(0)
-#define YerFace_MutexUnlock(X) do { if(SDL_UnlockMutex(X) != 0) { throw runtime_error("Failed to unlock mutex."); } } while(0)
+#define YerFace_MutexLock(X) do {														\
+	int mutexStatus = SDL_MUTEX_TIMEDOUT;												\
+	Uint32 mutexStartLock = SDL_GetTicks();												\
+	while(mutexStatus == SDL_MUTEX_TIMEDOUT) {											\
+		mutexStatus = SDL_TryLockMutex(X);												\
+		if(mutexStatus == -1) {															\
+			throw runtime_error("Failed to lock mutex.");								\
+		} else if(mutexStatus == SDL_MUTEX_TIMEDOUT) {									\
+			if(SDL_GetTicks() - mutexStartLock > 4000) {								\
+				throw runtime_error("Break glass! Mutex lock timed out; possible deadlock. (This was probably caused by an earlier error."); \
+			}																			\
+		}																				\
+	}																					\
+} while(0)
+
+#define YerFace_MutexUnlock(X) do {						\
+	if(SDL_UnlockMutex(X) != 0) {						\
+		throw runtime_error("Failed to unlock mutex.");	\
+	}													\
+} while(0)
 
 #endif
 
