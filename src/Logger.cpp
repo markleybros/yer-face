@@ -181,13 +181,12 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 		if(colorsEligible == LOG_COLORS_CONSOLE_ELIGIBILITY_UNKNOWN) {
 			if(isatty(fileno(myOutFile))) {
 				#ifdef WIN32
+				colorsEligible = LOG_COLORS_CONSOLE_INELIGIBLE;
 				if(outFile == stderr) {
 					myWinConsole = GetStdHandle(STD_ERROR_HANDLE);
-				}
-				if(myWinConsole != NULL && myWinConsole != INVALID_HANDLE_VALUE) {
-					colorsEligible = LOG_COLORS_CONSOLE_ELIGIBLE;
-				} else {
-					colorsEligible = LOG_COLORS_CONSOLE_INELIGIBLE;
+					if(myWinConsole != NULL && myWinConsole != INVALID_HANDLE_VALUE) {
+						colorsEligible = LOG_COLORS_CONSOLE_ELIGIBLE;
+					}
 				}
 				#else
 				colorsEligible = LOG_COLORS_CONSOLE_ELIGIBLE;
@@ -218,7 +217,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	time_t now_time_t = (time_t)now_sec;
 	uint64_t millis = now_milli % 1000;
 	struct tm myTm;
-	my_localtime(&now_time_t, &myTm);
+	my_localtime(&now_time_t, &myTm); // This is a platform-dependent macro, see above.
 	char timeStringIntermediate[64];
 	strftime(timeStringIntermediate, sizeof(timeStringIntermediate), "%F %H:%M:%S", &myTm);
 	char timeStringC[128];
@@ -230,33 +229,29 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 
 	// Dump the line -- platform dependent
 	#ifdef WIN32
-	YerFace_MutexLock(staticMutex);
 
+	//Concatenate and validate a format string prefix.
+	string prefixFormat = "[" + timeString + "] " + severityString + ": " + name + ": ";
+	if(prefixFormat.find('%') != string::npos) {
+		throw logic_error("Logger error, log line prefix is invalid!");
+	}
+
+	//Assemble the final format string and send it to the output target.
+	string finalFormat = prefixFormat + originalFormat;
+
+	YerFace_MutexLock(staticMutex);
 	if(myColorMode == LOG_COLORS_ON) {
 		myWinConsole = GetStdHandle(STD_ERROR_HANDLE);
-	}
-
-	WORD resetColors = CONSOLE_COLOR_FOREGROUND_WHITE | CONSOLE_COLOR_BACKGROUND_BLACK;
-
-	if(myColorMode == LOG_COLORS_ON) {
-		SetConsoleTextAttribute(myWinConsole, resetColors);
-	}
-	fprintf(myOutFile, "%s", ("[" + timeString + "] ").c_str());
-
-	if(myColorMode == LOG_COLORS_ON) {
 		SetConsoleTextAttribute(myWinConsole, getSeverityStringConsoleCode(severity));
 	}
-	fprintf(myOutFile, "%s", (severityString + ": " + name + ": ").c_str());
-
-	vfprintf(myOutFile, originalFormat.c_str(), args);
-
+	vfprintf(myOutFile, finalFormat.c_str(), args);
 	if(myColorMode == LOG_COLORS_ON) {
-		SetConsoleTextAttribute(myWinConsole, resetColors);
+		SetConsoleTextAttribute(myWinConsole, CONSOLE_COLOR_FOREGROUND_WHITE | CONSOLE_COLOR_BACKGROUND_BLACK);
 	}
 	fprintf(myOutFile, "\n");
-
 	YerFace_MutexUnlock(staticMutex);
-	#else
+
+	#else // End WIN32, Begin Non-WIN32
 
 	string colorCode = "";
 	if(myColorMode == LOG_COLORS_ON) {
@@ -278,7 +273,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	vfprintf(myOutFile, finalFormat.c_str(), args);
 	YerFace_MutexUnlock(staticMutex);
 
-	#endif
+	#endif // End Non-WIN32
 }
 
 void Logger::setLoggingTarget(std::string filePath) {
