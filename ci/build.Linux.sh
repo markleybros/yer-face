@@ -14,17 +14,21 @@ _log "Starting up..."
 _log "Base path is: ${BASEPATH}"
 cd "${BASEPATH}"
 
+if [ -z "${CMAKE_BUILD_TYPE}" ]; then
+	CMAKE_BUILD_TYPE=Release
+fi
+
 _log "Setting up build directory..."
 rm -rf build
 mkdir -p build
 cd build
 
 _log "Configuring..."
-cmake ..
+cmake -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" ..
 VERSION_STRING="$(cat "${BASEPATH}/build/VersionString")"
 _log "Resolved version string: ${VERSION_STRING}"
 _log "Compiling..."
-cmake --build . --config Release -- -j 8
+cmake --build . -- -j 8
 _log "Staging installation..."
 make install DESTDIR=AppDir
 
