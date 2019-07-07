@@ -38,7 +38,11 @@ static constexpr cstr portableBasename(cstr str) {
 	return portableBasename(str, str);
 }
 
+#ifdef WIN32
+#define YERFACE_FILE portableBasename(__FILE__)
+#else
 #define YERFACE_FILE ({constexpr cstr sf__ {portableBasename(__FILE__)}; sf__;})
+#endif
 
 #define YerFace_MutexLock_Trivial(X) do {							\
 	if(SDL_LockMutex(X) != 0) {										\
