@@ -146,7 +146,7 @@ public:
 class FFmpegDriver {
 public:
 	FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions);
-	~FFmpegDriver();
+	~FFmpegDriver() noexcept(false);
 	void openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string inputAudioChannelMap, bool tryAudio);
 	void openOutputMedia(string outFile);
 	void setVideoCaptureWorkerPool(WorkerPool *workerPool);

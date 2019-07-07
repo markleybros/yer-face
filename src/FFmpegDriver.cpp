@@ -96,7 +96,7 @@ FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool my
 	logger->debug1("FFmpegDriver object constructed and ready to go! Low Latency mode is %s.", lowLatency ? "ENABLED" : "DISABLED");
 }
 
-FFmpegDriver::~FFmpegDriver() {
+FFmpegDriver::~FFmpegDriver() noexcept(false) {
 	logger->debug1("FFmpegDriver object destructing...");
 	destroyDemuxerThread();
 
@@ -1114,6 +1114,23 @@ void FFmpegDriver::logAVCallback(void *ptr, int level, const char *fmt, va_list 
 	}
 
 	//Build up the log line.
+	if(logBuffer == "") {
+		char intermediateClassPrefixBufferA[512];
+		char intermediateClassPrefixBufferB[512];
+		intermediateClassPrefixBufferA[0] = '\0';
+		intermediateClassPrefixBufferB[0] = '\0';
+		AVClass *avc = ptr ? *(AVClass **)ptr : NULL;
+		if(avc != NULL) {
+			if(avc->parent_log_context_offset) {
+				AVClass** parent = *(AVClass ***) (((uint8_t *)ptr) + avc->parent_log_context_offset);
+				if(parent && *parent) {
+					snprintf(intermediateClassPrefixBufferA, sizeof(intermediateClassPrefixBufferA), "[%s @ %p] ", (*parent)->item_name(parent), parent);
+				}
+			}
+			snprintf(intermediateClassPrefixBufferB, sizeof(intermediateClassPrefixBufferB), "[%s @ %p] ", avc->item_name(ptr), ptr);
+		}
+		logBuffer += (string)intermediateClassPrefixBufferA + (string)intermediateClassPrefixBufferB;
+	}
 	char intermediateBuffer[512];
 	vsnprintf(intermediateBuffer, sizeof(intermediateBuffer), fmt, args);
 	logBuffer += (string)intermediateBuffer;
