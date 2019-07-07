@@ -20,7 +20,7 @@ Status::Status(bool myLowLatency) {
 	previewDebugDensity = 0;
 }
 
-Status::~Status() {
+Status::~Status() noexcept(false) {
 	logger->debug1("Status object destructing...");
 	SDL_DestroyMutex(myMutex);
 	delete logger;
@@ -28,8 +28,10 @@ Status::~Status() {
 
 void Status::setEmergency(void) {
 	YerFace_MutexLock(myMutex);
+	if(!emergency) {
+		logger->emerg("Initiated Emergency Stop");
+	}
 	emergency = true;
-	logger->emerg("Initiated Emergency Stop");
 	setIsRunning(false);
 	YerFace_MutexUnlock(myMutex);
 }
@@ -43,8 +45,10 @@ bool Status::getEmergency(void) {
 
 void Status::setIsRunning(bool newIsRunning) {
 	YerFace_MutexLock(myMutex);
+	if(newIsRunning != isRunning) {
+		logger->info("Running is set to %s...", newIsRunning ? "TRUE" : "FALSE");
+	}
 	isRunning = newIsRunning;
-	logger->info("Running is set to %s...", isRunning ? "TRUE" : "FALSE");
 	YerFace_MutexUnlock(myMutex);
 }
 

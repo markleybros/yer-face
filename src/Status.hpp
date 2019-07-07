@@ -27,7 +27,7 @@ enum PreviewPositionInFrameDirection {
 class Status {
 public:
 	Status(bool myLowLatency);
-	~Status();
+	~Status() noexcept(false);
 	void setEmergency(void);
 	bool getEmergency(void);
 	void setIsRunning(bool newisRunning);

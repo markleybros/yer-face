@@ -32,7 +32,7 @@ Metrics::Metrics(json config, const char *myName, bool myMetricIsFrames) {
 	logger->debug1("Metrics object constructed and ready to go!");
 }
 
-Metrics::~Metrics() {
+Metrics::~Metrics() noexcept(false) {
 	logger->debug1("Metrics object destructing...");
 	logReportNow("FINAL REPORT: ");
 	SDL_DestroyMutex(myMutex);

@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
 	try {
 		return yerface(argc, argv);
 	} catch(exception &e) {
-		fprintf(stderr, "Uncaught exception in parent thread: %s\n", e.what());
+		fprintf(stderr, "\n\nUncaught exception in parent thread: %s\n\n\n", e.what());
 	}
 	return 1;
 }
@@ -398,28 +398,32 @@ int yerface(int argc, char *argv[]) {
 	}
 
 	//Join worker thread.
-	delete videoCaptureWorkerPool;
+	YerFace_CarefullyDelete(logger, status, videoCaptureWorkerPool);
 
 	//Cleanup.
 	if(imageSequence != NULL) {
-		delete imageSequence;
+		YerFace_CarefullyDelete(logger, status, imageSequence);
 	}
-	delete eventLogger;
+	YerFace_CarefullyDelete(logger, status, eventLogger);
 	if(sphinxDriver != NULL) {
 		delete sphinxDriver;
 	}
-	delete outputDriver;
-	delete faceMapper;
-	delete faceTracker;
-	delete faceDetector;
-	delete previewHUD;
-	delete frameServer;
-	delete ffmpegDriver;
-	delete sdlDriver;
-	delete metrics;
-	delete status;
-	logger->notice("Goodbye!");
-	delete logger;
+	YerFace_CarefullyDelete(logger, status, outputDriver);
+	YerFace_CarefullyDelete(logger, status, faceMapper);
+	YerFace_CarefullyDelete(logger, status, faceTracker);
+	YerFace_CarefullyDelete(logger, status, faceDetector);
+	YerFace_CarefullyDelete(logger, status, previewHUD);
+	YerFace_CarefullyDelete(logger, status, frameServer);
+	YerFace_CarefullyDelete(logger, status, ffmpegDriver);
+	YerFace_CarefullyDelete(logger, status, sdlDriver);
+	YerFace_CarefullyDelete(logger, status, metrics);
+	YerFace_CarefullyDelete_NoStatus(logger, status);
+	try {
+		logger->notice("Goodbye!");
+		delete logger;
+	} catch(exception &e) {
+		fprintf(stderr, "Logger Destructor exception: %s\n", e.what());
+	}
 
 	// If we previously opened a file as a logging target,
 	// setting a new logging target will force the old file to be closed.

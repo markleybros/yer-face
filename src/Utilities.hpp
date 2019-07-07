@@ -36,7 +36,7 @@ namespace YerFace {
 	}													\
 } while(0)
 
-#else
+#else // End Mutex Debugging Macros, Begin Regular Mutex Macros
 
 #define YerFace_MutexLock(X) do {														\
 	int mutexStatus = SDL_MUTEX_TIMEDOUT;												\
@@ -47,7 +47,8 @@ namespace YerFace {
 			throw runtime_error("Failed to lock mutex.");								\
 		} else if(mutexStatus == SDL_MUTEX_TIMEDOUT) {									\
 			if(SDL_GetTicks() - mutexStartLock > 4000) {								\
-				throw runtime_error("Break glass! Mutex lock timed out; possible deadlock. (This was probably caused by an earlier error."); \
+				throw runtime_error("Break glass! Mutex lock timed out; possible "		\
+					"deadlock. (This was probably caused by an earlier exception!!!)");	\
 			}																			\
 		}																				\
 	}																					\
@@ -59,13 +60,30 @@ namespace YerFace {
 	}													\
 } while(0)
 
-#endif
+#endif // End Regular Mutex Macros
 
 #ifdef WIN32
 #define YERFACE_PATH_SEP "\\"
 #else
 #define YERFACE_PATH_SEP "/"
 #endif
+
+#define YerFace_CarefullyDelete(logger, status, x) do {					\
+	try {																\
+		delete x;														\
+	} catch(exception &e) {												\
+		logger->emerg("%s Destructor exception: %s\n", #x, e.what());	\
+		status->setEmergency();											\
+	}																	\
+} while(0)
+
+#define YerFace_CarefullyDelete_NoStatus(logger, x) do {				\
+	try {																\
+		delete x;														\
+	} catch(exception &e) {												\
+		logger->emerg("%s Destructor exception: %s\n", #x, e.what());	\
+	}																	\
+} while(0)
 
 class TimeIntervalComparison {
 public:

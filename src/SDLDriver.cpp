@@ -114,7 +114,7 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	logger->debug1("SDLDriver object constructed and ready to go!");
 }
 
-SDLDriver::~SDLDriver() {
+SDLDriver::~SDLDriver() noexcept(false) {
 	logger->debug1("SDLDriver object destructing...");
 	if(audioDevice.opened) {
 		SDL_PauseAudioDevice(audioDevice.deviceID, 1);

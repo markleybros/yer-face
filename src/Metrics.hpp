@@ -25,7 +25,7 @@ class FrameServer;
 class Metrics {
 public:
 	Metrics(json config, const char *myName, bool myMetricIsFrames = false);
-	~Metrics();
+	~Metrics() noexcept(false);
 	MetricsTick startClock(void);
 	void endClock(MetricsTick tick);
 	double getAverageTimeSeconds(void);
