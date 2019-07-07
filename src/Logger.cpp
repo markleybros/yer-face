@@ -88,92 +88,102 @@ Logger::Logger(const char *myName) {
 void Logger::debug4(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_DEBUG4, fmt, args);
+	svlog(name, LOG_SEVERITY_DEBUG4, fmt, args);
 	va_end(args);
 }
 
 void Logger::debug3(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_DEBUG3, fmt, args);
+	svlog(name, LOG_SEVERITY_DEBUG3, fmt, args);
 	va_end(args);
 }
 
 void Logger::debug2(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_DEBUG2, fmt, args);
+	svlog(name, LOG_SEVERITY_DEBUG2, fmt, args);
 	va_end(args);
 }
 
 void Logger::debug1(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_DEBUG1, fmt, args);
+	svlog(name, LOG_SEVERITY_DEBUG1, fmt, args);
 	va_end(args);
 }
 
 void Logger::info(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_INFO, fmt, args);
+	svlog(name, LOG_SEVERITY_INFO, fmt, args);
 	va_end(args);
 }
 
 void Logger::notice(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_NOTICE, fmt, args);
+	svlog(name, LOG_SEVERITY_NOTICE, fmt, args);
 	va_end(args);
 }
 
 void Logger::warning(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_WARNING, fmt, args);
+	svlog(name, LOG_SEVERITY_WARNING, fmt, args);
 	va_end(args);
 }
 
 void Logger::err(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_ERR, fmt, args);
+	svlog(name, LOG_SEVERITY_ERR, fmt, args);
 	va_end(args);
 }
 
 void Logger::crit(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_CRIT, fmt, args);
+	svlog(name, LOG_SEVERITY_CRIT, fmt, args);
 	va_end(args);
 }
 
 void Logger::alert(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_ALERT, fmt, args);
+	svlog(name, LOG_SEVERITY_ALERT, fmt, args);
 	va_end(args);
 }
 
 void Logger::emerg(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(LOG_SEVERITY_EMERG, fmt, args);
+	svlog(name, LOG_SEVERITY_EMERG, fmt, args);
 	va_end(args);
 }
 
 void Logger::log(LogMessageSeverity severity, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	vlog(severity, fmt, args);
+	svlog(name, severity, fmt, args);
 	va_end(args);
 }
 
-void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
+void Logger::slog(std::string moduleName, LogMessageSeverity severity, const char *fmt, ...) {
+	va_list args;
+	va_start(args, fmt);
+	svlog(moduleName, severity, fmt, args);
+	va_end(args);
+}
+
+void Logger::svlog(std::string moduleName, LogMessageSeverity severity, const char *fmt, va_list args) {
+	if(moduleName.find('%') != string::npos) {
+		throw invalid_argument("Logger moduleName must not contain a percent sign.");
+	}
 	#ifdef WIN32
 	HANDLE myWinConsole = NULL;
 	#endif
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 	LogMessageSeverity mySeverityFilter = severityFilter;
 	FILE *myOutFile = outFile;
 	LogColorModes myColorMode = colorMode;
@@ -201,7 +211,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 			myColorMode = LOG_COLORS_OFF;
 		}
 	}
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 
 	//Drop messages according to the logging filter.
 	if(severity > mySeverityFilter) {
@@ -231,7 +241,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	#ifdef WIN32
 
 	//Concatenate and validate a format string prefix.
-	string prefixFormat = "[" + timeString + "] " + severityString + ": " + name + ": ";
+	string prefixFormat = "[" + timeString + "] " + severityString + ": " + moduleName + ": ";
 	if(prefixFormat.find('%') != string::npos) {
 		throw logic_error("Logger error, log line prefix is invalid!");
 	}
@@ -239,7 +249,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	//Assemble the final format string and send it to the output target.
 	string finalFormat = prefixFormat + originalFormat;
 
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 	if(myColorMode == LOG_COLORS_ON) {
 		myWinConsole = GetStdHandle(STD_ERROR_HANDLE);
 		SetConsoleTextAttribute(myWinConsole, getSeverityStringConsoleCode(severity));
@@ -249,7 +259,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 		SetConsoleTextAttribute(myWinConsole, CONSOLE_COLOR_FOREGROUND_WHITE | CONSOLE_COLOR_BACKGROUND_BLACK);
 	}
 	fprintf(myOutFile, "\n");
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 
 	#else // End WIN32, Begin Non-WIN32
 
@@ -259,7 +269,7 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 	}
 
 	//Concatenate and validate a format string prefix.
-	string prefixFormat = "[" + timeString + "] " + colorCode + severityString + ": " + name + ": ";
+	string prefixFormat = "[" + timeString + "] " + colorCode + severityString + ": " + moduleName + ": ";
 	if(prefixFormat.find('%') != string::npos) {
 		throw logic_error("Logger error, log line prefix is invalid!");
 	}
@@ -269,15 +279,15 @@ void Logger::vlog(LogMessageSeverity severity, const char *fmt, va_list args) {
 
 	//Assemble the final format string and send it to the output target.
 	string finalFormat = prefixFormat + originalFormat + suffixFormat;
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 	vfprintf(myOutFile, finalFormat.c_str(), args);
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 
 	#endif // End Non-WIN32
 }
 
 void Logger::setLoggingTarget(std::string filePath) {
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 
 	// If we previously opened a file as a logging target,
 	// setting a new logging target will force the old file to be closed.
@@ -296,11 +306,11 @@ void Logger::setLoggingTarget(std::string filePath) {
 	// Remember that we "own" this file, so it can be closed later.
 	outFileOpened = true;
 
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 }
 
 void Logger::setLoggingTarget(FILE *file) {
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 
 	// If we own the old file handle, we need to close it before losing track of it.
 	if(outFileOpened) {
@@ -313,23 +323,23 @@ void Logger::setLoggingTarget(FILE *file) {
 
 	// Until we've tested the output device, we don't know if it's eligible for output colorization.
 	colorsEligible = LOG_COLORS_CONSOLE_ELIGIBILITY_UNKNOWN;
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 }
 
 void Logger::setLoggingColorMode(LogColorModes mode) {
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 	colorMode = mode;
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 }
 
 void Logger::setLoggingFilter(LogMessageSeverity severity) {
-	YerFace_MutexLock(staticMutex);
+	YerFace_MutexLock_Trivial(staticMutex);
 	if(severity > LOG_SEVERITY_MAX) {
 		severityFilter = LOG_SEVERITY_MAX;
 	} else {
 		severityFilter = severity;
 	}
-	YerFace_MutexUnlock(staticMutex);
+	YerFace_MutexUnlock_Trivial(staticMutex);
 }
 
 std::string Logger::getSeverityString(LogMessageSeverity severity) {

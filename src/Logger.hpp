@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Utilities.hpp"
+
 #include "SDL.h"
 
 #include <cstdarg>
@@ -61,6 +63,7 @@ public:
 	void alert(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 	void emerg(const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 	void log(LogMessageSeverity severity, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+	static void slog(std::string moduleName, LogMessageSeverity severity, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 	#else
 	void debug4(const char *fmt, ...);
 	void debug3(const char *fmt, ...);
@@ -74,15 +77,16 @@ public:
 	void alert(const char *fmt, ...);
 	void emerg(const char *fmt, ...);
 	void log(LogMessageSeverity severity, const char *fmt, ...);
+	static void slog(std::string moduleName, LogMessageSeverity severity, const char *fmt, ...);
 	#endif
-	void vlog(LogMessageSeverity severity, const char *fmt, va_list args);
+	static void svlog(std::string moduleName, LogMessageSeverity severity, const char *fmt, va_list args);
 	static void setLoggingTarget(std::string filePath);
 	static void setLoggingTarget(FILE *file);
 	static void setLoggingColorMode(LogColorModes mode);
 	static void setLoggingFilter(LogMessageSeverity severity);
 	static std::string getSeverityString(LogMessageSeverity severity);
 private:
-	LogConsoleCode getSeverityStringConsoleCode(LogMessageSeverity severity);
+	static LogConsoleCode getSeverityStringConsoleCode(LogMessageSeverity severity);
 
 	std::string name;
 	static LogMessageSeverity severityFilter;
@@ -92,5 +96,8 @@ private:
 	static LogColorEligibility colorsEligible;
 	static SDL_mutex *staticMutex;
 };
+
+#define YerFace_SLog(moduleName, severity, fmt, ...) \
+	Logger::slog(moduleName, severity, "%s:%d: " fmt, YERFACE_FILE, __LINE__, __VA_ARGS__)
 
 }; //namespace YerFace

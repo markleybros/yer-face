@@ -9,64 +9,90 @@
 #include <exception>
 #include <vector>
 #include <fstream>
+#include <chrono>
 
 using namespace std;
 using json = nlohmann::json;
 
 namespace YerFace {
 
-//#define YERFACE_MUTEX_DEBUG
-
-#ifdef YERFACE_MUTEX_DEBUG
-
-#include "pthread.h"
-
-#define YerFace_MutexLock(X) do {						\
-	fprintf(stderr, "%s:%d: THREAD %lu ATTEMPTING MUTEX LOCK %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
-	if(SDL_LockMutex(X) != 0) {							\
-		throw runtime_error("Failed to lock mutex.");	\
-	}													\
-	fprintf(stderr, "%s:%d: THREAD %lu SUCCESSFULLY LOCKED MUTEX %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
-} while(0)
-
-#define YerFace_MutexUnlock(X) do {						\
-	fprintf(stderr, "%s:%d: THREAD %lu UNLOCKING MUTEX %s (0x%lX)\n", __FILE__, __LINE__, pthread_self(), (#X), (long unsigned int)(X));	\
-	if(SDL_UnlockMutex(X) != 0) {						\
-		throw runtime_error("Failed to unlock mutex.");	\
-	}													\
-} while(0)
-
-#else // End Mutex Debugging Macros, Begin Regular Mutex Macros
-
-#define YerFace_MutexLock(X) do {														\
-	int mutexStatus = SDL_MUTEX_TIMEDOUT;												\
-	Uint32 mutexStartLock = SDL_GetTicks();												\
-	while(mutexStatus == SDL_MUTEX_TIMEDOUT) {											\
-		mutexStatus = SDL_TryLockMutex(X);												\
-		if(mutexStatus == -1) {															\
-			throw runtime_error("Failed to lock mutex.");								\
-		} else if(mutexStatus == SDL_MUTEX_TIMEDOUT) {									\
-			if(SDL_GetTicks() - mutexStartLock > 4000) {								\
-				throw runtime_error("Break glass! Mutex lock timed out; possible "		\
-					"deadlock. (This was probably caused by an earlier exception!!!)");	\
-			}																			\
-		}																				\
-	}																					\
-} while(0)
-
-#define YerFace_MutexUnlock(X) do {						\
-	if(SDL_UnlockMutex(X) != 0) {						\
-		throw runtime_error("Failed to unlock mutex.");	\
-	}													\
-} while(0)
-
-#endif // End Regular Mutex Macros
-
 #ifdef WIN32
 #define YERFACE_PATH_SEP "\\"
 #else
 #define YERFACE_PATH_SEP "/"
 #endif
+
+using cstr = const char * const;
+
+static constexpr cstr portableBasename(cstr str, cstr lastSep) {
+	return
+		// If str is pointing to the end of the string, return lastSep
+		*str == '\0' ? lastSep :
+			// Otherwise, if str is pointing to a valid path separator, remember and recurse.
+			(*str == '/' || *str =='\\') ? portableBasename(str + 1, str + 1) :
+				// Otherwise, leave the last known valid separator alone and recurse.
+				portableBasename(str + 1, lastSep);
+}
+
+static constexpr cstr portableBasename(cstr str) {
+	return portableBasename(str, str);
+}
+
+#define YERFACE_FILE ({constexpr cstr sf__ {portableBasename(__FILE__)}; sf__;})
+
+#define YerFace_MutexLock_Trivial(X) do {							\
+	if(SDL_LockMutex(X) != 0) {										\
+		throw runtime_error("Failed to lock mutex trivially.");		\
+	}																\
+} while(0)
+
+#define YerFace_MutexUnlock_Trivial(X) do {							\
+	if(SDL_UnlockMutex(X) != 0) {									\
+		throw runtime_error("Failed to unlock mutex trivially.");	\
+	}																\
+} while(0)
+
+//// YERFACE_MUTEX_TRIVIAL replaces all mutex operations with their trivial counterparts.
+// #define YERFACE_MUTEX_TRIVIAL
+
+#define YerFace_MutexLock YerFace_MutexLock_Trivial
+#define YerFace_MutexUnlock YerFace_MutexUnlock_Trivial
+
+#ifdef YERFACE_MUTEX_TRIVIAL
+
+#else // End Trivial mutex macros, begin regular mutex macros
+
+#define YerFace_MutexLock(X) do {														\
+	int _mutexStatus = SDL_MUTEX_TIMEDOUT;												\
+	uint64_t _mutexStart = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); \
+	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Attempting lock on mutex %s (%p) ...", #X, X);	\
+	while(_mutexStatus == SDL_MUTEX_TIMEDOUT) {											\
+		_mutexStatus = SDL_TryLockMutex(X);												\
+		if(_mutexStatus == -1) {															\
+			YerFace_SLog("Utilities", LOG_SEVERITY_CRIT, "Failed to lock mutex %s (%p). Error was: %s", #X, X, SDL_GetError());	\
+			throw runtime_error("Failed to lock mutex.");								\
+		} else if(_mutexStatus == SDL_MUTEX_TIMEDOUT) {									\
+			uint64_t _mutexEnd = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); \
+			YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Lock attempt on mutex %s (%p) timed out...", #X, X);	\
+			if(_mutexEnd - _mutexStart > 4000) {								\
+				YerFace_SLog("Utilities", LOG_SEVERITY_CRIT, "Lock attempt on mutex %s (%p) timed out! No more retries...", #X, X);	\
+				throw runtime_error("Break glass! Mutex lock timed out; possible "		\
+					"deadlock. (This was probably caused by an earlier exception!!!)");	\
+			}																			\
+		}																				\
+	}																					\
+	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Successfully locked mutex %s (%p) ...", #X, X);	\
+} while(0)
+
+#define YerFace_MutexUnlock(X) do {						\
+	if(SDL_UnlockMutex(X) != 0) {						\
+		YerFace_SLog("Utilities", LOG_SEVERITY_CRIT, "Failed to unlock mutex %s (%p). Error was: %s", #X, X, SDL_GetError());	\
+		throw runtime_error("Failed to unlock mutex.");	\
+	}													\
+	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Successfully unlocked mutex %s (%p) ...", #X, X);	\
+} while(0)
+
+#endif // End regular mutex macros
 
 #define YerFace_CarefullyDelete(logger, status, x) do {					\
 	try {																\
@@ -93,6 +119,8 @@ public:
 	bool doesAOccurAfterB;
 	bool doesAStartAfterB;
 };
+
+class Logger;
 
 class Utilities {
 public:

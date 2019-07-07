@@ -14,6 +14,9 @@ Status::Status(bool myLowLatency) {
 	}
 	logger = new Logger("Status");
 	logger->debug1("Status object constructed and ready to go!");
+	emergency = false;
+	isRunning = false;
+	isPaused = true;
 	setIsRunning(true);
 	setIsPaused(false);
 	setPreviewPositionInFrame(BottomRight);

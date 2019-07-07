@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
 	try {
 		return yerface(argc, argv);
 	} catch(exception &e) {
-		fprintf(stderr, "\n\nUncaught exception in parent thread: %s\n\n\n", e.what());
+		Logger::slog("Main", LOG_SEVERITY_CRIT, "Uncaught exception in parent thread: %s", e.what());
 	}
 	return 1;
 }
@@ -422,7 +422,7 @@ int yerface(int argc, char *argv[]) {
 		logger->notice("Goodbye!");
 		delete logger;
 	} catch(exception &e) {
-		fprintf(stderr, "Logger Destructor exception: %s\n", e.what());
+		Logger::slog("YerFace", LOG_SEVERITY_EMERG, "Logger Destructor exception: %s", e.what());
 	}
 
 	// If we previously opened a file as a logging target,
