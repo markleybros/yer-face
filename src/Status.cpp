@@ -13,23 +13,45 @@ Status::Status(bool myLowLatency) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	logger = new Logger("Status");
-	logger->debug("Status object constructed and ready to go!");
+	logger->debug1("Status object constructed and ready to go!");
+	emergency = false;
+	isRunning = false;
+	isPaused = true;
 	setIsRunning(true);
 	setIsPaused(false);
 	setPreviewPositionInFrame(BottomRight);
 	previewDebugDensity = 0;
 }
 
-Status::~Status() {
-	logger->debug("Status object destructing...");
+Status::~Status() noexcept(false) {
+	logger->debug1("Status object destructing...");
 	SDL_DestroyMutex(myMutex);
 	delete logger;
 }
 
+void Status::setEmergency(void) {
+	YerFace_MutexLock(myMutex);
+	if(!emergency) {
+		logger->emerg("Initiated Emergency Stop");
+	}
+	emergency = true;
+	setIsRunning(false);
+	YerFace_MutexUnlock(myMutex);
+}
+
+bool Status::getEmergency(void) {
+	YerFace_MutexLock(myMutex);
+	bool status = emergency;
+	YerFace_MutexUnlock(myMutex);
+	return status;
+}
+
 void Status::setIsRunning(bool newIsRunning) {
 	YerFace_MutexLock(myMutex);
+	if(newIsRunning != isRunning) {
+		logger->info("Running is set to %s...", newIsRunning ? "TRUE" : "FALSE");
+	}
 	isRunning = newIsRunning;
-	logger->info("Running is set to %s...", isRunning ? "TRUE" : "FALSE");
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -43,7 +65,7 @@ bool Status::getIsRunning(void) {
 void Status::setIsPaused(bool newIsPaused) {
 	YerFace_MutexLock(myMutex);
 	if(newIsPaused && lowLatency) {
-		logger->warn("Processing cannot be set to PAUSED in lowLatency mode.");
+		logger->warning("Processing cannot be set to PAUSED in lowLatency mode.");
 		YerFace_MutexUnlock(myMutex);
 		return;
 	}
@@ -114,7 +136,7 @@ void Status::setPreviewDebugDensity(int newDensity) {
 	} else {
 		previewDebugDensity = newDensity;
 	}
-	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
+	logger->info("Preview Debug Density set to %d", previewDebugDensity);
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -125,7 +147,7 @@ int Status::incrementPreviewDebugDensity(void) {
 		previewDebugDensity = 0;
 	}
 	int status = previewDebugDensity;
-	logger->debug("Preview Debug Density set to %d", previewDebugDensity);
+	logger->info("Preview Debug Density set to %d", previewDebugDensity);
 	YerFace_MutexUnlock(myMutex);
 	return status;
 }

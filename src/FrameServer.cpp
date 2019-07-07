@@ -40,6 +40,7 @@ FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	metrics = new Metrics(config, "FrameServer");
 
 	draining = false;
+	workerPool = NULL;
 
 	WorkerPoolParameters workerPoolParameters;
 	workerPoolParameters.name = "FrameServer.Herder";
@@ -51,15 +52,15 @@ FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, this, workerPoolParameters);
 
-	logger->debug("FrameServer constructed and ready to go!");
+	logger->debug1("FrameServer constructed and ready to go!");
 }
 
 FrameServer::~FrameServer() noexcept(false) {
-	logger->debug("FrameServer object destructing...");
+	logger->debug1("FrameServer object destructing...");
 
 	YerFace_MutexLock(myMutex);
 	if(!draining) {
-		logger->warn("Was never set to draining! You should always drain the FrameServer before destructing it.");
+		logger->warning("Was never set to draining! You should always drain the FrameServer before destructing it.");
 		draining = true;
 	}
 	YerFace_MutexUnlock(myMutex);
@@ -68,7 +69,7 @@ FrameServer::~FrameServer() noexcept(false) {
 	
 	YerFace_MutexLock(myMutex);
 	if(frameStore.size() > 0) {
-		logger->warn("Frames are still sitting in the frame store! Draining did not complete!");
+		logger->err("Frames are still sitting in the frame store! Draining did not complete!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
@@ -111,7 +112,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	}
 
 	if(lowLatency && frameStore.size() >= YERFACE_FRAMESERVER_MAX_QUEUEDEPTH) {
-		logger->warn("FrameStore has hit the maximum allowable queue depth of %d! Main loop is now BLOCKED! If this happens a lot, consider some tuning.", YERFACE_FRAMESERVER_MAX_QUEUEDEPTH);
+		logger->err("FrameStore has hit the maximum allowable queue depth of %d! Main loop is now BLOCKED! If this happens a lot, consider some tuning.", YERFACE_FRAMESERVER_MAX_QUEUEDEPTH);
 		while(frameStore.size() >= YERFACE_FRAMESERVER_MAX_QUEUEDEPTH) {
 			YerFace_MutexUnlock(myMutex);
 			SDL_Delay(5);
@@ -146,7 +147,7 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 
 	static bool reportedScale = false;
 	if(!reportedScale) {
-		logger->debug("Scaled current frame <%dx%d> down to <%dx%d> for detection", frameSize.width, frameSize.height, workingFrame->detectionFrame.size().width, workingFrame->detectionFrame.size().height);
+		logger->debug1("Scaled current frame <%dx%d> down to <%dx%d> for detection", frameSize.width, frameSize.height, workingFrame->detectionFrame.size().width, workingFrame->detectionFrame.size().height);
 		reportedScale = true;
 	}
 
@@ -158,13 +159,15 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	}
 
 	frameStore[workingFrame->frameTimestamps.frameNumber] = workingFrame;
-	// logger->verbose("Inserted new working frame " YERFACE_FRAMENUMBER_FORMAT " into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
+	logger->debug4("Inserted new working frame " YERFACE_FRAMENUMBER_FORMAT " into frame store. Frame store size is now %lu", workingFrame->frameTimestamps.frameNumber, frameStore.size());
 
 	setFrameStatus(workingFrame->frameTimestamps, FRAME_STATUS_NEW);
 
 	metrics->endClock(tick);
 
-	workerPool->sendWorkerSignal();
+	if(workerPool != NULL) {
+		workerPool->sendWorkerSignal();
+	}
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -175,7 +178,14 @@ void FrameServer::setDraining(void) {
 		throw logic_error("Can't set draining while already draining!");
 	}
 	draining = true;
-	logger->verbose("Set to draining!");
+	logger->info("Set to draining!");
+
+	//Under rare circumstances, we may have already processed the entire frame queue before we get notification that we should set draining.
+	if(isDrained()) {
+		if(workerPool != NULL) {
+			workerPool->stopWorkerNow();
+		}
+	}
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -197,7 +207,7 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 	try {
 		frame = getWorkingFrame(frameNumber);
 	} catch(exception &e) {
-		logger->warn("Caught exception: %s ... Rethrowing!", e.what());
+		logger->err("Caught exception: %s ... Rethrowing!", e.what());
 		YerFace_MutexUnlock(myMutex);
 		throw;
 	}
@@ -215,7 +225,9 @@ void FrameServer::setWorkingFrameStatusCheckpoint(FrameNumber frameNumber, Worki
 		throw logic_error("Trying to set a checkpoint on a status for a frame, but the checkpoint was already set!");
 	}
 	frame->checkpoints[status][checkpointKey] = true;
-	workerPool->sendWorkerSignal();
+	if(workerPool != NULL) {
+		workerPool->sendWorkerSignal();
+	}
 	YerFace_MutexUnlock(myMutex);
 }
 
@@ -223,18 +235,21 @@ bool FrameServer::isDrained(void) {
 	bool drained;
 	YerFace_MutexLock(myMutex);
 	drained = draining && frameStore.size() == 0;
+	// logger->debug4("Drained? %s Draining? %s FrameStoreSize? %ld", drained ? "TRUE" : "FALSE", draining ? "TRUE" : "FALSE", frameStore.size());
 	YerFace_MutexUnlock(myMutex);
 	return drained;
 }
 
 void FrameServer::destroyFrame(FrameNumber frameNumber) {
-	// logger->verbose("Cleaning up GONE Frame #" YERFACE_FRAMENUMBER_FORMAT " ...", frameNumber);
+	logger->debug4("Cleaning up GONE Frame #" YERFACE_FRAMENUMBER_FORMAT " ...", frameNumber);
 	SDL_DestroyMutex(frameStore[frameNumber]->previewFrameMutex);
 	delete frameStore[frameNumber];
 	frameStore.erase(frameNumber);
 
 	if(isDrained()) {
-		workerPool->stopWorkerNow();
+		if(workerPool != NULL) {
+			workerPool->stopWorkerNow();
+		}
 	}
 }
 
@@ -242,7 +257,7 @@ void FrameServer::setFrameStatus(FrameTimestamps frameTimestamps, WorkingFrameSt
 	checkStatusValue(newStatus);
 	YerFace_MutexLock(myMutex);
 	frameStore[frameTimestamps.frameNumber]->status = newStatus;
-	// logger->verbose("Setting Frame #" YERFACE_FRAMENUMBER_FORMAT " Status to %d ...", frameTimestamps.frameNumber, newStatus);
+	logger->debug4("Setting Frame #" YERFACE_FRAMENUMBER_FORMAT " Status to %d ...", frameTimestamps.frameNumber, newStatus);
 	for(auto callback : onFrameStatusChangeCallbacks[newStatus]) {
 		callback.callback(callback.userdata, newStatus, frameTimestamps);
 	}
@@ -312,6 +327,9 @@ bool FrameServer::workerHandler(WorkerPoolWorker *worker) {
 
 void FrameServer::workerDeinitializer(WorkerPoolWorker *worker, void *usrPtr) {
 	FrameServer *self = (FrameServer *)worker->ptr;
+	if(self->status->getEmergency()) {
+		return;
+	}
 	YerFace_MutexLock(self->myMutex);
 	for(auto callback : self->onFrameServerDrainedCallbacks) {
 		callback.callback(callback.userdata);

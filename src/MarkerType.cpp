@@ -1,8 +1,6 @@
 
 #include "MarkerType.hpp"
 
-using namespace std;
-
 namespace YerFace {
 
 MarkerType::MarkerType() {

@@ -66,11 +66,11 @@ MarkerTracker::MarkerTracker(json config, MarkerType myMarkerType, FaceMapper *m
 
 	string loggerName = "MarkerTracker<" + (string)markerType.toString() + ">";
 	logger = new Logger(loggerName.c_str());
-	logger->debug("MarkerTracker object constructed and ready to go!");
+	logger->debug1("MarkerTracker object constructed and ready to go!");
 }
 
 MarkerTracker::~MarkerTracker() noexcept(false) {
-	logger->debug("MarkerTracker object destructing...");
+	logger->debug1("MarkerTracker object destructing...");
 	YerFace_MutexLock(myStaticMutex);
 	for(vector<MarkerTracker *>::iterator iterator = markerTrackers.begin(); iterator != markerTrackers.end(); ++iterator) {
 		if(*iterator == this) {
@@ -256,14 +256,14 @@ void MarkerTracker::calculate3dMarkerPoint(FrameNumber frameNumber, MarkerPoint 
 	Point3d rayOrigin = Point3d(0,0,0);
 	Vec3d rayVector = Vec3d(worldPoint.at<double>(0), worldPoint.at<double>(1), worldPoint.at<double>(2));
 	if(!Utilities::rayPlaneIntersection(intersection, rayOrigin, rayVector, facialPlane.planePoint, facialPlane.planeNormal)) {
-		logger->warn("Failed 3d ray/plane intersection with face plane! No update to 3d marker point.");
+		logger->err("Failed 3d ray/plane intersection with face plane! No update to 3d marker point.");
 		return;
 	}
 	Mat markerMat = (Mat_<double>(3, 1) << intersection.x, intersection.y, intersection.z);
 	markerMat = markerMat - facialPose.translationVectorInternal;
 	markerMat = facialPose.rotationMatrixInternal.inv() * markerMat;
 	markerPoint->point3d = Point3d(markerMat.at<double>(0), markerMat.at<double>(1), markerMat.at<double>(2));
-	// logger->verbose("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", markerPoint->point3d.x, markerPoint->point3d.y, markerPoint->point3d.z);
+	logger->debug4("Recovered approximate 3D position: <%.03f, %.03f, %.03f>", markerPoint->point3d.x, markerPoint->point3d.y, markerPoint->point3d.z);
 }
 
 void MarkerTracker::performMarkerPointValidationAndSmoothing(WorkingFrame *workingFrame, FrameNumber frameNumber, MarkerPoint *markerPoint) {
@@ -283,14 +283,14 @@ void MarkerTracker::performMarkerPointValidationAndSmoothing(WorkingFrame *worki
 	double distance;
 	if(previouslyReportedMarkerPoint.set) {
 		if(previouslyReportedMarkerPoint.timestamp.frameNumber >= frameTimestamps.frameNumber) {
-			logger->error("MarkerTracker is being fed frames out of order! This will wreak havoc with smoothing code.");
+			logger->crit("MarkerTracker is being fed frames out of order! This will wreak havoc with smoothing code.");
 		}
 
 		distance = Utilities::lineDistance(markerPoint->point3d, previouslyReportedMarkerPoint.point3d);
 		if(distance > (pointMotionHighRejectionThreshold * timeScale)) {
-			logger->warn("Dropping marker position due to high motion (%.02lf)!", distance);
+			logger->info("Dropping marker position due to high motion (%.02lf)!", distance);
 			if(markerPoint->timestamp.startTimestamp - previouslyReportedMarkerPoint.timestamp.startTimestamp >= markerRejectionResetAfterSeconds) {
-				logger->warn("Marker position has come back bad consistantly for %.02lf seconds! Unsetting the marker completely.", markerPoint->timestamp.startTimestamp - previouslyReportedMarkerPoint.timestamp.startTimestamp);
+				logger->notice("Marker position has come back bad consistantly for %.02lf seconds! Unsetting the marker completely.", markerPoint->timestamp.startTimestamp - previouslyReportedMarkerPoint.timestamp.startTimestamp);
 				previouslyReportedMarkerPoint.set = false;
 			}
 			*markerPoint = previouslyReportedMarkerPoint;

@@ -10,6 +10,7 @@ using namespace cv;
 namespace YerFace {
 
 PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer) {
+	workerPool = NULL;
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -49,17 +50,17 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("PreviewHUD object constructed and ready to go.");
+	logger->debug1("PreviewHUD object constructed and ready to go.");
 }
 
 PreviewHUD::~PreviewHUD() noexcept(false) {
-	logger->debug("PreviewHUD object destructing...");
+	logger->debug1("PreviewHUD object destructing...");
 
 	delete workerPool;
 
 	YerFace_MutexLock(myMutex);
 	if(pendingFrameNumbers.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+		logger->err("Frames are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
@@ -112,7 +113,7 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(frameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, frameNumber);
+		self->logger->debug4("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, frameNumber);
 		MetricsTick tick = self->metrics->startClock();
 
 		int density = self->status->getPreviewDebugDensity();
@@ -136,7 +137,7 @@ bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
 void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	PreviewHUD *self = (PreviewHUD *)userdata;
-	// self->logger->verbose("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
+	self->logger->debug4("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
@@ -144,7 +145,9 @@ void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 			YerFace_MutexLock(self->myMutex);
 			self->pendingFrameNumbers.push_back(frameNumber);
 			YerFace_MutexUnlock(self->myMutex);
-			self->workerPool->sendWorkerSignal();
+			if(self->workerPool != NULL) {
+				self->workerPool->sendWorkerSignal();
+			}
 			break;
 	}
 }

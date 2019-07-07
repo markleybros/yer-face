@@ -38,7 +38,7 @@ public:
 class SDLDriver {
 public:
 	SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
-	~SDLDriver();
+	~SDLDriver() noexcept(false);
 	SDLWindowRenderer createPreviewWindow(int width, int height, string windowTitle);
 	SDLWindowRenderer getPreviewWindow(void);
 	SDL_Texture *getPreviewTexture(cv::Size textureSize);

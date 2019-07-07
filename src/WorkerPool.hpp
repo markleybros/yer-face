@@ -11,11 +11,14 @@ using namespace std;
 
 namespace YerFace {
 
+class WorkerPool;
+
 class WorkerPoolWorker {
 public:
 	int num;
 	SDL_Thread *thread;
-	void *ptr, *self;
+	void *ptr;
+	WorkerPool *pool;
 };
 
 typedef function<void(WorkerPoolWorker *worker, void *ptr)> WorkerPoolWorkerInitializer;

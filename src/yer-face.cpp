@@ -39,16 +39,25 @@ string inAudioChannels;
 string inAudioRate;
 string inAudioCodec;
 
-string outAudioChannelMap;
+string inAudioChannelMap;
 
-string inEvents;
-string outData;
+string inEventData;
+
+string outEventData;
+string outVideo;
+string outLogFile;
+string outLogColors;
+string outLogColorsString = "";
+
 string previewImgSeq;
 bool lowLatency = false;
 bool headless = false;
-bool audioPreview = false;
+bool previewAudio = false;
 bool tryAudioInVideo = false;
 bool openInputAudio = false;
+bool stdinPipeUsed = false;
+
+int verbosity = 0, logSeverityFilter = LOG_SEVERITY_FILTERDEFAULT;
 
 json config = NULL;
 
@@ -105,19 +114,16 @@ int main(int argc, char *argv[]) {
 	try {
 		return yerface(argc, argv);
 	} catch(exception &e) {
-		fprintf(stderr, "Uncaught exception: %s\n", e.what());
+		Logger::slog("Main", LOG_SEVERITY_CRIT, "Uncaught exception in parent thread: %s", e.what());
 	}
 	return 1;
 }
 
 int yerface(int argc, char *argv[]) {
-	Logger::setLoggingFilter(SDL_LOG_PRIORITY_VERBOSE, SDL_LOG_CATEGORY_APPLICATION);
-	logger = new Logger("YerFace");
-
-	//Command line options.
+	//Command line options. NOTE: Remember to update the documentation when making changes here!
 	CommandLineParser parser(argc, argv,
-		"{help h||Usage message.}"
-		"{configFile C||Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file. Omit to search common locations.)}"
+		"{help h usage ?||Display command line usage documentation.}"
+		"{configFile||Required configuration file. (Indicate the full or relative path to your 'yer-face-config.json' file. Omit to search common locations.)}"
 		"{lowLatency||If true, will tweak behavior across the system to minimize latency. (Don't use this if the input is pre-recorded!)}"
 		"{inVideo||Video file, URL, or device to open. (Or '-' for STDIN.)}"
 		"{inVideoFormat||Tell libav to use a specific format to interpret the inVideo. Leave blank for auto-detection.}"
@@ -129,41 +135,54 @@ int yerface(int argc, char *argv[]) {
 		"{inAudioChannels||Tell libav to attempt a specific number of channels when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioRate||Tell libav to attempt a specific sample rate when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
-		"{outAudioChannelMap||Alter the audio channel mapping. Set to \"left\" to take only the left channel, \"right\" to take only the right channel, and leave blank for the default.}"
-		"{inEvents||Event replay file. (Previously generated outData, for re-processing recorded sessions.)}"
-		"{outData||Output file for generated performance capture data.}"
-		"{audioPreview||If true, will preview processed audio out the computer's sound device.}"
+		"{inAudioChannelMap||Alter the input audio channel mapping. Set to \"left\" to interpret only the left channel, \"right\" to interpret only the right channel, and leave blank for the default.}"
+		"{inEventData||Input event data / replay file. (Previously generated outEventData, for re-processing recorded sessions.)}"
+		"{outEventData||Output event data / replay file. (Includes performance capture data.)}"
+		"{outVideo||Output file for captured video and audio. Together with the \"outEventData\" file, this can be used to re-run a previous capture session.}"
+		"{outLogFile||If specified, log messages will be written to this file. If \"-\" or not specified, log messages will be written to STDERR.}"
+		"{outLogColors||If true, log colorization will be forced on. If false, log colorization will be forced off. If \"auto\" or not specified, log colorization will auto-detect.}"
+		"{previewAudio||If true, will preview processed audio out the computer's sound device.}"
 		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
-		"{headless||If set, all video and audio output is disabled. Intended to be suitable for jobs running in the terminal.}"
+		"{headless||If set, all video display and audio playback is disabled. Intended to be suitable for jobs running in the terminal.}"
 		"{version||Emit the version string to STDOUT and exit.}"
+		"{verbosity verbose v||Adjust the log level filter. Indicate a positive number to increase the verbosity, a negative number to decrease the verbosity, or specify with no integer to increase the verbosity to a moderate degree.)}"
 		);
-	parser.about("YerFace! A stupid facial performance capture engine for cartoon animation. (" YERFACE_VERSION ")");
+	parser.about("YerFace! A stupid facial performance capture engine for cartoon animation. [" YERFACE_VERSION "]");
 	if(argc <= 1) {
 		parser.printMessage();
 		return 0;
 	}
-	if(parser.get<bool>("version")) {
+	if(parser.has("version") && parser.get<bool>("version")) {
 		fprintf(stdout, "%s\n", YERFACE_VERSION);
 		return 0;
 	}
-	if(parser.get<bool>("help")) {
+	if(parser.has("help") && parser.get<bool>("help")) {
 		parser.printMessage();
 		return 1;
 	}
-	if(parser.check()) {
-		parser.printErrors();
-		parser.printMessage();
-		return 1;
+	if(parser.has("verbosity")) {
+		string verbosityString = parser.get<string>("verbosity");
+		if(verbosityString.length() == 0 || verbosityString == "true") {
+			verbosity = 2;
+		} else {
+			verbosity = parser.get<int>("verbosity");
+		}
+		logSeverityFilter = (int)LOG_SEVERITY_FILTERDEFAULT + verbosity;
+		if(logSeverityFilter < (int)LOG_SEVERITY_MIN) {
+			logSeverityFilter = LOG_SEVERITY_MIN;
+		} else if(logSeverityFilter > (int)LOG_SEVERITY_MAX) {
+			logSeverityFilter = LOG_SEVERITY_MAX;
+		}
+		Logger::setLoggingFilter((LogMessageSeverity)logSeverityFilter);
 	}
 	configFile = parser.get<string>("configFile");
 	inVideo = parser.get<string>("inVideo");
-	if(inVideo.length() < 1) {
-		logger->error("--inVideo is required!");
-		parser.printMessage();
-		return 1;
+	if(inVideo.length() == 0) {
+		throw invalid_argument("--inVideo is a required argument, but is blank or not specified!");
 	}
 	if(inVideo == "-") {
 		inVideo = "pipe:0";
+		stdinPipeUsed = true;
 	}
 	inVideoFormat = parser.get<string>("inVideoFormat");
 	inVideoSize = parser.get<string>("inVideoSize");
@@ -172,6 +191,10 @@ int yerface(int argc, char *argv[]) {
 	inAudio = parser.get<string>("inAudio");
 	if(inAudio == "-") {
 		inAudio = "pipe:0";
+		if(stdinPipeUsed) {
+			throw invalid_argument("Can't use STDIN for both --inVideo and --inAudio! If you need to read Video and Audio from the same pipe, use a tool to multiplex them first.");
+		}
+		stdinPipeUsed = true;
 	}
 	if(inAudio.length() > 0) {
 		if(inAudio == "ignore") {
@@ -189,17 +212,51 @@ int yerface(int argc, char *argv[]) {
 	inAudioChannels = parser.get<string>("inAudioChannels");
 	inAudioRate = parser.get<string>("inAudioRate");
 	inAudioCodec = parser.get<string>("inAudioCodec");
-	outAudioChannelMap = parser.get<string>("outAudioChannelMap");
-	inEvents = parser.get<string>("inEvents");
-	outData = parser.get<string>("outData");
+	inAudioChannelMap = parser.get<string>("inAudioChannelMap");
+	inEventData = parser.get<string>("inEventData");
+	outEventData = parser.get<string>("outEventData");
+	outVideo = parser.get<string>("outVideo");
+	outLogFile = parser.get<string>("outLogFile");
+	outLogColors = parser.get<string>("outLogColors");
 	previewImgSeq = parser.get<string>("previewImgSeq");
-	lowLatency = parser.get<bool>("lowLatency");
-	headless = parser.get<bool>("headless");
-	audioPreview = parser.get<bool>("audioPreview");
+	lowLatency = parser.has("lowLatency") && parser.get<bool>("lowLatency");
+	headless = parser.has("headless") && parser.get<bool>("headless");
+	previewAudio = parser.has("previewAudio") && parser.get<bool>("previewAudio");
+
+	if(!parser.check()) {
+		parser.printErrors();
+		parser.printMessage();
+		return 1;
+	}
 
 	sdlWindowRenderer.window = NULL;
 	sdlWindowRenderer.renderer = NULL;
 	windowInitializationFailed = false;
+
+	if(outLogFile.length() == 0 || outLogFile == "-") {
+		outLogFile = "-";
+		Logger::setLoggingTarget(stderr);
+	} else {
+		Logger::setLoggingTarget(outLogFile);
+	}
+	if(outLogColors.length() == 0 || outLogColors == "auto") {
+		Logger::setLoggingColorMode(LOG_COLORS_AUTO);
+		outLogColorsString = "AUTO";
+	} else {
+		if(parser.get<bool>("outLogColors")) {
+			Logger::setLoggingColorMode(LOG_COLORS_ON);
+			outLogColorsString = "ON";
+		} else {
+			Logger::setLoggingColorMode(LOG_COLORS_OFF);
+			outLogColorsString = "OFF";
+		}
+	}
+
+	logger = new Logger("YerFace");
+	logger->notice("Starting up...");
+	logger->info("Log output is being sent to: %s", outLogFile == "-" ? "STDERR" : outLogFile.c_str());
+	logger->info("Log filter is set to: %s", Logger::getSeverityString((LogMessageSeverity)logSeverityFilter).c_str());
+	logger->info("Log colorization mode is: %s", outLogColorsString.c_str());
 
 	//Create locks.
 	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
@@ -224,19 +281,22 @@ int yerface(int argc, char *argv[]) {
 	frameServer = new FrameServer(config, status, lowLatency);
 	previewHUD = new PreviewHUD(config, status, frameServer);
 	ffmpegDriver = new FFmpegDriver(status, frameServer, lowLatency, false);
-	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, outAudioChannelMap, tryAudioInVideo);
+	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, inAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
-		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, outAudioChannelMap, true);
+		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, inAudioChannelMap, true);
 	}
-	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, audioPreview && ffmpegDriver->getIsAudioInputPresent());
+	if(outVideo.length() > 0) {
+		ffmpegDriver->openOutputMedia(outVideo);
+	}
+	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, previewAudio && ffmpegDriver->getIsAudioInputPresent());
 	faceDetector = new FaceDetector(config, status, frameServer);
 	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
 	faceMapper = new FaceMapper(config, status, frameServer, faceTracker, previewHUD);
-	outputDriver = new OutputDriver(config, outData, status, frameServer, faceTracker, sdlDriver);
+	outputDriver = new OutputDriver(config, outEventData, status, frameServer, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, status, frameServer, ffmpegDriver, sdlDriver, outputDriver, previewHUD, lowLatency);
 	}
-	eventLogger = new EventLogger(config, inEvents, status, outputDriver, frameServer);
+	eventLogger = new EventLogger(config, inEventData, status, outputDriver, frameServer);
 	if(previewImgSeq.length() > 0) {
 		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
 	}
@@ -278,7 +338,7 @@ int yerface(int argc, char *argv[]) {
 
 	//Launch event / rendering loop.
 	bool myDrained = false;
-	while(status->getIsRunning() || !myDrained) {
+	while((status->getIsRunning() || !myDrained) && !status->getEmergency()) {
 		// Window initialization.
 		if(!headless && sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
@@ -290,8 +350,8 @@ int yerface(int argc, char *argv[]) {
 				sdlWindowRenderer = sdlDriver->createPreviewWindow(frameSize.width, frameSize.height, "YerFace! Preview Window");
 			} catch(exception &e) {
 				windowInitializationFailed = true;
-				logger->error("Uh oh, failed to create a preview window! Got exception: %s", e.what());
-				logger->warn("Continuing despite the lack of a preview window.");
+				logger->err("Uh oh, failed to create a preview window! Got exception: %s", e.what());
+				logger->notice("Continuing despite the lack of a preview window.");
 			}
 			YerFace_MutexUnlock(frameSizeMutex);
 		}
@@ -338,27 +398,37 @@ int yerface(int argc, char *argv[]) {
 	}
 
 	//Join worker thread.
-	delete videoCaptureWorkerPool;
+	YerFace_CarefullyDelete(logger, status, videoCaptureWorkerPool);
 
 	//Cleanup.
 	if(imageSequence != NULL) {
-		delete imageSequence;
+		YerFace_CarefullyDelete(logger, status, imageSequence);
 	}
-	delete eventLogger;
+	YerFace_CarefullyDelete(logger, status, eventLogger);
 	if(sphinxDriver != NULL) {
 		delete sphinxDriver;
 	}
-	delete outputDriver;
-	delete faceMapper;
-	delete faceTracker;
-	delete faceDetector;
-	delete previewHUD;
-	delete frameServer;
-	delete ffmpegDriver;
-	delete sdlDriver;
-	delete metrics;
-	delete status;
-	delete logger;
+	YerFace_CarefullyDelete(logger, status, outputDriver);
+	YerFace_CarefullyDelete(logger, status, faceMapper);
+	YerFace_CarefullyDelete(logger, status, faceTracker);
+	YerFace_CarefullyDelete(logger, status, faceDetector);
+	YerFace_CarefullyDelete(logger, status, previewHUD);
+	YerFace_CarefullyDelete(logger, status, frameServer);
+	YerFace_CarefullyDelete(logger, status, ffmpegDriver);
+	YerFace_CarefullyDelete(logger, status, sdlDriver);
+	YerFace_CarefullyDelete(logger, status, metrics);
+	YerFace_CarefullyDelete_NoStatus(logger, status);
+	try {
+		logger->notice("Goodbye!");
+		delete logger;
+	} catch(exception &e) {
+		Logger::slog("YerFace", LOG_SEVERITY_EMERG, "Logger Destructor exception: %s", e.what());
+	}
+
+	// If we previously opened a file as a logging target,
+	// setting a new logging target will force the old file to be closed.
+	// Otherwise this line will have no effect.
+	Logger::setLoggingTarget(stderr);
 
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(previewDisplayMutex);
@@ -369,19 +439,17 @@ int yerface(int argc, char *argv[]) {
 }
 
 void videoCaptureInitializer(WorkerPoolWorker *worker, void *ptr) {
-	ffmpegDriver->setVideoCaptureWorkerPool(videoCaptureWorkerPool);
-	ffmpegDriver->rollDemuxerThreads();
+	ffmpegDriver->setVideoCaptureWorkerPool(worker->pool);
+	ffmpegDriver->rollDemuxerThread();
 }
 
 bool videoCaptureHandler(WorkerPoolWorker *worker) {
 	VideoFrame videoFrame;
 	bool didWork = false;
 	static bool didSetFrameSizeValid = false;
-	
-	if(!ffmpegDriver->waitForNextVideoFrame(&videoFrame)) {
-		logger->info("FFmpeg Demuxer thread finished.");
-		status->setIsRunning(false);
-	} else {
+
+	int demuxerRunning = ffmpegDriver->pollForNextVideoFrame(&videoFrame);
+	if(videoFrame.valid) {
 		if(!didSetFrameSizeValid) {
 			YerFace_MutexLock(frameSizeMutex);
 			if(!frameSizeValid) {
@@ -396,15 +464,31 @@ bool videoCaptureHandler(WorkerPoolWorker *worker) {
 		didWork = true;
 	}
 
+	if(!videoFrame.valid && !demuxerRunning) {
+		logger->info("FFmpeg Demuxer thread finished.");
+		status->setIsRunning(false);
+	}
+
 	if(!status->getIsRunning()) {
-		videoCaptureWorkerPool->stopWorkerNow();
+		logger->debug4("Issuing videoCaptureWorkerPool->stopWorkerNow()");
+		worker->pool->stopWorkerNow();
 		didWork = true;
+	}
+
+	if(!didWork) {
+		logger->debug4("Main Video Capture thread woke up, found no work to do, and went back to sleep.");
 	}
 
 	return didWork;
 }
 
 void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
+	sdlDriver->stopAudioDriverNow();
+
+	if(status->getEmergency()) {
+		return;
+	}
+
 	frameServer->setDraining();
 
 	bool myDrained = false;
@@ -415,7 +499,6 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr) {
 		YerFace_MutexUnlock(frameServerDrainedMutex);
 	} while(!myDrained);
 
-	sdlDriver->stopAudioDriverNow();
 	ffmpegDriver->stopAudioCallbacksNow();
 }
 
@@ -426,7 +509,7 @@ void parseConfigFile(void) {
 		configFile = Utilities::fileValidPathOrDie(configFile);
 	}
 	try {
-		logger->verbose("Opening and parsing config file: \"%s\"", configFile.c_str());
+		logger->info("Opening and parsing config file: \"%s\"", configFile.c_str());
 		std::ifstream fileStream = std::ifstream(configFile);
 		if(fileStream.fail()) {
 			throw invalid_argument("Specified config file failed to open.");
@@ -435,7 +518,7 @@ void parseConfigFile(void) {
 		ssBuffer << fileStream.rdbuf();
 		config = json::parse(ssBuffer.str());
 	} catch(exception &e) {
-		logger->error("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
+		logger->err("Failed to parse configuration file \"%s\". Got exception: %s", configFile.c_str(), e.what());
 		throw;
 	}
 }

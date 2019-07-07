@@ -27,7 +27,9 @@ enum PreviewPositionInFrameDirection {
 class Status {
 public:
 	Status(bool myLowLatency);
-	~Status();
+	~Status() noexcept(false);
+	void setEmergency(void);
+	bool getEmergency(void);
 	void setIsRunning(bool newisRunning);
 	bool getIsRunning(void);
 	void setIsPaused(bool newIsPaused);
@@ -42,6 +44,7 @@ public:
 
 private:
 	bool lowLatency;
+	bool emergency;
 	bool isRunning;
 	bool isPaused;
 	int previewDebugDensity;

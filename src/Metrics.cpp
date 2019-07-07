@@ -29,11 +29,11 @@ Metrics::Metrics(json config, const char *myName, bool myMetricIsFrames) {
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	logger->debug("Metrics object constructed and ready to go!");
+	logger->debug1("Metrics object constructed and ready to go!");
 }
 
-Metrics::~Metrics() {
-	logger->debug("Metrics object destructing...");
+Metrics::~Metrics() noexcept(false) {
+	logger->debug1("Metrics object destructing...");
 	logReportNow("FINAL REPORT: ");
 	SDL_DestroyMutex(myMutex);
 	delete logger;
@@ -90,7 +90,7 @@ void Metrics::endClock(MetricsTick tick) {
 }
 
 void Metrics::logReportNow(string prefix) {
-	logger->verbose("%s%s, %s", prefix.c_str(), fpsString, timesString);
+	logger->debug1("%s%s, %s", prefix.c_str(), fpsString, timesString);
 }
 
 double Metrics::getAverageTimeSeconds(void) {

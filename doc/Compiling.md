@@ -25,6 +25,6 @@ cmake --config Release ..
 make -j 4
 ```
 
-For testing and invokation examples, see [ExampleScriptlets.md](ExampleScriptlets.md)
+For testing and invokation examples, see [Examples.md](Examples.md)
 
 **If you run into trouble,** please feel free to open a pull request or an issue and we'll be happy to help!

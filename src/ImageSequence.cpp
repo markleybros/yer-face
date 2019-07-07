@@ -12,6 +12,7 @@ using namespace cv;
 namespace YerFace {
 
 ImageSequence::ImageSequence(json config, Status *myStatus, FrameServer *myFrameServer, string myOutputPrefix) {
+	workerPool = NULL;
 	outputPrefix = myOutputPrefix;
 	status = myStatus;
 	if(status == NULL) {
@@ -49,17 +50,17 @@ ImageSequence::ImageSequence(json config, Status *myStatus, FrameServer *myFrame
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("ImageSequence object constructed with OutputPrefix: %s", outputPrefix.c_str());
+	logger->debug1("ImageSequence object constructed with OutputPrefix: %s", outputPrefix.c_str());
 }
 
 ImageSequence::~ImageSequence() noexcept(false) {
-	logger->debug("ImageSequence object destructing...");
+	logger->debug1("ImageSequence object destructing...");
 
 	delete workerPool;
 
 	YerFace_MutexLock(myMutex);
 	if(outputFrameNumbers.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+		logger->err("Frames are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
@@ -88,7 +89,7 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(outputFrameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, outputFrameNumber);
+		self->logger->debug4("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, outputFrameNumber);
 
 		MetricsTick tick = self->metrics->startClock();
 
@@ -103,9 +104,9 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 		size_t filenameLength = self->outputPrefix.length() + 32;
 		char *filename = new char[filenameLength];
 		snprintf(filename, filenameLength, "%s-%06" YERFACE_FRAMENUMBER_FORMATINNER ".png", self->outputPrefix.c_str(), outputFrameNumber);
-		self->logger->verbose("Thread #%d writing preview frame #" YERFACE_FRAMENUMBER_FORMAT " to file: %s ", worker->num, outputFrameNumber, filename);
+		self->logger->debug1("Thread #%d writing preview frame #" YERFACE_FRAMENUMBER_FORMAT " to file: %s ", worker->num, outputFrameNumber, filename);
 		imwrite(filename, previewFrameCopy);
-		delete filename;
+		delete[] filename;
 
 		self->metrics->endClock(tick);
 
@@ -117,14 +118,16 @@ bool ImageSequence::workerHandler(WorkerPoolWorker *worker) {
 void ImageSequence::handleFrameStatusLateProcessing(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	ImageSequence *self = (ImageSequence *)userdata;
-	// self->logger->verbose("Got notification that Frame #" YERFACE_FRAMENUMBER_FORMAT " has transitioned to LATE_PROCESSING.", frameNumber);
+	self->logger->debug4("Got notification that Frame #" YERFACE_FRAMENUMBER_FORMAT " has transitioned to LATE_PROCESSING.", frameNumber);
 	//It is not safe or recommended to perform ANY work during a FrameStatusChangeEventCallback.
 	//(Notably, any attempt to operate on the frame is very likely to deadlock.)
 	//The only thing we can (and should) do is record the frame number in the list of frames we care about.
 	YerFace_MutexLock(self->myMutex);
 	self->outputFrameNumbers.push_back(frameNumber);
 	YerFace_MutexUnlock(self->myMutex);
-	self->workerPool->sendWorkerSignal();
+	if(self->workerPool != NULL) {
+		self->workerPool->sendWorkerSignal();
+	}
 }
 
 } //namespace YerFace

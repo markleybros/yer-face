@@ -11,6 +11,7 @@ using namespace cv;
 namespace YerFace {
 
 FaceMapper::FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, PreviewHUD *myPreviewHUD) {
+	workerPool = NULL;
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -106,17 +107,17 @@ FaceMapper::FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer
 	workerPoolParameters.handler = workerHandler;
 	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
 
-	logger->debug("FaceMapper object constructed and ready to go!");
+	logger->debug1("FaceMapper object constructed and ready to go!");
 }
 
 FaceMapper::~FaceMapper() noexcept(false) {
-	logger->debug("FaceMapper object destructing...");
+	logger->debug1("FaceMapper object destructing...");
 
 	delete workerPool;
 
 	YerFace_MutexLock(myMutex);
 	if(pendingFrames.size() > 0) {
-		logger->error("Frames are still pending! Woe is me!");
+		logger->err("Frames are still pending! Woe is me!");
 	}
 	YerFace_MutexUnlock(myMutex);
 
@@ -173,7 +174,7 @@ void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	FaceMapper *self = (FaceMapper *)userdata;
 	FaceMapperPendingFrame newFrame;
-	// self->logger->verbose("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
+	self->logger->debug4("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
 	switch(newStatus) {
 		default:
 			throw logic_error("Handler passed unsupported frame status change event!");
@@ -189,11 +190,13 @@ void FaceMapper::handleFrameStatusChange(void *userdata, WorkingFrameStatus newS
 			}
 			break;
 		case FRAME_STATUS_MAPPING:
-			// self->logger->verbose("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " entered MAPPING.", frameNumber);
+			self->logger->debug4("handleFrameStatusChange() Frame #" YERFACE_FRAMENUMBER_FORMAT " entered MAPPING.", frameNumber);
 			YerFace_MutexLock(self->myMutex);
 			self->pendingFrames[frameNumber].hasEnteredMapping = true;
 			YerFace_MutexUnlock(self->myMutex);
-			self->workerPool->sendWorkerSignal();
+			if(self->workerPool != NULL) {
+				self->workerPool->sendWorkerSignal();
+			}
 			break;
 		case FRAME_STATUS_GONE:
 			YerFace_MutexLock(self->myMutex);
@@ -228,7 +231,7 @@ bool FaceMapper::workerHandler(WorkerPoolWorker *worker) {
 
 	//// DO THE WORK ////
 	if(myFrameNumber > 0) {
-		// self->logger->verbose("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, myFrameNumber);
+		self->logger->debug4("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, myFrameNumber);
 		if(myFrameNumber <= lastFrameNumber) {
 			throw logic_error("FaceMapper handling frames out of order!");
 		}
