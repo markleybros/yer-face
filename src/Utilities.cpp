@@ -218,12 +218,23 @@ void Utilities::drawX(Mat frame, Point2d markerPoint, Scalar color, int lineLeng
 	a.y = markerPoint.y - lineLength;
 	b.x = markerPoint.x;
 	b.y = markerPoint.y + lineLength;
-	line(frame, a, b, color, thickness);
+	line(frame, a, b, color, thickness, LINE_AA);
 	a.x = markerPoint.x - lineLength;
 	a.y = markerPoint.y;
 	b.x = markerPoint.x + lineLength;
 	b.y = markerPoint.y;
-	line(frame, a, b, color, thickness);
+	line(frame, a, b, color, thickness, LINE_AA);
+}
+
+void Utilities::drawText(cv::Mat frame, const cv::String &text, cv::Point origin, cv::Scalar color, double size, cv::Point2d shadowOffset, double shadowColorMultiply) {
+	// FIXME - proportional drawing
+	cv::Point shadowOrigin = origin + cv::Point((int)round(shadowOffset.x * size), (int)round(shadowOffset.y * size));
+	cv::putText(frame, text, shadowOrigin, FONT_HERSHEY_DUPLEX, 0.75 * size, color * shadowColorMultiply, ceil(size), LINE_AA);
+	cv::putText(frame, text, origin, FONT_HERSHEY_DUPLEX, 0.75 * size, color, ceil(size), LINE_AA);
+}
+
+cv::Size Utilities::getTextSize(const cv::String &text, int *baseline, double size) {
+	return cv::getTextSize(text, FONT_HERSHEY_DUPLEX, 0.75 * size, ceil(size), baseline);
 }
 
 cv::Scalar Utilities::scalarColorFromJSONArray(string jsonArrayString) {

@@ -456,7 +456,7 @@ bool FaceTracker::doConvertLandmarkPointToImagePoint(DlibPointPointer pointPoint
 	return true;
 }
 
-void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density, bool mirrorMode) {
 	YerFace_MutexLock(myMutex);
 	if(frameNumber < 0 || outputFrames.find(frameNumber) == outputFrames.end()) {
 		YerFace_MutexUnlock(myMutex);
@@ -468,6 +468,8 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 	YerFace_MutexLock(myAssignmentMutex);
 	FacialCameraModel camera = facialCameraModel;
 	YerFace_MutexUnlock(myAssignmentMutex);
+
+	int frameWidth = frame.size().width;
 
 	if(density > 0) {
 		if(output.facialPose.set) {
@@ -483,15 +485,23 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 			Mat tempRotationVector;
 			Rodrigues(output.facialPose.rotationMatrix, tempRotationVector);
 			projectPoints(gizmo3d, tempRotationVector, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, gizmo2d);
-			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2);
-			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2);
-			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2);
+			if(mirrorMode) {
+				for(int i = 0; i <= 5; i++) {
+					gizmo2d[i].x = frameWidth - gizmo2d[i].x;
+				}
+			}
+			arrowedLine(frame, gizmo2d[0], gizmo2d[1], Scalar(0, 0, 255), 2, LINE_AA); // FIXME - proportional drawing size
+			arrowedLine(frame, gizmo2d[2], gizmo2d[3], Scalar(255, 0, 0), 2, LINE_AA); // FIXME - proportional drawing size
+			arrowedLine(frame, gizmo2d[4], gizmo2d[5], Scalar(0, 255, 0), 2, LINE_AA); // FIXME - proportional drawing size
 		}
 	}
 	if(density > 3) {
 		if(output.facialFeatures.set) {
-			for(auto feature : output.facialFeatures.featuresExposed.features) {
-				Utilities::drawX(frame, feature, Scalar(147, 20, 255));
+			for(Point2d feature : output.facialFeatures.featuresExposed.features) {
+				if(mirrorMode) {
+					feature.x = frameWidth - feature.x;
+				}
+				Utilities::drawX(frame, feature, Scalar(147, 20, 255)); // FIXME - proportional drawing
 			}
 		}
 	}
@@ -519,7 +529,11 @@ void FaceTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densi
 			projectPoints(edges3d, output.facialPose.rotationMatrix, output.facialPose.translationVector, camera.cameraMatrix, camera.distortionCoefficients, edges2d);
 
 			for(unsigned int i = 0; i + 1 < edges2d.size(); i = i + 2) {
-				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255));
+				if(mirrorMode) {
+					edges2d[i].x = frameWidth - edges2d[i].x;
+					edges2d[i + 1].x = frameWidth - edges2d[i + 1].x;
+				}
+				cv::line(frame, edges2d[i], edges2d[i + 1], Scalar(255, 255, 255), 1, LINE_AA); // FIXME - proportional drawing
 			}
 		}
 	}

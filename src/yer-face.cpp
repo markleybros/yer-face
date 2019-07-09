@@ -12,7 +12,6 @@
 #include "OutputDriver.hpp"
 #include "SphinxDriver.hpp"
 #include "EventLogger.hpp"
-#include "ImageSequence.hpp"
 #include "PreviewHUD.hpp"
 #include "WorkerPool.hpp"
 
@@ -49,7 +48,8 @@ string outLogFile;
 string outLogColors;
 string outLogColorsString = "";
 
-string previewImgSeq;
+string previewMirror;
+bool previewMirrorBool = false;
 bool lowLatency = false;
 bool headless = false;
 bool previewAudio = false;
@@ -74,10 +74,10 @@ FaceDetector *faceDetector = NULL;
 FaceTracker *faceTracker = NULL;
 FaceMapper *faceMapper = NULL;
 Metrics *metrics = NULL;
+Metrics *previewMetrics = NULL;
 OutputDriver *outputDriver = NULL;
 SphinxDriver *sphinxDriver = NULL;
 EventLogger *eventLogger = NULL;
-ImageSequence *imageSequence = NULL;
 PreviewHUD *previewHUD = NULL;
 
 //VARIABLES PROTECTED BY frameSizeMutex
@@ -89,6 +89,7 @@ SDL_mutex *frameSizeMutex;
 //VARIABLES PROTECTED BY previewDisplayMutex
 list<FrameNumber> previewDisplayFrameNumbers;
 SDL_mutex *previewDisplayMutex;
+SDL_cond *previewDisplayCond;
 //END VARIABLES PROTECTED BY previewDisplayMutex
 
 //VARIABLES PROTECTED BY frameServerDrainedMutex
@@ -108,7 +109,7 @@ void videoCaptureDeinitializer(WorkerPoolWorker *worker, void *ptr);
 void parseConfigFile(void);
 void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 void handleFrameServerDrainedEvent(void *userdata);
-void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density);
+void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode);
 
 int main(int argc, char *argv[]) {
 	try {
@@ -142,7 +143,7 @@ int yerface(int argc, char *argv[]) {
 		"{outLogFile||If specified, log messages will be written to this file. If \"-\" or not specified, log messages will be written to STDERR.}"
 		"{outLogColors||If true, log colorization will be forced on. If false, log colorization will be forced off. If \"auto\" or not specified, log colorization will auto-detect.}"
 		"{previewAudio||If true, will preview processed audio out the computer's sound device.}"
-		"{previewImgSeq||If set, is presumed to be the file name prefix of the output preview image sequence.}"
+		"{previewMirror||If true, mirror mode (horizontal reflection) of the preview will be forced on. If false, mirror mode will be forced off. If \"auto\" or not specified, mirror mode will be enabled for lowLatency mode and disabled otherwise.}"
 		"{headless||If set, all video display and audio playback is disabled. Intended to be suitable for jobs running in the terminal.}"
 		"{version||Emit the version string to STDOUT and exit.}"
 		"{verbosity verbose v||Adjust the log level filter. Indicate a positive number to increase the verbosity, a negative number to decrease the verbosity, or specify with no integer to increase the verbosity to a moderate degree.)}"
@@ -218,10 +219,10 @@ int yerface(int argc, char *argv[]) {
 	outVideo = parser.get<string>("outVideo");
 	outLogFile = parser.get<string>("outLogFile");
 	outLogColors = parser.get<string>("outLogColors");
-	previewImgSeq = parser.get<string>("previewImgSeq");
 	lowLatency = parser.has("lowLatency") && parser.get<bool>("lowLatency");
 	headless = parser.has("headless") && parser.get<bool>("headless");
 	previewAudio = parser.has("previewAudio") && parser.get<bool>("previewAudio");
+	previewMirror = parser.get<string>("previewMirror");
 
 	if(!parser.check()) {
 		parser.printErrors();
@@ -252,18 +253,27 @@ int yerface(int argc, char *argv[]) {
 		}
 	}
 
+	if(previewMirror.length() == 0 || previewMirror == "auto") {
+		previewMirrorBool = lowLatency;
+	} else {
+		previewMirrorBool = parser.get<bool>("previewMirror");
+	}
+
 	logger = new Logger("YerFace");
 	logger->notice("Starting up...");
 	logger->info("Log output is being sent to: %s", outLogFile == "-" ? "STDERR" : outLogFile.c_str());
 	logger->info("Log filter is set to: %s", Logger::getSeverityString((LogMessageSeverity)logSeverityFilter).c_str());
 	logger->info("Log colorization mode is: %s", outLogColorsString.c_str());
 
-	//Create locks.
+	//Create locks and conditions.
 	if((frameSizeMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((previewDisplayMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
+	}
+	if((previewDisplayCond = SDL_CreateCond()) == NULL) {
+		throw runtime_error("Failed creating condition!");
 	}
 	if((frameServerDrainedMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -272,14 +282,16 @@ int yerface(int argc, char *argv[]) {
 		throw runtime_error("Failed creating mutex!");
 	}
 
+
 	//Initialize configuration.
 	parseConfigFile();
 
 	//Instantiate our classes.
 	status = new Status(lowLatency);
 	metrics = new Metrics(config, "YerFace", true);
+	previewMetrics = new Metrics(config, "YerFace[Preview/Event Loop]", false);
 	frameServer = new FrameServer(config, status, lowLatency);
-	previewHUD = new PreviewHUD(config, status, frameServer);
+	previewHUD = new PreviewHUD(config, status, frameServer, previewMirrorBool);
 	ffmpegDriver = new FFmpegDriver(status, frameServer, lowLatency, false);
 	ffmpegDriver->openInputMedia(inVideo, AVMEDIA_TYPE_VIDEO, inVideoFormat, inVideoSize, "", inVideoRate, inVideoCodec, inAudioChannelMap, tryAudioInVideo);
 	if(openInputAudio) {
@@ -297,9 +309,6 @@ int yerface(int argc, char *argv[]) {
 		sphinxDriver = new SphinxDriver(config, status, frameServer, ffmpegDriver, sdlDriver, outputDriver, previewHUD, lowLatency);
 	}
 	eventLogger = new EventLogger(config, inEventData, status, outputDriver, frameServer);
-	if(previewImgSeq.length() > 0) {
-		imageSequence = new ImageSequence(config, status, frameServer, previewImgSeq);
-	}
 
 	outputDriver->setEventLogger(eventLogger);
 
@@ -338,7 +347,12 @@ int yerface(int argc, char *argv[]) {
 
 	//Launch event / rendering loop.
 	bool myDrained = false;
+	std::list<FrameNumber> previewFrames;
+	previewFrames.clear();
+	FrameNumber previewTargetFrameNumber = -1;
 	while((status->getIsRunning() || !myDrained) && !status->getEmergency()) {
+		MetricsTick tick = previewMetrics->startClock();
+
 		// Window initialization.
 		if(!headless && sdlWindowRenderer.window == NULL && !windowInitializationFailed) {
 			YerFace_MutexLock(frameSizeMutex);
@@ -358,39 +372,53 @@ int yerface(int argc, char *argv[]) {
 
 		//Preview frame display.
 		if(!headless) {
-			std::list<FrameNumber> previewFrames;
-			YerFace_MutexLock(previewDisplayMutex);
-			//If there are preview frames waiting to be displayed, handle them.
-			while(previewDisplayFrameNumbers.size() > 0) {
-				previewFrames.push_front(previewDisplayFrameNumbers.back());
-				previewDisplayFrameNumbers.pop_back();
-			}
-			YerFace_MutexUnlock(previewDisplayMutex);
-
-			//Note that we can't call frameServer->setWorkingFrameStatusCheckpoint() inside the above loop, because we would deadlock.
 			while(previewFrames.size() > 0) {
-				FrameNumber previewFrameNumber = previewFrames.back();
-				previewFrames.pop_back();
-
-				//Display the last preview frame to the screen.
-				if(previewFrames.size() == 0 && sdlWindowRenderer.window != NULL) {
-					WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewFrameNumber);
-					YerFace_MutexLock(previewFrame->previewFrameMutex);
-					Mat previewFrameCopy = previewFrame->previewFrame.clone();
-					YerFace_MutexUnlock(previewFrame->previewFrameMutex);
-					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
-					sdlDriver->doRenderPreviewFrame(previewFrameCopy);
-				} else {
-					frameServer->setWorkingFrameStatusCheckpoint(previewFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
+				if(previewTargetFrameNumber != -1) {
+					// We had a previous "target" preview frame, we should release it from the pipeline.
+					frameServer->setWorkingFrameStatusCheckpoint(previewTargetFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
 				}
+				previewTargetFrameNumber = previewFrames.back();
+				previewFrames.pop_back();
+			}
+
+			if(previewTargetFrameNumber != -1) {
+				WorkingFrame *previewFrame = frameServer->getWorkingFrame(previewTargetFrameNumber);
+				YerFace_MutexLock(previewFrame->previewFrameMutex);
+				Mat previewFrameCopy = previewFrame->previewFrame.clone();
+				YerFace_MutexUnlock(previewFrame->previewFrameMutex);
+				previewHUD->doRenderPreviewHUD(previewFrameCopy, previewTargetFrameNumber);
+				sdlDriver->doRenderPreviewFrame(previewFrameCopy);
+			}
+		}
+
+		// If we're shutting down, don't hang on to the previous frame.
+		if(!status->getIsRunning()) {
+			if(previewTargetFrameNumber != -1) {
+				frameServer->setWorkingFrameStatusCheckpoint(previewTargetFrameNumber, FRAME_STATUS_PREVIEW_DISPLAY, "main.PreviewDisplayed");
+				previewTargetFrameNumber = -1;
 			}
 		}
 
 		//SDL bookkeeping.
 		sdlDriver->doHandleEvents();
 
-		//Be a good neighbor.
-		SDL_Delay(10); //FIXME - better timing?
+		previewMetrics->endClock(tick);
+
+		//Loop timing is semi-regulated by condition signalling.
+		YerFace_MutexLock(previewDisplayMutex);
+		if(status->getIsRunning() && previewDisplayFrameNumbers.size() == 0) {
+			// Condition timeout needs to be very short because our our responsiveness to input events depends on it.
+			int result = SDL_CondWaitTimeout(previewDisplayCond, previewDisplayMutex, 1);
+			if(result < 0) {
+				throw runtime_error("CondWaitTimeout() failed!");
+			}
+		}
+		//Take note of any preview frames waiting to be displayed so they can be handled.
+		while(previewDisplayFrameNumbers.size() > 0) {
+			previewFrames.push_front(previewDisplayFrameNumbers.back());
+			previewDisplayFrameNumbers.pop_back();
+		}
+		YerFace_MutexUnlock(previewDisplayMutex);
 
 		YerFace_MutexLock(frameServerDrainedMutex);
 		myDrained = frameServerDrained;
@@ -401,9 +429,6 @@ int yerface(int argc, char *argv[]) {
 	YerFace_CarefullyDelete(logger, status, videoCaptureWorkerPool);
 
 	//Cleanup.
-	if(imageSequence != NULL) {
-		YerFace_CarefullyDelete(logger, status, imageSequence);
-	}
 	YerFace_CarefullyDelete(logger, status, eventLogger);
 	if(sphinxDriver != NULL) {
 		delete sphinxDriver;
@@ -416,6 +441,7 @@ int yerface(int argc, char *argv[]) {
 	YerFace_CarefullyDelete(logger, status, frameServer);
 	YerFace_CarefullyDelete(logger, status, ffmpegDriver);
 	YerFace_CarefullyDelete(logger, status, sdlDriver);
+	YerFace_CarefullyDelete(logger, status, previewMetrics);
 	YerFace_CarefullyDelete(logger, status, metrics);
 	YerFace_CarefullyDelete_NoStatus(logger, status);
 	try {
@@ -432,6 +458,7 @@ int yerface(int argc, char *argv[]) {
 
 	SDL_DestroyMutex(frameSizeMutex);
 	SDL_DestroyMutex(previewDisplayMutex);
+	SDL_DestroyCond(previewDisplayCond);
 	SDL_DestroyMutex(frameServerDrainedMutex);
 	SDL_DestroyMutex(frameMetricsMutex);
 
@@ -536,6 +563,7 @@ void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, Frame
 		case FRAME_STATUS_PREVIEW_DISPLAY:
 			YerFace_MutexLock(previewDisplayMutex);
 			previewDisplayFrameNumbers.push_front(frameNumber);
+			SDL_CondSignal(previewDisplayCond);
 			YerFace_MutexUnlock(previewDisplayMutex);
 			break;
 		case FRAME_STATUS_GONE:
@@ -553,13 +581,22 @@ void handleFrameServerDrainedEvent(void *userdata) {
 	YerFace_MutexUnlock(frameServerDrainedMutex);
 }
 
-void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
-	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density);
-	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density);
-	faceMapper->renderPreviewHUD(previewFrame, frameNumber, density);
+void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode) {
+	faceDetector->renderPreviewHUD(previewFrame, frameNumber, density, mirrorMode);
+	faceTracker->renderPreviewHUD(previewFrame, frameNumber, density, mirrorMode);
+	faceMapper->renderPreviewHUD(previewFrame, frameNumber, density, mirrorMode);
 	if(sphinxDriver != NULL) {
-		sphinxDriver->renderPreviewHUD(previewFrame, frameNumber, density);
+		sphinxDriver->renderPreviewHUD(previewFrame, frameNumber, density, mirrorMode);
 	}
-	putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
-	putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_SIMPLEX, 0.75, Scalar(0,0,255), 2);
+	double fontSize = 1.25 * (previewFrame.size().height / 720.0); // FIXME - magic numbers
+	int baseline;
+	Size textSize = Utilities::getTextSize(metrics->getTimesString().c_str(), &baseline, fontSize);
+	// logger->debug1("Retrieved text size: %dx%d (%d)", textSize.width, textSize.height, baseline);
+	int lineskip = textSize.height + baseline;
+	Point origin = Point(25, lineskip + 25);
+	Utilities::drawText(previewFrame, metrics->getTimesString().c_str(), origin, Scalar(200,200,200), fontSize);
+	origin.y += lineskip;
+	Utilities::drawText(previewFrame, metrics->getFPSString().c_str(), origin, Scalar(200,200,200), fontSize);
+	// putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_DUPLEX, 0.75, Scalar(0,0,255), 2, LINE_AA); // FIXME - proportional drawing
+	// putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_DUPLEX, 0.75, Scalar(0,0,255), 2, LINE_AA); // FIXME - proportional drawing
 }

@@ -12,31 +12,29 @@ using namespace std;
 
 namespace YerFace {
 
-typedef function<void(cv::Mat previewFrame, FrameNumber frameNumber, int density)> PreviewHUDRenderer;
+typedef function<void(cv::Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode)> PreviewHUDRenderer;
 
 class PreviewHUD {
 public:
-	PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer);
+	PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer, bool myMirrorMode);
 	~PreviewHUD() noexcept(false);
 	void registerPreviewHUDRenderer(PreviewHUDRenderer renderer);
 	void createPreviewHUDRectangle(cv::Size frameSize, cv::Rect2d *previewRect, cv::Point2d *previewCenter);
+	void doRenderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber);
 private:
-	static bool workerHandler(WorkerPoolWorker *worker);
-	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 
 	Status *status;
 	FrameServer *frameServer;
 
+	bool mirrorMode;
+
 	Metrics *metrics;
 	Logger *logger;
 	SDL_mutex *myMutex;
-	std::list<FrameNumber> pendingFrameNumbers;
 
 	double previewRatio, previewWidthPercentage, previewCenterHeightPercentage;
 
 	std::list<PreviewHUDRenderer> renderers;
-
-	WorkerPool *workerPool;
 };
 
 }; //namespace YerFace

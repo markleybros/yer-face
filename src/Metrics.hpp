@@ -27,7 +27,7 @@ public:
 	Metrics(json config, const char *myName, bool myMetricIsFrames = false);
 	~Metrics() noexcept(false);
 	MetricsTick startClock(void);
-	void endClock(MetricsTick tick);
+	void endClock(MetricsTick tick, bool verbose = false);
 	double getAverageTimeSeconds(void);
 	double getWorstTimeSeconds(void);
 	double getFPS(void);

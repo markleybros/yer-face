@@ -10,11 +10,13 @@
 namespace YerFace {
 
 #define YERFACE_AUDIO_LATE_GRACE 0.1
+#define YERFACE_HUD_PIXFMT SDL_PIXELFORMAT_RGBA32
 
 class SDLWindowRenderer {
 public:
 	SDL_Window *window;
 	SDL_Renderer *renderer;
+	SDL_RendererInfo rendererInfo;
 };
 
 class SDLAudioDevice {
@@ -35,13 +37,19 @@ public:
 	bool inUse;
 };
 
+class SDLTextures {
+public:
+	SDL_Texture *videoTexture;
+	cv::Size hudSize;
+};
+
 class SDLDriver {
 public:
 	SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless = false, bool myAudioPreview = true);
 	~SDLDriver() noexcept(false);
 	SDLWindowRenderer createPreviewWindow(int width, int height, string windowTitle);
 	SDLWindowRenderer getPreviewWindow(void);
-	SDL_Texture *getPreviewTexture(cv::Size textureSize);
+	void initializePreviewTextures(cv::Size textureSize);
 	void doRenderPreviewFrame(cv::Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
@@ -62,7 +70,7 @@ private:
 
 	SDLWindowRenderer previewWindow;
 	string previewWindowTitle;
-	SDL_Texture *previewTexture;
+	SDLTextures previewTextures;
 
 	SDLAudioDevice audioDevice;
 

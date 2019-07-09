@@ -42,7 +42,7 @@ public:
 	FaceDetector(json config, Status *myStatus, FrameServer *myFrameServer);
 	~FaceDetector() noexcept(false);
 	FacialDetectionBox getFacialDetection(FrameNumber frameNumber);
-	void renderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode);
 private:
 	void doDetectFace(WorkerPoolWorker *worker, FaceDetectionTask task);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);

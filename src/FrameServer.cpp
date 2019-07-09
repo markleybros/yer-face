@@ -40,6 +40,7 @@ FrameServer::FrameServer(json config, Status *myStatus, bool myLowLatency) {
 	metrics = new Metrics(config, "FrameServer");
 
 	draining = false;
+	mirrorMode = false;
 	workerPool = NULL;
 
 	WorkerPoolParameters workerPoolParameters;
@@ -127,7 +128,11 @@ void FrameServer::insertNewFrame(VideoFrame *videoFrame) {
 	}
 
 	workingFrame->frame = videoFrame->frameCV.clone();
-	workingFrame->previewFrame = workingFrame->frame.clone();
+	if(mirrorMode) {
+		cv::flip(workingFrame->frame, workingFrame->previewFrame, 1);
+	} else {
+		workingFrame->previewFrame = workingFrame->frame.clone();
+	}
 
 	frameSize = workingFrame->frame.size();
 	frameSizeSet = true;
@@ -186,6 +191,12 @@ void FrameServer::setDraining(void) {
 			workerPool->stopWorkerNow();
 		}
 	}
+	YerFace_MutexUnlock(myMutex);
+}
+
+void FrameServer::setMirrorMode(bool myMirrorMode) {
+	YerFace_MutexLock(myMutex);
+	mirrorMode = myMirrorMode;
 	YerFace_MutexUnlock(myMutex);
 }
 

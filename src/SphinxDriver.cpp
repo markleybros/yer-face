@@ -219,7 +219,7 @@ SphinxDriver::~SphinxDriver() noexcept(false) {
 	sphinxLoggerMutex = NULL;
 }
 
-void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density, bool mirrorMode) {
 	static double vuMeterLastSetPeak = vuMeterPeakHoldSeconds * (-1.0);
 
 	if(density > 0) {
@@ -243,7 +243,7 @@ void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int dens
 		if(maxAmplitude >= vuMeterWarningThreshold) {
 			color = Scalar(0, 165, 255);
 		}
-		rectangle(frame, vuMeter, color, FILLED);
+		rectangle(frame, vuMeter, color, FILLED); // FIXME - proportional drawing
 
 		if(peak) {
 			vuMeterLastSetPeak = (double)SDL_GetTicks() / (double)1000.0;
@@ -251,7 +251,7 @@ void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int dens
 		double now = (double)SDL_GetTicks() / (double)1000.0;
 		if(now <= vuMeterLastSetPeak + vuMeterPeakHoldSeconds) {
 			Rect2d peakIndicator = Rect2d(previewRect.x, previewRect.y, vuMeterWidth, vuMeterWidth);
-			rectangle(frame, peakIndicator, Scalar(0, 0, 255), FILLED);
+			rectangle(frame, peakIndicator, Scalar(0, 0, 255), FILLED); // FIXME - proportional drawing
 		}
 	}
 }

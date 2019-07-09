@@ -341,7 +341,7 @@ void MarkerTracker::performMarkerPointValidationAndSmoothing(WorkingFrame *worki
 	YerFace_MutexUnlock(myMutex);
 }
 
-void MarkerTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+void MarkerTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density, bool mirrorMode) {
 	Scalar color = Scalar(0, 0, 255);
 	if(markerType.type == EyelidLeftBottom || markerType.type == EyelidRightBottom || markerType.type == EyelidLeftTop || markerType.type == EyelidRightTop) {
 		color = Scalar(0, 255, 255);
@@ -370,7 +370,11 @@ void MarkerTracker::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int den
 	}
 	YerFace_MutexLock(myMutex);
 	if(density > 0 && markerPoints[frameNumber].set) {
-		Utilities::drawX(frame, markerPoints[frameNumber].point, color, 10, 2);
+		cv::Point2d point = markerPoints[frameNumber].point;
+		if(mirrorMode) {
+			point.x = frame.size().width - point.x;
+		}
+		Utilities::drawX(frame, point, color, 10, 2); // FIXME - proportional drawing
 	}
 	YerFace_MutexUnlock(myMutex);
 }

@@ -342,10 +342,14 @@ Important notes:
 		If true, will preview processed audio out the computer's sound device.
 ```
 
-### Generating a Preview Image Sequence
-_Use this flag to save the preview display to an image sequence._
+### Controlling Preview Mirror Mode (Selfie Reflection)
+_Use this flag to control horizontal reflection of the preview (aka "Mirror Mode")._
+
+Important notes:
+- Default behavior is to link Mirror Mode to Low Latency mode, because Low Latency is generally used in conjunction with a webcam.
+- Mirror Mode has no effect on the performance capture pipeline, nor on the output data. The reflection along the X axis affects the preview only.
 
 ```
-	--previewImgSeq
-		If set, is presumed to be the file name prefix of the output preview image sequence.
+	--previewMirror
+		If true, mirror mode (horizontal reflection) of the preview will be forced on. If false, mirror mode will be forced off. If "auto" or not specified, mirror mode will be enabled for lowLatency mode and disabled otherwise.
 ```

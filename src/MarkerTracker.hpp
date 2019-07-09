@@ -32,7 +32,7 @@ public:
 	~MarkerTracker() noexcept(false);
 	MarkerType getMarkerType(void);
 	void processFrame(FrameNumber frameNumber);
-	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density, bool mirrorMode);
 	void frameStatusNew(FrameNumber frameNumber);
 	void frameStatusGone(FrameNumber frameNumber);
 	MarkerPoint getMarkerPoint(FrameNumber frameNumber);

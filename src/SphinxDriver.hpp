@@ -71,7 +71,7 @@ class SphinxDriver {
 public:
 	SphinxDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, SDLDriver *mySDLDriver, OutputDriver *myOutputDriver, PreviewHUD *myPreviewHUD, bool myLowLatency);
 	~SphinxDriver() noexcept(false);
-	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density, bool mirrorMode);
 private:
 	bool processPhonemeBreakdown(SphinxVideoFrame *videoFrame);
 	void processUtteranceHypothesis(void);
