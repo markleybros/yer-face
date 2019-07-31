@@ -10,7 +10,6 @@
 namespace YerFace {
 
 #define YERFACE_AUDIO_LATE_GRACE 0.1
-#define YERFACE_HUD_PIXFMT SDL_PIXELFORMAT_RGBA32
 
 class SDLWindowRenderer {
 public:

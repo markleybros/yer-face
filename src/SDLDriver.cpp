@@ -33,8 +33,6 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
 	previewTextures.videoTexture = NULL;
-	// previewTextures.hudTexture = NULL;
-	// previewTextures.hudSurface = NULL;
 	onBasisFlagCallbacks.clear();
 
 	status = myStatus;
@@ -130,9 +128,6 @@ SDLDriver::~SDLDriver() noexcept(false) {
 	if(previewWindow.renderer != NULL) {
 		SDL_DestroyRenderer(previewWindow.renderer);
 	}
-	// if(previewTextures.hudSurface != NULL) {
-	// 	SDL_FreeSurface(previewTextures.hudSurface);
-	// }
 	SDL_DestroyMutex(frameTimestampsNowMutex);
 	frameTimestampsNowMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
@@ -258,7 +253,6 @@ void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
 	// Draw
 	SDL_RenderClear(previewWindow.renderer);
 	SDL_RenderCopy(previewWindow.renderer, previewTextures.videoTexture, NULL, &viewport);
-	// SDL_RenderCopy(previewWindow.renderer, previewTextures.hudTexture, NULL, &viewport);
 	SDL_RenderPresent(previewWindow.renderer);
 }
 
