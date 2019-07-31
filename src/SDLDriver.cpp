@@ -32,7 +32,7 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	frameTimestampsNow.estimatedEndTimestamp = 0.0;
 	previewWindow.window = NULL;
 	previewWindow.renderer = NULL;
-	previewTexture = NULL;
+	previewTextures.videoTexture = NULL;
 	onBasisFlagCallbacks.clear();
 
 	status = myStatus;
@@ -111,6 +111,8 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	}
 
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
 	logger->debug1("SDLDriver object constructed and ready to go!");
 }
 
@@ -151,7 +153,9 @@ SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height, string w
 	}
 	previewWindowTitle = windowTitle;
 	logger->info("Creating Preview SDL Window <%dx%d> \"%s\"", width, height, previewWindowTitle.c_str());
-	previewWindow.window = SDL_CreateWindow(previewWindowTitle.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
+	previewWindow.window = SDL_CreateWindow(previewWindowTitle.c_str(),
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height,
+		SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
 	if(previewWindow.window == NULL) {
 		throw runtime_error("SDL Driver tried to create a preview window and failed.");
 	}
@@ -160,6 +164,14 @@ SDLWindowRenderer SDLDriver::createPreviewWindow(int width, int height, string w
 	if(previewWindow.renderer == NULL) {
 		throw runtime_error("SDL Driver tried to create a preview renderer and failed.");
 	}
+	if(SDL_GetRendererInfo(previewWindow.renderer, &previewWindow.rendererInfo) != 0) {
+		throw runtime_error("Was not able to query properties of our new SDL Renderer");
+	}
+	logger->debug1("Got SDL Renderer %s with mode %s, %s and max texture dimensions %dx%d.",
+		previewWindow.rendererInfo.name,
+		previewWindow.rendererInfo.flags & SDL_RENDERER_SOFTWARE ? "SOFTWARE" : "HARDWARE",
+		previewWindow.rendererInfo.flags & SDL_RENDERER_ACCELERATED ? "ACCELERATED" : "NON-ACCELERATED",
+		previewWindow.rendererInfo.max_texture_width, previewWindow.rendererInfo.max_texture_height);
 	return previewWindow;
 }
 
@@ -167,29 +179,38 @@ SDLWindowRenderer SDLDriver::getPreviewWindow(void) {
 	return previewWindow;
 }
 
-SDL_Texture *SDLDriver::getPreviewTexture(Size textureSize) {
+void SDLDriver::initializePreviewTextures(cv::Size textureSize) {
 	if(headless) {
-		logger->warning("SDLDriver::getPreviewTexture() called, but we're running in headless mode. This is an NOP.");
-		return previewTexture;
+		logger->warning("SDLDriver::initializePreviewTextures() called, but we're running in headless mode. This is an NOP.");
+		return;
 	}
-	if(previewTexture != NULL) {
+
+	// If we already have a texture, validate that its dimensions area correct.
+	if(previewTextures.videoTexture != NULL) {
 		int actualWidth, actualHeight;
-		SDL_QueryTexture(previewTexture, NULL, NULL, &actualWidth, &actualHeight);
+		SDL_QueryTexture(previewTextures.videoTexture, NULL, NULL, &actualWidth, &actualHeight);
 		if(actualWidth != textureSize.width || actualHeight != textureSize.height) {
 			logger->crit("Requested texture size (%dx%d) does not match previous texture size (%dx%d)! Somebody has yanked the rug out from under us.", textureSize.width, textureSize.height, actualWidth, actualHeight);
 			throw runtime_error("Requested vs. Actual texture size mismatch! Somebody has yanked the rug out from under us.");
 		}
-		return previewTexture;
 	}
-	if(previewWindow.renderer == NULL) {
-		throw logic_error("SDLDriver::getPreviewTexture() was called, but there is no preview window renderer!");
+
+	if(previewTextures.videoTexture == NULL) {
+		// Check our renderer settings.
+		if(previewWindow.renderer == NULL) {
+			throw logic_error("SDLDriver::initializePreviewTextures() was called, but there is no preview window renderer!");
+		}
+		if(previewWindow.rendererInfo.max_texture_width < textureSize.width || previewWindow.rendererInfo.max_texture_height < textureSize.height) {
+			logger->warning("Our SDL Renderer %s reports maximum texture dimensions %dx%d, but the input video has dimensions %dx%d! This will not end well...", previewWindow.rendererInfo.name, previewWindow.rendererInfo.max_texture_width, previewWindow.rendererInfo.max_texture_height, textureSize.width, textureSize.height);
+		}
+
+		// Acquire textures for video.
+		logger->info("Creating Preview Video SDL Texture <%dx%d>", textureSize.width, textureSize.height);
+		previewTextures.videoTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, textureSize.width, textureSize.height);
+		if(previewTextures.videoTexture == NULL) {
+			throw runtime_error("SDL Driver was not able to create a preview video texture!");
+		}
 	}
-	logger->info("Creating Preview SDL Texture <%dx%d>", textureSize.width, textureSize.height);
-	previewTexture = SDL_CreateTexture(previewWindow.renderer, SDL_PIXELFORMAT_BGR24, SDL_TEXTUREACCESS_STREAMING, textureSize.width, textureSize.height);
-	if(previewTexture == NULL) {
-		throw runtime_error("SDL Driver was not able to create a preview texture!");
-	}
-	return previewTexture;
 }
 
 void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
@@ -201,17 +222,37 @@ void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
 		throw logic_error("SDL Driver asked to render preview frame, but no preview window/renderer exists!");
 	}
 
+	// Make sure the textures are ready.
 	Size previewFrameSize = previewFrame.size();
-	SDL_Texture *texture = getPreviewTexture(previewFrameSize);
+	initializePreviewTextures(previewFrameSize);
 
-	unsigned char * textureData = NULL;
+	// Handle letterboxing of content within the window.
+	SDL_Rect viewport;
+	SDL_RenderGetViewport(previewWindow.renderer, &viewport);
+	double sourceAspect = (double)previewFrameSize.width / (double)previewFrameSize.height;
+	double destAspect = (double)viewport.w / (double)viewport.h;
+	if(destAspect < sourceAspect) {
+		double newHeight = (double)viewport.w / sourceAspect;
+		double newY = ((double)viewport.h - newHeight) / 2.0;
+		viewport.h = (int)round(newHeight);
+		viewport.y = (int)round(newY);
+	} else if(destAspect > sourceAspect) {
+		double newWidth = (double)viewport.h * sourceAspect;
+		double newX = ((double)viewport.w - newWidth) / 2.0;
+		viewport.w = (int)round(newWidth);
+		viewport.x = (int)round(newX);
+	}
+
+	// Update preview frame texture.
+	unsigned char *textureData = NULL;
 	int texturePitch = 0;
-	SDL_LockTexture(texture, 0, (void **)&textureData, &texturePitch);
+	SDL_LockTexture(previewTextures.videoTexture, 0, (void **)&textureData, &texturePitch);
 	memcpy(textureData, (void *)previewFrame.data, previewFrameSize.width * previewFrameSize.height * previewFrame.channels());
-	SDL_UnlockTexture(texture);
+	SDL_UnlockTexture(previewTextures.videoTexture);
 
+	// Draw
 	SDL_RenderClear(previewWindow.renderer);
-	SDL_RenderCopy(previewWindow.renderer, texture, NULL, NULL);
+	SDL_RenderCopy(previewWindow.renderer, previewTextures.videoTexture, NULL, &viewport);
 	SDL_RenderPresent(previewWindow.renderer);
 }
 

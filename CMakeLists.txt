@@ -38,7 +38,7 @@ else(UNIX)
 endif()
 add_definitions(-DYERFACE_DATA_DIR="${YERFACE_DATA_DIR}")
 
-set( YERFACE_MODULES src/EventLogger.cpp src/FaceDetector.cpp src/FaceMapper.cpp src/FaceTracker.cpp src/FFmpegDriver.cpp src/FrameServer.cpp src/ImageSequence.cpp src/Logger.cpp src/MarkerTracker.cpp src/MarkerType.cpp src/Metrics.cpp src/OutputDriver.cpp src/PreviewHUD.cpp src/SDLDriver.cpp src/SphinxDriver.cpp src/Status.cpp src/Utilities.cpp src/WorkerPool.cpp src/yer-face.cpp )
+set( YERFACE_MODULES src/EventLogger.cpp src/FaceDetector.cpp src/FaceMapper.cpp src/FaceTracker.cpp src/FFmpegDriver.cpp src/FrameServer.cpp src/Logger.cpp src/MarkerTracker.cpp src/MarkerType.cpp src/Metrics.cpp src/OutputDriver.cpp src/PreviewHUD.cpp src/SDLDriver.cpp src/SphinxDriver.cpp src/Status.cpp src/Utilities.cpp src/WorkerPool.cpp src/yer-face.cpp )
 
 include(CTest)
 

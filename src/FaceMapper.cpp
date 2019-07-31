@@ -131,32 +131,37 @@ FaceMapper::~FaceMapper() noexcept(false) {
 	delete logger;
 }
 
-void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density) {
+void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int density, bool mirrorMode) {
 	for(MarkerTracker *markerTracker : trackers) {
-		markerTracker->renderPreviewHUD(frame, frameNumber, density);
+		markerTracker->renderPreviewHUD(frame, frameNumber, density, mirrorMode);
 	}
 	if(density > 0) {
 		int gridIncrement = 15; //FIXME - magic numbers
 		Rect2d previewRect;
 		Point2d previewCenter;
 		previewHUD->createPreviewHUDRectangle(frame.size(), &previewRect, &previewCenter);
-		double previewPointScale = previewRect.width / 200;
 		rectangle(frame, previewRect, Scalar(20, 20, 20), FILLED);
+		//// FIXME - grid should be related to real-world units if possible
 		if(density > 4) {
 			for(int x = (int)previewRect.x; x < (int)(previewRect.x + previewRect.width); x = x + gridIncrement) {
-				cv::line(frame, Point2d(x, previewRect.y), Point2d(x, previewRect.y + previewRect.height), Scalar(75, 75, 75));
+				cv::line(frame, Point2d(x, previewRect.y), Point2d(x, previewRect.y + previewRect.height), Scalar(75, 75, 75), 1, LINE_AA); // FIXME - proportional drawing
 			}
 			for(int y = (int)previewRect.y; y < (int)(previewRect.y + previewRect.height); y = y + gridIncrement) {
-				cv::line(frame, Point2d(previewRect.x, y), Point2d(previewRect.x + previewRect.width, y), Scalar(75, 75, 75));
+				cv::line(frame, Point2d(previewRect.x, y), Point2d(previewRect.x + previewRect.width, y), Scalar(75, 75, 75), 1, LINE_AA); // FIXME - proportional drawing
 			}
+		}
+		double previewPointScale = previewRect.width / 200; // FIXME - more magic numbers?
+		double mirrorFlip = 1.0;
+		if(mirrorMode) {
+			mirrorFlip = -1.0;
 		}
 		for(MarkerTracker *markerTracker : trackers) {
 			MarkerPoint markerPoint = markerTracker->getMarkerPoint(frameNumber);
 			if(markerPoint.set) {
 				Point2d previewPoint = Point2d(
-						(markerPoint.point3d.x * previewPointScale) + previewCenter.x,
+						(markerPoint.point3d.x * previewPointScale * mirrorFlip) + previewCenter.x,
 						(markerPoint.point3d.y * previewPointScale) + previewCenter.y);
-				Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255));
+				Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255)); // FIXME - proportional drawing
 			}
 		}
 	}

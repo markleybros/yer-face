@@ -16,6 +16,12 @@ using json = nlohmann::json;
 
 namespace YerFace {
 
+//// YERFACE_MUTEX_TRIVIAL replaces all mutex operations with their trivial counterparts.
+// #define YERFACE_MUTEX_TRIVIAL
+//// YERFACE_MUTEX_DEBUGGING enables extremely detailed mutex logging
+// #define YERFACE_MUTEX_DEBUGGING
+
+
 #ifdef WIN32
 #define YERFACE_PATH_SEP "\\"
 #else
@@ -56,33 +62,36 @@ static constexpr cstr portableBasename(cstr str) {
 	}																\
 } while(0)
 
-//// YERFACE_MUTEX_TRIVIAL replaces all mutex operations with their trivial counterparts.
-// #define YERFACE_MUTEX_TRIVIAL
+#ifdef YERFACE_MUTEX_DEBUGGING
+#define YERFACE_MUTEX_DEBUGLOG YerFace_SLog
+#else
+#define YERFACE_MUTEX_DEBUGLOG(...) do { } while(0)
+#endif
 
 #ifdef YERFACE_MUTEX_TRIVIAL
 
 #define YerFace_MutexLock YerFace_MutexLock_Trivial
 #define YerFace_MutexUnlock YerFace_MutexUnlock_Trivial
 
-#else // End Trivial mutex macros, begin regular mutex macros
+#else // END Trivial mutex macros, BEGIN non-trivial mutex macros
 
 #define YerFace_MutexLock(X) do {														\
 	int _mutexStatus = SDL_MUTEX_TIMEDOUT;												\
 	uint64_t _mutexStart = std::chrono::duration_cast<std::chrono::milliseconds>		\
 		(std::chrono::steady_clock::now().time_since_epoch()).count();					\
-	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Attempting lock on mutex "			\
-		"%s (%p) ...", #X, X);															\
+	YERFACE_MUTEX_DEBUGLOG("Utilities", LOG_SEVERITY_DEBUG4,							\
+		"Attempting lock on mutex %s (%p) ...", #X, X);									\
 	while(_mutexStatus == SDL_MUTEX_TIMEDOUT) {											\
 		_mutexStatus = SDL_TryLockMutex(X);												\
 		if(_mutexStatus == -1) {														\
-			YerFace_SLog("Utilities", LOG_SEVERITY_CRIT, "Failed to lock mutex " 		\
-				"%s (%p). Error was: %s", #X, X, SDL_GetError());						\
+			YERFACE_MUTEX_DEBUGLOG("Utilities", LOG_SEVERITY_CRIT, "Failed to "			\
+				"lock mutex %s (%p). Error was: %s", #X, X, SDL_GetError());			\
 			throw runtime_error("Failed to lock mutex.");								\
 		} else if(_mutexStatus == SDL_MUTEX_TIMEDOUT) {									\
 			uint64_t _mutexEnd = std::chrono::duration_cast<std::chrono::milliseconds>	\
 				(std::chrono::steady_clock::now().time_since_epoch()).count();			\
-			YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Lock attempt on mutex "		\
-				"%s (%p) timed out...", #X, X);											\
+			YERFACE_MUTEX_DEBUGLOG("Utilities", LOG_SEVERITY_DEBUG4,					\
+				"Lock attempt on mutex %s (%p) timed out...", #X, X);					\
 			if(_mutexEnd - _mutexStart > 4000) {										\
 				YerFace_SLog("Utilities", LOG_SEVERITY_CRIT, "Lock attempt on mutex "	\
 					"%s (%p) timed out! No more retries...", #X, X);					\
@@ -91,8 +100,8 @@ static constexpr cstr portableBasename(cstr str) {
 			}																			\
 		}																				\
 	}																					\
-	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Successfully locked mutex "			\
-		"%s (%p) ...", #X, X);	\
+	YERFACE_MUTEX_DEBUGLOG("Utilities", LOG_SEVERITY_DEBUG4,							\
+		"Successfully locked mutex %s (%p) ...", #X, X);								\
 } while(0)
 
 #define YerFace_MutexUnlock(X) do {														\
@@ -101,11 +110,11 @@ static constexpr cstr portableBasename(cstr str) {
 			"%s (%p). Error was: %s", #X, X, SDL_GetError());							\
 		throw runtime_error("Failed to unlock mutex.");									\
 	}																					\
-	YerFace_SLog("Utilities", LOG_SEVERITY_DEBUG4, "Successfully unlocked mutex "		\
-		"%s (%p) ...", #X, X);															\
+	YERFACE_MUTEX_DEBUGLOG("Utilities", LOG_SEVERITY_DEBUG4,							\
+		"Successfully unlocked mutex %s (%p) ...", #X, X);								\
 } while(0)
 
-#endif // End regular mutex macros
+#endif // End non-trivial mutex macros
 
 #define YerFace_CarefullyDelete(logger, status, x) do {					\
 	try {																\
@@ -154,6 +163,8 @@ public:
 	static bool rayPlaneIntersection(cv::Point3d &intersection, cv::Point3d rayOrigin, cv::Vec3d rayVector, cv::Point3d planePoint, cv::Vec3d planeNormal);
 	static void drawRotatedRectOutline(cv::Mat frame, cv::RotatedRect rrect, cv::Scalar color = cv::Scalar(0, 0, 255), int thickness = 1);
 	static void drawX(cv::Mat frame, cv::Point2d markerPoint, cv::Scalar color = cv::Scalar(0, 0, 255), int lineLength = 5, int thickness = 1);
+	static void drawText(cv::Mat frame, const cv::String &text, cv::Point origin, cv::Scalar color, double size = 2, cv::Point2d shadowOffset = cv::Point2d(1, 2), double shadowColorMultiply = 0.1);
+	static cv::Size getTextSize(const cv::String &text, int *baseline, double size = 2);
 	static cv::Scalar scalarColorFromJSONArray(string jsonArrayString);
 	static cv::Scalar scalarColorFromJSONArray(json jsonArray);
 	static json JSONArrayFromScalarColor(cv::Scalar color);

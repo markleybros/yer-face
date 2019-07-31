@@ -141,14 +141,18 @@ FacialDetectionBox FaceDetector::getFacialDetection(FrameNumber frameNumber) {
 	return detection;
 }
 
-void FaceDetector::renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density) {
+void FaceDetector::renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode) {
 	YerFace_MutexLock(detectionsMutex);
 	FacialDetectionBox detection = detections[frameNumber];
 	YerFace_MutexUnlock(detectionsMutex);
 
 	if(density > 1) {
 		if(detection.set) {
-			cv::rectangle(previewFrame, detection.boxNormalSize, Scalar(255, 255, 0), 1);
+			cv::Rect2d box = detection.boxNormalSize;
+			if(mirrorMode) {
+				box.x = previewFrame.size().width - box.x - box.width;
+			}
+			cv::rectangle(previewFrame, box, Scalar(255, 255, 0), 1, LINE_AA); // FIXME - proportional drawing
 		}
 	}
 }

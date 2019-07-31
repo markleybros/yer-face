@@ -9,8 +9,7 @@ using namespace cv;
 
 namespace YerFace {
 
-PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer) {
-	workerPool = NULL;
+PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer, bool myMirrorMode) {
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -19,54 +18,29 @@ PreviewHUD::PreviewHUD(json config, Status *myStatus, FrameServer *myFrameServer
 	if(frameServer == NULL) {
 		throw invalid_argument("frameServer cannot be NULL");
 	}
+	mirrorMode = myMirrorMode;
+	frameServer->setMirrorMode(mirrorMode);
 	logger = new Logger("PreviewHUD");
+	metrics = new Metrics(config, "PreviewHUD", true);
+
 	if((myMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	metrics = new Metrics(config, "PreviewHUD", true);
 
 	status->setPreviewDebugDensity(config["YerFace"]["PreviewHUD"]["initialPreviewDisplayDensity"]);
 	previewRatio = config["YerFace"]["PreviewHUD"]["previewRatio"];
 	previewWidthPercentage = config["YerFace"]["PreviewHUD"]["previewWidthPercentage"];
 	previewCenterHeightPercentage = config["YerFace"]["PreviewHUD"]["previewCenterHeightPercentage"];
 
-	//We want to know when any frame has entered our status.
-	FrameStatusChangeEventCallback frameStatusChangeCallback;
-	frameStatusChangeCallback.userdata = (void *)this;
-	frameStatusChangeCallback.callback = handleFrameStatusChange;
-	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEW_RENDER;
-	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
-
-	//We also want to introduce a checkpoint so that frames cannot TRANSITION AWAY from FRAME_STATUS_PREVIEW_RENDER without our blessing.
-	frameServer->registerFrameStatusCheckpoint(FRAME_STATUS_PREVIEW_RENDER, "previewHUD.ran");
-
-	WorkerPoolParameters workerPoolParameters;
-	workerPoolParameters.name = "PreviewHUD";
-	workerPoolParameters.numWorkers = config["YerFace"]["PreviewHUD"]["numWorkers"];
-	workerPoolParameters.numWorkersPerCPU = config["YerFace"]["PreviewHUD"]["numWorkersPerCPU"];
-	workerPoolParameters.initializer = NULL;
-	workerPoolParameters.deinitializer = NULL;
-	workerPoolParameters.usrPtr = (void *)this;
-	workerPoolParameters.handler = workerHandler;
-	workerPool = new WorkerPool(config, status, frameServer, workerPoolParameters);
-
-	logger->debug1("PreviewHUD object constructed and ready to go.");
+	logger->debug1("PreviewHUD object constructed with Mirror Mode %s and ready to go.", mirrorMode ? "ENABLED" : "DISABLED");
 }
 
 PreviewHUD::~PreviewHUD() noexcept(false) {
 	logger->debug1("PreviewHUD object destructing...");
 
-	delete workerPool;
-
-	YerFace_MutexLock(myMutex);
-	if(pendingFrameNumbers.size() > 0) {
-		logger->err("Frames are still pending! Woe is me!");
-	}
-	YerFace_MutexUnlock(myMutex);
-
 	SDL_DestroyMutex(myMutex);
-	delete logger;
 	delete metrics;
+	delete logger;
 }
 
 void PreviewHUD::registerPreviewHUDRenderer(PreviewHUDRenderer renderer) {
@@ -93,63 +67,20 @@ void PreviewHUD::createPreviewHUDRectangle(Size frameSize, Rect2d *previewRect, 
 	previewCenter->y -= previewRect->height * previewCenterHeightPercentage;
 }
 
-bool PreviewHUD::workerHandler(WorkerPoolWorker *worker) {
-	PreviewHUD *self = (PreviewHUD *)worker->ptr;
-	bool didWork = false;
+void PreviewHUD::doRenderPreviewHUD(cv::Mat previewFrame, FrameNumber frameNumber) {
+	MetricsTick tick = metrics->startClock();
 
-	YerFace_MutexLock(self->myMutex);
+	YerFace_MutexLock(myMutex);
 
-	//// CHECK FOR WORK ////
-	FrameNumber frameNumber = -1;
-	//If there are preview frames waiting to be displayed, handle them.
-	if(self->pendingFrameNumbers.size() > 0) {
-		frameNumber = self->pendingFrameNumbers.front();
-		self->pendingFrameNumbers.pop_front();
-	}
-	std::list<PreviewHUDRenderer> myRenderers = self->renderers; //Make a copy of this so we can operate on it while myMutex is unlocked.
+	int density = status->getPreviewDebugDensity();
 
-	//Do not squat on myMutex while doing time-consuming work.
-	YerFace_MutexUnlock(self->myMutex);
-
-	//// DO THE WORK ////
-	if(frameNumber > 0) {
-		self->logger->debug4("Thread #%d handling frame #" YERFACE_FRAMENUMBER_FORMAT, worker->num, frameNumber);
-		MetricsTick tick = self->metrics->startClock();
-
-		int density = self->status->getPreviewDebugDensity();
-
-		WorkingFrame *previewFrame = self->frameServer->getWorkingFrame(frameNumber);
-		YerFace_MutexLock(previewFrame->previewFrameMutex);
-		for(auto renderer : myRenderers) {
-			renderer(previewFrame->previewFrame, frameNumber, density);
-		}
-		YerFace_MutexUnlock(previewFrame->previewFrameMutex);
-
-		self->frameServer->setWorkingFrameStatusCheckpoint(frameNumber, FRAME_STATUS_PREVIEW_RENDER, "previewHUD.ran");
-		self->metrics->endClock(tick);
-
-		didWork = true;
+	for(PreviewHUDRenderer renderer : renderers) {
+		renderer(previewFrame, frameNumber, density, mirrorMode);
 	}
 
-	return didWork;
-}
+	YerFace_MutexUnlock(myMutex);
 
-void PreviewHUD::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
-	FrameNumber frameNumber = frameTimestamps.frameNumber;
-	PreviewHUD *self = (PreviewHUD *)userdata;
-	self->logger->debug4("Handling Frame Status Change for Frame Number " YERFACE_FRAMENUMBER_FORMAT " to Status %d", frameNumber, newStatus);
-	switch(newStatus) {
-		default:
-			throw logic_error("Handler passed unsupported frame status change event!");
-		case FRAME_STATUS_PREVIEW_RENDER:
-			YerFace_MutexLock(self->myMutex);
-			self->pendingFrameNumbers.push_back(frameNumber);
-			YerFace_MutexUnlock(self->myMutex);
-			if(self->workerPool != NULL) {
-				self->workerPool->sendWorkerSignal();
-			}
-			break;
-	}
+	metrics->endClock(tick);
 }
 
 } //namespace YerFace

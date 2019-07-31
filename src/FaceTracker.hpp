@@ -137,7 +137,7 @@ class FaceTracker {
 public:
 	FaceTracker(json config, Status *myStatus, SDLDriver *mySDLDriver, FrameServer *myFrameServer, FaceDetector *myFaceDetector);
 	~FaceTracker() noexcept(false);
-	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density, bool mirrorMode);
 	FacialFeatures getFacialFeatures(FrameNumber frameNumber);
 	FacialCameraModel getFacialCameraModel(void);
 	FacialPose getFacialPose(FrameNumber frameNumber);

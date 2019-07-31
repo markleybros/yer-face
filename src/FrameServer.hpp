@@ -30,11 +30,10 @@ enum WorkingFrameStatus: unsigned int {
 	FRAME_STATUS_DETECTION = 2, //Primary face rectangle is being identified by FaceDetector
 	FRAME_STATUS_TRACKING = 3, //Face raw landmarks and pose are being recovered by FaceTracker
 	FRAME_STATUS_MAPPING = 4, //Primary markers position is being recovered by FaceMapper and its children.
-	FRAME_STATUS_PREVIEW_RENDER = 5, //Frame preview is to be rendered.
-	FRAME_STATUS_PREVIEW_DISPLAY = 6, //Frame preview is to be displayed. (NOTE: After this stage, ALL bitmap data associated with this frame is RELEASED!)
-	FRAME_STATUS_LATE_PROCESSING = 7, //Frame is eligible for any late-stage processing (like Sphinx data or event logs).
-	FRAME_STATUS_DRAINING = 8, //Last call before this frame is gone. (Output frame data.)
-	FRAME_STATUS_GONE = 9 //This frame is about to be freed and purged from the frame store. (No checkpoints can be registered for this status!)
+	FRAME_STATUS_PREVIEW_DISPLAY = 5, //Frame preview is to be displayed. (NOTE: After this stage, ALL bitmap data associated with this frame is RELEASED!)
+	FRAME_STATUS_LATE_PROCESSING = 6, //Frame is eligible for any late-stage processing (like Sphinx data or event logs).
+	FRAME_STATUS_DRAINING = 7, //Last call before this frame is gone. (Output frame data.)
+	FRAME_STATUS_GONE = 8 //This frame is about to be freed and purged from the frame store. (No checkpoints can be registered for this status!)
 };
 
 class WorkingFrame {
@@ -68,6 +67,7 @@ public:
 	FrameServer(json config, Status *myStatus, bool myLowLatency);
 	~FrameServer() noexcept(false);
 	void setDraining(void);
+	void setMirrorMode(bool myMirrorMode);
 	void onFrameServerDrainedEvent(FrameServerDrainedEventCallback callback);
 	void onFrameStatusChangeEvent(FrameStatusChangeEventCallback callback);
 	void registerFrameStatusCheckpoint(WorkingFrameStatus status, string checkpointKey);
@@ -85,6 +85,7 @@ private:
 	Status *status;
 	bool lowLatency;
 	bool draining;
+	bool mirrorMode;
 	int detectionBoundingBox;
 	double detectionScaleFactor;
 	Logger *logger;

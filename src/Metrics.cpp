@@ -45,9 +45,13 @@ MetricsTick Metrics::startClock(void) {
 	return tick;
 }
 
-void Metrics::endClock(MetricsTick tick) {
+void Metrics::endClock(MetricsTick tick, bool verbose) {
 	double now = (double)getTickCount() / (double)getTickFrequency();
 	tick.runTime = now - tick.startTime;
+
+	if(verbose) {
+		logger->debug1("Tracked event had duration: %.04lfms", tick.runTime * 1000.0);
+	}
 
 	YerFace_MutexLock(myMutex);
 

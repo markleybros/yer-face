@@ -26,7 +26,7 @@ class FaceMapper {
 public:
 	FaceMapper(json config, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, PreviewHUD *myPreviewHUD);
 	~FaceMapper() noexcept(false);
-	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density);
+	void renderPreviewHUD(cv::Mat frame, FrameNumber frameNumber, int density, bool mirrorMode);
 	FrameServer *getFrameServer(void);
 	FaceTracker *getFaceTracker(void);
 private:
