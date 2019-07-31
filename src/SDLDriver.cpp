@@ -18,10 +18,13 @@ namespace YerFace {
 SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, FFmpegDriver *myFFmpegDriver, bool myHeadless, bool myAudioPreview) {
 	logger = new Logger("SDLDriver");
 
+	joystickEnabled = config["YerFace"]["SDLDriver"]["joystick"]["enabled"];
+	joystickEventsRaw = config["YerFace"]["SDLDriver"]["joystick"]["eventsRaw"];
+
 	if((audioFramesMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
-	if((onBasisFlagCallbacksMutex = SDL_CreateMutex()) == NULL) {
+	if((callbacksMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
 	if((frameTimestampsNowMutex = SDL_CreateMutex()) == NULL) {
@@ -55,6 +58,9 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 		sdlInitFlags |= SDL_INIT_VIDEO;
 		if(audioPreview) {
 			sdlInitFlags |= SDL_INIT_AUDIO;
+		}
+		if(joystickEnabled) {
+			sdlInitFlags |= SDL_INIT_JOYSTICK;
 		}
 	}
 	if(SDL_Init(sdlInitFlags) != 0) {
@@ -112,12 +118,53 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 	}
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+	SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+
+	if(joystickEnabled) {
+		SDLJoystickDevice joystick;
+		int numJoysticks = SDL_NumJoysticks();
+		logger->debug1("Joystick support enabled. Detected number of joysticks: %d", numJoysticks);
+		for(int x = 0; x < numJoysticks; x++) {
+			joystick.index = x;
+			joystick.joystick = SDL_JoystickOpen(joystick.index);
+			if(joystick.joystick) {
+				joystick.id = SDL_JoystickInstanceID(joystick.joystick);
+				joystick.name = SDL_JoystickNameForIndex(joystick.index);
+				joystick.axesNum = SDL_JoystickNumAxes(joystick.joystick);
+				joystick.buttonsNum = SDL_JoystickNumButtons(joystick.joystick);
+				joystick.buttonsPressedTime.assign(joystick.buttonsNum, 0);
+
+				json controllerSettingsList = config["YerFace"]["SDLDriver"]["joystick"]["controllerSettings"];
+				json controllerSettings = controllerSettingsList["default"];
+
+				if(controllerSettingsList.find(joystick.name) != controllerSettingsList.end()) {
+					controllerSettings = controllerSettingsList[joystick.name];
+				}
+
+				joystick.buttonEventMappingBasis = controllerSettings["buttonEventMapping"]["basis"];
+				joystick.buttonEventMappingPreviewDebugDensity = controllerSettings["buttonEventMapping"]["previewDebugDensity"];
+				joystick.axisMin = controllerSettings["axisSettings"]["min"];
+				joystick.axisMax = controllerSettings["axisSettings"]["max"];
+
+				joysticks[joystick.id] = joystick;
+				logger->debug1("Opened Joystick %d [%s] with InstanceID %d, %d Axes, and %d Buttons.", joystick.index, joystick.name.c_str(), joystick.id, joystick.axesNum, joystick.buttonsNum);
+			}
+		}
+		SDL_JoystickEventState(SDL_ENABLE);
+	}
 
 	logger->debug1("SDLDriver object constructed and ready to go!");
 }
 
 SDLDriver::~SDLDriver() noexcept(false) {
 	logger->debug1("SDLDriver object destructing...");
+	if(joystickEnabled) {
+		std::unordered_map<SDL_JoystickID, SDLJoystickDevice>::iterator it = joysticks.begin();
+		while(it != joysticks.end()) {
+			SDL_JoystickClose(it->second.joystick);
+			it++;
+		}
+	}
 	if(audioDevice.opened) {
 		SDL_PauseAudioDevice(audioDevice.deviceID, 1);
 		SDL_CloseAudioDevice(audioDevice.deviceID);
@@ -132,8 +179,8 @@ SDLDriver::~SDLDriver() noexcept(false) {
 	frameTimestampsNowMutex = NULL;
 	SDL_DestroyMutex(audioFramesMutex);
 	audioFramesMutex = NULL;
-	SDL_DestroyMutex(onBasisFlagCallbacksMutex);
-	onBasisFlagCallbacksMutex = NULL;
+	SDL_DestroyMutex(callbacksMutex);
+	callbacksMutex = NULL;
 	for(SDLAudioFrame *audioFrame : audioFramesAllocated) {
 		if(audioFrame->buf != NULL) {
 			av_freep(&audioFrame->buf);
@@ -258,6 +305,8 @@ void SDLDriver::doRenderPreviewFrame(Mat previewFrame) {
 
 void SDLDriver::doHandleEvents(void) {
 	SDL_Event event;
+	SDLJoystickDevice *joystick;
+	double axisValue, buttonHeldSeconds;
 	while(SDL_PollEvent(&event)){
 		switch(event.type) {
 			case SDL_QUIT:
@@ -288,12 +337,69 @@ void SDLDriver::doHandleEvents(void) {
 						break;
 					case SDLK_RETURN:
 						logger->info("Received Basis Flag keyboard event. Rebroadcasting...");
-						YerFace_MutexLock(onBasisFlagCallbacksMutex);
+						YerFace_MutexLock(callbacksMutex);
 						for(auto callback : onBasisFlagCallbacks) {
 							callback();
 						}
-						YerFace_MutexUnlock(onBasisFlagCallbacksMutex);
+						YerFace_MutexUnlock(callbacksMutex);
 						break;
+				}
+				break;
+			case SDL_JOYBUTTONDOWN:
+			case SDL_JOYBUTTONUP:
+				joystick = &joysticks[event.jbutton.which];
+				logger->debug2("Joystick ID %d, Button %d, Status: %s", joystick->id, event.jbutton.button, event.jbutton.state == SDL_PRESSED ? "PRESSED" : "RELEASED");
+
+				if(event.jbutton.state == SDL_PRESSED) {
+					buttonHeldSeconds = -1.0;
+					joystick->buttonsPressedTime[event.jbutton.button] = event.jbutton.timestamp;
+
+					if(event.jbutton.button == joystick->buttonEventMappingBasis) {
+						logger->info("Received Basis Flag joystick event. Rebroadcasting...");
+						YerFace_MutexLock(callbacksMutex);
+						for(auto callback : onBasisFlagCallbacks) {
+							callback();
+						}
+						YerFace_MutexUnlock(callbacksMutex);
+					} else if(event.jbutton.button == joystick->buttonEventMappingPreviewDebugDensity) {
+						status->incrementPreviewDebugDensity();
+					}
+				} else {
+					buttonHeldSeconds = (double)(event.jbutton.timestamp - joystick->buttonsPressedTime[event.jbutton.button]) / 1000.0;
+					if(buttonHeldSeconds < 0.0) {
+						buttonHeldSeconds = 0.0;
+					}
+					logger->debug4("Released button was held for %.02f seconds.", buttonHeldSeconds);
+				}
+
+				if(joystickEventsRaw) {
+					YerFace_MutexLock(callbacksMutex);
+					for(auto callback : onJoystickButtonEventCallbacks) {
+						callback(joystick->id, event.jbutton.button, event.jbutton.state == SDL_PRESSED, buttonHeldSeconds);
+					}
+					YerFace_MutexUnlock(callbacksMutex);
+				}
+
+				break;
+			case SDL_JOYAXISMOTION:
+				joystick = &joysticks[event.jbutton.which];
+				axisValue = 0.0;
+				if(abs(event.jaxis.value) > joystick->axisMin) {
+					axisValue = (double)event.jaxis.value / (double)joystick->axisMax;
+				}
+				if(axisValue > 1.0) {
+					axisValue = 1.0;
+				} else if(axisValue < -1.0) {
+					axisValue = -1.0;
+				}
+				logger->debug2("Joystick ID %d, Axis %d, Value: %.02f (%d)", joystick->id, event.jaxis.axis, axisValue, event.jaxis.value);
+
+				if(joystickEventsRaw) {
+					YerFace_MutexLock(callbacksMutex);
+					for(auto callback : onJoystickAxisEventCallbacks) {
+						callback(joystick->id, event.jaxis.axis, axisValue);
+					}
+					YerFace_MutexUnlock(callbacksMutex);
 				}
 				break;
 		}
@@ -301,9 +407,21 @@ void SDLDriver::doHandleEvents(void) {
 }
 
 void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {
-	YerFace_MutexLock(onBasisFlagCallbacksMutex);
+	YerFace_MutexLock(callbacksMutex);
 	onBasisFlagCallbacks.push_back(callback);
-	YerFace_MutexUnlock(onBasisFlagCallbacksMutex);
+	YerFace_MutexUnlock(callbacksMutex);
+}
+
+void SDLDriver::onJoystickButtonEvent(function<void(int deviceId, int button, bool pressed, double heldSeconds)> callback) {
+	YerFace_MutexLock(callbacksMutex);
+	onJoystickButtonEventCallbacks.push_back(callback);
+	YerFace_MutexUnlock(callbacksMutex);
+}
+
+void SDLDriver::onJoystickAxisEvent(function<void(int deviceId, int axis, double value)> callback) {
+	YerFace_MutexLock(callbacksMutex);
+	onJoystickAxisEventCallbacks.push_back(callback);
+	YerFace_MutexUnlock(callbacksMutex);
 }
 
 SDLAudioFrame *SDLDriver::getNextAvailableAudioFrame(int desiredBufferSize) {

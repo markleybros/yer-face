@@ -135,6 +135,32 @@
     "EventLogger": {
     },
     "SDLDriver": {
+        "joystick": {
+            "enabled": true,
+            "eventsRaw": true,
+            "controllerSettings": {
+                "default": {
+                    "buttonEventMapping": {
+                        "basis": 9,
+                        "previewDebugDensity": 8
+                    },
+                    "axisSettings": {
+                        "max": 32767,
+                        "min": 10
+                    }
+                },
+                "Nintendo GameCube Controller Adapter": {
+                    "buttonEventMapping": {
+                        "basis": 9,
+                        "previewDebugDensity": 7
+                    },
+                    "axisSettings": {
+                        "max": 22000,
+                        "min": 500
+                    }
+                }
+            }
+        }
     },
     "PreviewHUD": {
       "numWorkersPerCPU": 0.5,

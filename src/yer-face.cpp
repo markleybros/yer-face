@@ -467,7 +467,7 @@ int yerface(int argc, char *argv[]) {
 
 void videoCaptureInitializer(WorkerPoolWorker *worker, void *ptr) {
 	ffmpegDriver->setVideoCaptureWorkerPool(worker->pool);
-	ffmpegDriver->rollDemuxerThread();
+	ffmpegDriver->rollWorkerThreads();
 }
 
 bool videoCaptureHandler(WorkerPoolWorker *worker) {
@@ -591,12 +591,9 @@ void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bo
 	double fontSize = 1.25 * (previewFrame.size().height / 720.0); // FIXME - magic numbers
 	int baseline;
 	Size textSize = Utilities::getTextSize(metrics->getTimesString().c_str(), &baseline, fontSize);
-	// logger->debug1("Retrieved text size: %dx%d (%d)", textSize.width, textSize.height, baseline);
 	int lineskip = textSize.height + baseline;
 	Point origin = Point(25, lineskip + 25);
 	Utilities::drawText(previewFrame, metrics->getTimesString().c_str(), origin, Scalar(200,200,200), fontSize);
 	origin.y += lineskip;
 	Utilities::drawText(previewFrame, metrics->getFPSString().c_str(), origin, Scalar(200,200,200), fontSize);
-	// putText(previewFrame, metrics->getTimesString().c_str(), Point(25,50), FONT_HERSHEY_DUPLEX, 0.75, Scalar(0,0,255), 2, LINE_AA); // FIXME - proportional drawing
-	// putText(previewFrame, metrics->getFPSString().c_str(), Point(25,75), FONT_HERSHEY_DUPLEX, 0.75, Scalar(0,0,255), 2, LINE_AA); // FIXME - proportional drawing
 }

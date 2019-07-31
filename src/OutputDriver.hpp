@@ -32,6 +32,12 @@ public:
 	json frame;
 };
 
+class OutputRawEvent {
+public:
+	string eventName;
+	json payload;
+};
+
 class OutputDriver {
 friend class OutputDriverWebSocketServer;
 
@@ -70,8 +76,10 @@ private:
 	SDL_mutex *workerMutex;
 	list<string> lateFrameWaitOn;
 	unordered_map<FrameNumber, OutputFrameContainer> pendingFrames;
-	FrameTimestamps newestFrameTimestamps;
 	bool frameServerDrained;
+
+	SDL_mutex *rawEventsMutex;
+	list<OutputRawEvent> rawEventsPending;
 };
 
 }; //namespace YerFace
