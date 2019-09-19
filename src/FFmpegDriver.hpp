@@ -23,6 +23,7 @@ namespace YerFace {
 
 #define YERFACE_FRAME_DURATION_ESTIMATE_BUFFER 10
 #define YERFACE_INITIAL_VIDEO_BACKING_FRAMES 60
+#define YERFACE_MAX_PUMPTIME 67 //If a/v stream pumping is taking longer than 1/15th of a second, we may have a hardware problem.
 
 #define YERFACE_AVLOG_LEVELMAP_MIN 0		//Less than this gets dropped.
 #define YERFACE_AVLOG_LEVELMAP_ALERT 8		//Less than this (libav* defines 0-7 as PANIC) gets mapped to our LOG_SEVERITY_ALERT
@@ -34,6 +35,7 @@ namespace YerFace {
 
 class FrameServer;
 class WorkerPool;
+class FFmpegDriver;
 
 enum FFmpegDriverInputAudioChannelMap {
 	CHANNELMAP_NONE = 0,
@@ -55,7 +57,7 @@ public:
 	
 	AVFormatContext *formatContext;
 
-	AVPacket packet;
+	AVPacket *packet;
 	AVFrame *frame;
 	FrameNumber frameNumber;
 
@@ -75,6 +77,12 @@ public:
 
 	bool demuxerDraining;
 
+	SDL_mutex *demuxerMutex;
+	SDL_Thread *demuxerThread;
+	bool demuxerThreadRunning;
+
+	FFmpegDriver *driver;
+
 	bool initialized;
 };
 
@@ -91,6 +99,11 @@ public:
 	int audioStreamIndex;
 
 	SDL_mutex *multiplexerMutex;
+	SDL_cond *multiplexerCond;
+	SDL_Thread *multiplexerThread;
+	bool multiplexerThreadRunning;
+
+	std::list<AVPacket *> outputPackets;
 
 	bool initialized;
 };
@@ -150,7 +163,7 @@ public:
 	void openInputMedia(string inFile, enum AVMediaType type, string inFormat, string inSize, string inChannels, string inRate, string inCodec, string inputAudioChannelMap, bool tryAudio);
 	void openOutputMedia(string outFile);
 	void setVideoCaptureWorkerPool(WorkerPool *workerPool);
-	void rollDemuxerThread(void);
+	void rollWorkerThreads(void);
 	bool getIsAudioInputPresent(void);
 	bool getIsVideoFrameBufferEmpty(void);
 	VideoFrame getNextVideoFrame(void);
@@ -163,15 +176,18 @@ private:
 	void openCodecContext(int *streamIndex, AVCodecContext **decoderContext, AVFormatContext *myFormatContext, enum AVMediaType type);
 	VideoFrameBacking *getNextAvailableVideoFrameBacking(void);
 	VideoFrameBacking *allocateNewVideoFrameBacking(void);
-	bool decodePacket(MediaInputContext *context, int streamIndex, bool drain);
-	void destroyDemuxerThread(void);
+	bool decodePacket(MediaInputContext *inputContext, int streamIndex, bool drain);
+	void destroyDemuxerThread(MediaInputContext *inputContext);
+	void destroyMuxerThread(void);
 	static int runOuterDemuxerLoop(void *ptr);
-	int innerDemuxerLoop(void);
-	void pumpDemuxer(MediaInputContext *context, enum AVMediaType type);
+	static int runOuterMuxerLoop(void *ptr);
+	int innerDemuxerLoop(MediaInputContext *inputContext);
+	int innerMuxerLoop(void);
+	void pumpDemuxer(MediaInputContext *inputContext, enum AVMediaType type);
 	bool flushAudioHandlers(bool draining);
 	bool getIsAudioDraining(void);
 	bool getIsVideoDraining(void);
-	FrameTimestamps resolveFrameTimestamp(MediaInputContext *context, enum AVMediaType type);
+	FrameTimestamps resolveFrameTimestamp(MediaInputContext *inputContext, enum AVMediaType type);
 	void recursivelyListAllAVOptions(void *obj, string depth = "-");
 	bool getIsAllocatedVideoFrameBackingsFull(void);
 	int64_t applyPTSOffset(int64_t pts, int64_t offset);
@@ -187,16 +203,12 @@ private:
 
 	std::list<double> frameStartTimes;
 
-	MediaInputContext videoContext, audioContext;
+	MediaInputContext videoInContext, audioInContext;
 	MediaOutputContext outputContext;
 
 	int width, height;
 	enum AVPixelFormat pixelFormat, pixelFormatBacking;
 	struct SwsContext *swsContext;
-
-	SDL_Thread *demuxerThread;
-	SDL_mutex *demuxerThreadMutex;
-	bool demuxerThreadRunning;
 
 	SDL_mutex *videoStreamMutex;
 	double videoStreamTimeBase;
@@ -213,11 +225,12 @@ private:
 	int videoDestBufSize;
 
 	SDL_mutex *videoFrameBufferMutex;
-	list<VideoFrame> readyVideoFrameBuffer;
-	list<VideoFrameBacking *> allocatedVideoFrameBackings;
+	std::list<VideoFrame> readyVideoFrameBuffer;
+	std::list<VideoFrameBacking *> allocatedVideoFrameBackings;
 
+	SDL_mutex *audioFrameHandlersMutex;
 	std::vector<AudioFrameHandler *> audioFrameHandlers;
-	bool audioCallbacksOkay;
+	bool audioFrameHandlersOkay;
 
 	static Logger *avLogger;
 	static SDL_mutex *avLoggerMutex;

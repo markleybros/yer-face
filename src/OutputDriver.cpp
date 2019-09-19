@@ -164,9 +164,7 @@ bool OutputFrameContainer::isReady(void) {
 OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatus, FrameServer *myFrameServer, FaceTracker *myFaceTracker, SDLDriver *mySDLDriver) {
 	workerPool = NULL;
 	outputFilename = myOutputFilename;
-	newestFrameTimestamps.frameNumber = -1;
-	newestFrameTimestamps.startTimestamp = -1.0;
-	newestFrameTimestamps.estimatedEndTimestamp = -1.0;
+	rawEventsPending.clear();
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -190,6 +188,9 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 	if((workerMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
 	}
+	if((rawEventsMutex = SDL_CreateMutex()) == NULL) {
+		throw runtime_error("Failed creating mutex!");
+	}
 
 	//We need to know when the frame server has drained.
 	frameServerDrained = false;
@@ -200,24 +201,43 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 
 	autoBasisTransmitted = false;
 	sdlDriver->onBasisFlagEvent([this] (void) -> void {
-		YerFace_MutexLock(this->workerMutex);
-		bool eventHandled = false;
-		if(this->newestFrameTimestamps.frameNumber > 0 && !this->frameServerDrained) {
-			FrameNumber frameNumber = this->newestFrameTimestamps.frameNumber;
-			if(this->pendingFrames.find(frameNumber) != this->pendingFrames.end()) {
-				if(!this->pendingFrames[frameNumber].frameIsDraining) {
-					if(this->eventLogger != NULL) {
-						this->eventLogger->logEvent("basis", (json)true, this->newestFrameTimestamps);
-					}
-					this->handleNewBasisEvent(frameNumber);
-					eventHandled = true;
-				}
-			}
+		// Log the user-generated basis event, but don't try to assign it to a frame because we might not have one in our pipeline right now.
+		YerFace_MutexLock(this->rawEventsMutex);
+		OutputRawEvent rawEvent;
+		rawEvent.eventName = "basis";
+		rawEvent.payload = (json)true;
+		this->rawEventsPending.push_back(rawEvent);
+		YerFace_MutexUnlock(this->rawEventsMutex);
+	});
+	sdlDriver->onJoystickButtonEvent([this] (int deviceId, int button, bool pressed, double heldSeconds) -> void {
+		YerFace_MutexLock(this->rawEventsMutex);
+		OutputRawEvent rawEvent;
+		rawEvent.eventName = "controller";
+		rawEvent.payload = {
+			{ "deviceId", deviceId },
+			{ "actionType", "button" },
+			{ "buttonIndex", button },
+			{ "buttonPressed", pressed },
+			{ "heldSeconds", heldSeconds }
+		};
+		if(heldSeconds < 0.0) {
+			rawEvent.payload["heldSeconds"] = nullptr;
 		}
-		if(!eventHandled) {
-			this->logger->err("Discarding user basis event because frame status is already drained. (Or similar bad state.)");
-		}
-		YerFace_MutexUnlock(this->workerMutex);
+		this->rawEventsPending.push_back(rawEvent);
+		YerFace_MutexUnlock(this->rawEventsMutex);
+	});
+	sdlDriver->onJoystickAxisEvent([this] (int deviceId, int axis, double value) -> void {
+		YerFace_MutexLock(this->rawEventsMutex);
+		OutputRawEvent rawEvent;
+		rawEvent.eventName = "controller";
+		rawEvent.payload = {
+			{ "deviceId", deviceId },
+			{ "actionType", "axis" },
+			{ "axisIndex", axis },
+			{ "axisValue", value }
+		};
+		this->rawEventsPending.push_back(rawEvent);
+		YerFace_MutexUnlock(this->rawEventsMutex);
 	});
 	logger = new Logger("OutputDriver");
 
@@ -261,6 +281,8 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 	frameStatusChangeCallback.callback = handleFrameStatusChange;
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_NEW;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
+	frameStatusChangeCallback.newStatus = FRAME_STATUS_PREVIEW_DISPLAY;
+	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_DRAINING;
 	frameServer->onFrameStatusChangeEvent(frameStatusChangeCallback);
 	frameStatusChangeCallback.newStatus = FRAME_STATUS_GONE;
@@ -300,6 +322,7 @@ OutputDriver::~OutputDriver() noexcept(false) {
 		SDL_WaitThread(webSocketServer->serverThread, NULL);
 	}
 
+	SDL_DestroyMutex(rawEventsMutex);
 	SDL_DestroyMutex(basisMutex);
 	SDL_DestroyMutex(webSocketServer->websocketMutex);
 	SDL_DestroyMutex(workerMutex);
@@ -322,7 +345,7 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 	basisEvent.name = "basis";
 	basisEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
 		if(eventName != "basis" || (bool)eventPayload != true) {
-			this->logger->err("Got an unsupported replay event!");
+			this->logger->err("Got an unsupported basis replay event!");
 			return false;
 		}
 		this->logger->info("Received replayed Basis Flag event. Rebroadcasting...");
@@ -340,6 +363,19 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 		return true;
 	};
 	eventLogger->registerEventType(basisEvent);
+
+	EventType controllerEvent;
+	controllerEvent.name = "controller";
+	controllerEvent.replayCallback = [this] (string eventName, json eventPayload, json sourcePacket) -> bool {
+		if(eventName != "controller" || !eventPayload.is_array()) {
+			this->logger->err("Got an unsupported controller replay event!");
+			return false;
+		}
+		FrameNumber frameNumber = (FrameNumber)sourcePacket["meta"]["frameNumber"];
+		pendingFrames[frameNumber].frame["controller"] = eventPayload;
+		return true;
+	};
+	eventLogger->registerEventType(controllerEvent);
 }
 
 void OutputDriver::handleNewBasisEvent(FrameNumber frameNumber) {
@@ -498,6 +534,9 @@ bool OutputDriver::workerHandler(WorkerPoolWorker *worker) {
 void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps) {
 	FrameNumber frameNumber = frameTimestamps.frameNumber;
 	OutputDriver *self = (OutputDriver *)userdata;
+	OutputRawEvent logEvent;
+	unordered_map<string, json> eventBuffer;
+	unordered_map<string, json>::iterator eventBufferIter;
 	static OutputFrameContainer newOutputFrame;
 	switch(newStatus) {
 		default:
@@ -516,8 +555,45 @@ void OutputDriver::handleFrameStatusChange(void *userdata, WorkingFrameStatus ne
 				newOutputFrame.waitingOn[waitOn] = true;
 			}
 			self->pendingFrames[frameNumber] = newOutputFrame;
-			self->newestFrameTimestamps = frameTimestamps;
 			YerFace_MutexUnlock(self->workerMutex);
+			break;
+		case FRAME_STATUS_PREVIEW_DISPLAY:
+			// Handle any pending raw events. (Assign them to frames as close as possible to real time.)
+			eventBuffer.clear();
+			YerFace_MutexLock(self->rawEventsMutex);
+			while(self->rawEventsPending.size() > 0) {
+				OutputRawEvent rawEvent = self->rawEventsPending.front();
+				self->rawEventsPending.pop_front();
+
+				//Accumulate raw events into an array, for cases where multiple of the same event fired during a single frame.
+				eventBufferIter = eventBuffer.find(rawEvent.eventName);
+				if(eventBufferIter == eventBuffer.end()) {
+					eventBuffer[rawEvent.eventName] = json::array();
+				}
+
+				eventBuffer[rawEvent.eventName].push_back(rawEvent.payload);
+			}
+			YerFace_MutexUnlock(self->rawEventsMutex);
+
+			eventBufferIter = eventBuffer.begin();
+			while(eventBufferIter != eventBuffer.end()) {
+				logEvent.eventName = eventBufferIter->first;
+				logEvent.payload = eventBufferIter->second;
+
+				if(logEvent.eventName == "basis") {
+					self->handleNewBasisEvent(frameNumber);
+					logEvent.payload = (json)true;
+				} else {
+					YerFace_MutexLock(self->workerMutex);
+					self->pendingFrames[frameNumber].frame[logEvent.eventName] = logEvent.payload;
+					YerFace_MutexUnlock(self->workerMutex);
+				}
+
+				if(self->eventLogger != NULL) {
+					self->eventLogger->logEvent(logEvent.eventName, logEvent.payload, frameTimestamps);
+				}
+				eventBufferIter++;
+			}
 			break;
 		case FRAME_STATUS_DRAINING:
 			YerFace_MutexLock(self->workerMutex);
