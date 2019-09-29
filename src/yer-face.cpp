@@ -41,6 +41,7 @@ string inAudioCodec;
 string inAudioChannelMap;
 
 string inEventData;
+double inEventDataStartSeconds = 0.0;
 
 string outEventData;
 string outVideo;
@@ -138,6 +139,7 @@ int yerface(int argc, char *argv[]) {
 		"{inAudioCodec||Tell libav to attempt a specific codec when interpreting inAudio. Leave blank for auto-detection.}"
 		"{inAudioChannelMap||Alter the input audio channel mapping. Set to \"left\" to interpret only the left channel, \"right\" to interpret only the right channel, and leave blank for the default.}"
 		"{inEventData||Input event data / replay file. (Previously generated outEventData, for re-processing recorded sessions.)}"
+		"{inEventDataStartSeconds|0.0|Offset for input event data / replay file timestamps. (Useful if the capture session was trimmed.)}"
 		"{outEventData||Output event data / replay file. (Includes performance capture data.)}"
 		"{outVideo||Output file for captured video and audio. Together with the \"outEventData\" file, this can be used to re-run a previous capture session.}"
 		"{outLogFile||If specified, log messages will be written to this file. If \"-\" or not specified, log messages will be written to STDERR.}"
@@ -215,6 +217,7 @@ int yerface(int argc, char *argv[]) {
 	inAudioCodec = parser.get<string>("inAudioCodec");
 	inAudioChannelMap = parser.get<string>("inAudioChannelMap");
 	inEventData = parser.get<string>("inEventData");
+	inEventDataStartSeconds = parser.get<double>("inEventDataStartSeconds");
 	outEventData = parser.get<string>("outEventData");
 	outVideo = parser.get<string>("outVideo");
 	outLogFile = parser.get<string>("outLogFile");
@@ -308,7 +311,7 @@ int yerface(int argc, char *argv[]) {
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, status, frameServer, ffmpegDriver, sdlDriver, outputDriver, previewHUD, lowLatency);
 	}
-	eventLogger = new EventLogger(config, inEventData, status, outputDriver, frameServer);
+	eventLogger = new EventLogger(config, inEventData, inEventDataStartSeconds, status, outputDriver, frameServer);
 
 	outputDriver->setEventLogger(eventLogger);
 

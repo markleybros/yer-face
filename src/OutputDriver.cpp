@@ -209,11 +209,12 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 		this->rawEventsPending.push_back(rawEvent);
 		YerFace_MutexUnlock(this->rawEventsMutex);
 	});
-	sdlDriver->onJoystickButtonEvent([this] (int deviceId, int button, bool pressed, double heldSeconds) -> void {
+	sdlDriver->onJoystickButtonEvent([this] (Uint32 relativeTimestamp, int deviceId, int button, bool pressed, double heldSeconds) -> void {
 		YerFace_MutexLock(this->rawEventsMutex);
 		OutputRawEvent rawEvent;
 		rawEvent.eventName = "controller";
 		rawEvent.payload = {
+			{ "relativeTimestamp", relativeTimestamp },
 			{ "deviceId", deviceId },
 			{ "actionType", "button" },
 			{ "buttonIndex", button },
@@ -226,15 +227,31 @@ OutputDriver::OutputDriver(json config, string myOutputFilename, Status *myStatu
 		this->rawEventsPending.push_back(rawEvent);
 		YerFace_MutexUnlock(this->rawEventsMutex);
 	});
-	sdlDriver->onJoystickAxisEvent([this] (int deviceId, int axis, double value) -> void {
+	sdlDriver->onJoystickAxisEvent([this] (Uint32 relativeTimestamp, int deviceId, int axis, double value) -> void {
 		YerFace_MutexLock(this->rawEventsMutex);
 		OutputRawEvent rawEvent;
 		rawEvent.eventName = "controller";
 		rawEvent.payload = {
+			{ "relativeTimestamp", relativeTimestamp },
 			{ "deviceId", deviceId },
 			{ "actionType", "axis" },
 			{ "axisIndex", axis },
 			{ "axisValue", value }
+		};
+		this->rawEventsPending.push_back(rawEvent);
+		YerFace_MutexUnlock(this->rawEventsMutex);
+	});
+	sdlDriver->onJoystickHatEvent([this] (Uint32 relativeTimestamp, int deviceId, int hat, int x, int y) -> void {
+		YerFace_MutexLock(this->rawEventsMutex);
+		OutputRawEvent rawEvent;
+		rawEvent.eventName = "controller";
+		rawEvent.payload = {
+			{ "relativeTimestamp", relativeTimestamp },
+			{ "deviceId", deviceId },
+			{ "actionType", "hat" },
+			{ "hatIndex", hat },
+			{ "hatX", x },
+			{ "hatY", y }
 		};
 		this->rawEventsPending.push_back(rawEvent);
 		YerFace_MutexUnlock(this->rawEventsMutex);
@@ -372,7 +389,19 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 			return false;
 		}
 		FrameNumber frameNumber = (FrameNumber)sourcePacket["meta"]["frameNumber"];
-		pendingFrames[frameNumber].frame["controller"] = eventPayload;
+		YerFace_MutexLock(workerMutex);
+		if(pendingFrames[frameNumber].frame.find("controller") == pendingFrames[frameNumber].frame.end()) {
+			pendingFrames[frameNumber].frame["controller"] = eventPayload;
+		} else {
+			if(pendingFrames[frameNumber].frame["controller"].is_array() && eventPayload.is_array()) {
+				for(json controllerEvent : eventPayload) {
+					pendingFrames[frameNumber].frame["controller"].push_back(controllerEvent);
+				}
+			} else {
+				throw logic_error("trying to apply controller data multiple times for the same frame, but not using arrays?!");
+			}
+		}
+		YerFace_MutexUnlock(workerMutex);
 		return true;
 	};
 	eventLogger->registerEventType(controllerEvent);

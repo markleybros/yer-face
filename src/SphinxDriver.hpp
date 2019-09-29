@@ -64,7 +64,7 @@ public:
 	FrameTimestamps timestamps;
 	PrestonBlairPhonemes phonemes;
 	bool peak;
-	double maxAmplitude;
+	double maxAmplitude, lipFlappingAmount;
 };
 
 class SphinxDriver {
@@ -89,7 +89,7 @@ private:
 	
 	string hiddenMarkovModel, allPhoneLM;
 	string lipFlappingTargetPhoneme;
-	double lipFlappingResponseThreshold, lipFlappingNonLinearResponse, lipFlappingNotInSpeechScale;
+	double lipFlappingResponseThreshold, lipFlappingNonLinearResponse, lipFlappingNotInSpeechScale, sphinxInfluenceOfLipFlappingOnResult;
 	json sphinxToPrestonBlairPhonemeMapping;
 	Status *status;
 	FrameServer *frameServer;
@@ -112,6 +112,7 @@ private:
 	list<SphinxAudioFrame *> audioFramesAllocated;
 	bool utteranceRestarted, inSpeech;
 	int utteranceIndex;
+	double lastUtteranceEndedTimestamp;
 	list<SphinxRecognizerResult> recognitionResults;
 	list<SphinxPhoneme> phonemeBuffer;
 

@@ -29,13 +29,17 @@ SphinxDriver::SphinxDriver(json config, Status *myStatus, FrameServer *myFrameSe
 	lipFlappingWorkerPool = NULL;
 	phonemeBreakdownWorkerPool = NULL;
 	
-	hiddenMarkovModel = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["hiddenMarkovModel"]);
-	allPhoneLM = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["allPhoneLM"]);
 	lipFlappingTargetPhoneme = config["YerFace"]["SphinxDriver"]["lipFlapping"]["targetPhoneme"];
 	lipFlappingResponseThreshold = config["YerFace"]["SphinxDriver"]["lipFlapping"]["responseThreshold"];
 	lipFlappingNonLinearResponse = config["YerFace"]["SphinxDriver"]["lipFlapping"]["nonLinearResponse"];
 	lipFlappingNotInSpeechScale = config["YerFace"]["SphinxDriver"]["lipFlapping"]["notInSpeechScale"];
-	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinxToPrestonBlairPhonemeMapping"];
+	hiddenMarkovModel = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["sphinx"]["hiddenMarkovModel"]);
+	allPhoneLM = Utilities::fileValidPathOrDie(config["YerFace"]["SphinxDriver"]["sphinx"]["allPhoneLM"]);
+	sphinxToPrestonBlairPhonemeMapping = config["YerFace"]["SphinxDriver"]["sphinx"]["prestonBlairPhonemeMapping"];
+	sphinxInfluenceOfLipFlappingOnResult = config["YerFace"]["SphinxDriver"]["sphinx"]["influenceOfLipFlappingOnResult"];
+	if(sphinxInfluenceOfLipFlappingOnResult < 0.0 || sphinxInfluenceOfLipFlappingOnResult > 1.0) {
+		throw invalid_argument("SphinxDriver influenceOfAmplitudeOnResult must be between 0.0 and 1.0 inclusive.");
+	}
 	vuMeterWidth = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWidth"];
 	vuMeterWarningThreshold = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterWarningThreshold"];
 	vuMeterPeakHoldSeconds = config["YerFace"]["SphinxDriver"]["PreviewHUD"]["vuMeterPeakHoldSeconds"];
@@ -78,6 +82,7 @@ SphinxDriver::SphinxDriver(json config, Status *myStatus, FrameServer *myFrameSe
 	pocketSphinx = NULL;
 	pocketSphinxConfig = NULL;
 	utteranceRestarted = false;
+	lastUtteranceEndedTimestamp = 0.0;
 	inSpeech = false;
 	if((recognitionMutex = SDL_CreateMutex()) == NULL) {
 		throw runtime_error("Failed creating mutex!");
@@ -226,7 +231,10 @@ void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int dens
 		YerFace_MutexLock(workingVideoFramesMutex);
 		double maxAmplitude = workingVideoFrames[frameNumber]->maxAmplitude;
 		bool peak = workingVideoFrames[frameNumber]->peak;
+		double lipFlappingAmount = workingVideoFrames[frameNumber]->lipFlappingAmount;
 		YerFace_MutexUnlock(workingVideoFramesMutex);
+
+		int meterWidth = floor(vuMeterWidth / 2.0);
 
 		Rect2d previewRect;
 		Point2d previewCenter;
@@ -236,13 +244,21 @@ void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int dens
 		Rect2d vuMeter;
 		vuMeter.x = previewRect.x;
 		vuMeter.y = previewRect.y + (previewRect.height - vuHeight);
-		vuMeter.width = vuMeterWidth;
+		vuMeter.width = meterWidth;
 		vuMeter.height = vuHeight;
 
 		Scalar color = Scalar(0, 255, 0);
 		if(maxAmplitude >= vuMeterWarningThreshold) {
 			color = Scalar(0, 165, 255);
 		}
+		rectangle(frame, vuMeter, color, FILLED); // FIXME - proportional drawing
+
+		vuHeight = previewRect.height * lipFlappingAmount;
+		vuMeter.x = previewRect.x + meterWidth;
+		vuMeter.y = previewRect.y + (previewRect.height - vuHeight);
+		vuMeter.width = meterWidth;
+		vuMeter.height = vuHeight;
+		color = Scalar(255, 64, 0);
 		rectangle(frame, vuMeter, color, FILLED); // FIXME - proportional drawing
 
 		if(peak) {
@@ -257,6 +273,8 @@ void SphinxDriver::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int dens
 }
 
 bool SphinxDriver::processPhonemeBreakdown(SphinxVideoFrame *videoFrame) {
+	// logger->debug4("processPhonemeBreakdown() on frame #" YERFACE_FRAMENUMBER_FORMAT, videoFrame->timestamps.frameNumber);
+	double phonemeTotal = Utilities::morph(1.0, videoFrame->lipFlappingAmount, sphinxInfluenceOfLipFlappingOnResult);
 	bool processedThroughFrameTime = false;
 	YerFace_MutexLock(recognitionMutex);
 	while(phonemeBuffer.size()) {
@@ -286,10 +304,11 @@ bool SphinxDriver::processPhonemeBreakdown(SphinxVideoFrame *videoFrame) {
 				}
 				double numerator = phonemeEndTime - phonemeStartTime;
 				currentPercent = currentPercent + (numerator / divisor);
-				// logger->verbose("pbPhenome %s is %.04lf / %.04lf = %.04lf", phonemeBuffer.back().pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
+				// logger->debug4("pbPhenome %s is %.04lf / %.04lf = %.04lf", phonemeBuffer.back().pbPhoneme.c_str(), numerator, divisor, numerator / divisor);
 				if(currentPercent > 1.0) {
 					currentPercent = 1.0;
 				}
+				currentPercent = currentPercent * phonemeTotal;
 				videoFrame->phonemes.percent[phonemeBuffer.back().pbPhoneme] = currentPercent;
 			}
 			if(!comparison.doesAOccurAfterB) {
@@ -307,6 +326,7 @@ bool SphinxDriver::processPhonemeBreakdown(SphinxVideoFrame *videoFrame) {
 }
 
 void SphinxDriver::processUtteranceHypothesis(void) {
+	// logger->debug4("processUtteranceHypothesis()");
 	int frameRate = cmd_ln_int32_r(pocketSphinxConfig, "-frate");
 	ps_seg_t *segmentIterator = ps_seg_iter(pocketSphinx);
 	bool addedPhonemes = false;
@@ -394,9 +414,10 @@ void SphinxDriver::processLipFlappingAudio(SphinxVideoFrame *videoFrame) {
 		}
 		lipFlappingAmount = temp;
 	}
-	if(lipFlappingAmount > (double)videoFrame->phonemes.percent[lipFlappingTargetPhoneme]) {
+	if(lowLatency && lipFlappingAmount > (double)videoFrame->phonemes.percent[lipFlappingTargetPhoneme]) {
 		videoFrame->phonemes.percent[lipFlappingTargetPhoneme] = lipFlappingAmount;
 	}
+	videoFrame->lipFlappingAmount = lipFlappingAmount;
 	videoFrame->maxAmplitude = maxAmplitude;
 	videoFrame->peak = peak;
 }
@@ -546,7 +567,9 @@ bool SphinxDriver::recognitionWorkerHandler(WorkerPoolWorker *worker) {
 		if(self->inSpeech && self->utteranceRestarted) {
 			self->utteranceRestarted = false;
 		}
+
 		if(!self->inSpeech && !self->utteranceRestarted) {
+			self->lastUtteranceEndedTimestamp = result.endTimestamp;
 			if(ps_end_utt(self->pocketSphinx) < 0) {
 				throw runtime_error("Failed to end PocketSphinx utterance");
 			}
@@ -558,6 +581,25 @@ bool SphinxDriver::recognitionWorkerHandler(WorkerPoolWorker *worker) {
 				throw runtime_error("Failed to start PocketSphinx utterance");
 			}
 			self->utteranceRestarted = true;
+		}
+
+		if(!self->inSpeech && !self->lowLatency) {
+			// Further down the pipeline we depend on phonemes to be present, otherwise processing blocks.
+			// If we have not been inSpeech for a long time (over a second) drop an empty phoneme in the buffer.
+			double timeElapsedSinceLastUtteranceEnded = result.endTimestamp - self->lastUtteranceEndedTimestamp;
+			if(timeElapsedSinceLastUtteranceEnded >= 1.0) {
+				self->logger->warning("Dropping an empty phoneme into the buffer to avoid blocking the pipeline.");
+				self->lastUtteranceEndedTimestamp = result.endTimestamp;
+				SphinxPhoneme phoneme;
+				phoneme.utteranceIndex = self->utteranceIndex;
+				phoneme.startTime = result.startTimestamp;
+				phoneme.endTime = result.endTimestamp;
+				phoneme.pbPhoneme = "";
+				self->phonemeBuffer.push_front(phoneme);
+				if(self->phonemeBreakdownWorkerPool != NULL) {
+					self->phonemeBreakdownWorkerPool->sendWorkerSignal();
+				}
+			}
 		}
 
 		self->recognitionResults.push_front(result);

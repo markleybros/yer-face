@@ -151,6 +151,7 @@ public:
 	static cv::Rect2d insetBox(cv::Rect2d originalBox, double scale);
 	static cv::Point2d centerRect(cv::Rect2d rect);
 	static cv::Point2d averagePoint(std::vector<cv::Point2d> points);
+	static double morph(double a, double b, double progress);
 	static double lineDistance(cv::Point2d a, cv::Point2d b);
 	static double lineDistance(cv::Point3d a, cv::Point3d b);
 	static TimeIntervalComparison timeIntervalCompare(double startTimeA, double endTimeA, double startTimeB, double endTimeB);

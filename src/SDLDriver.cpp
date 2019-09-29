@@ -131,8 +131,10 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 				joystick.id = SDL_JoystickInstanceID(joystick.joystick);
 				joystick.name = SDL_JoystickNameForIndex(joystick.index);
 				joystick.axesNum = SDL_JoystickNumAxes(joystick.joystick);
+				joystick.axesValues.assign(joystick.axesNum, -1000.0);
 				joystick.buttonsNum = SDL_JoystickNumButtons(joystick.joystick);
 				joystick.buttonsPressedTime.assign(joystick.buttonsNum, 0);
+				joystick.hatsNum = SDL_JoystickNumHats(joystick.joystick);
 
 				json controllerSettingsList = config["YerFace"]["SDLDriver"]["joystick"]["controllerSettings"];
 				json controllerSettings = controllerSettingsList["default"];
@@ -147,7 +149,7 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 				joystick.axisMax = controllerSettings["axisSettings"]["max"];
 
 				joysticks[joystick.id] = joystick;
-				logger->debug1("Opened Joystick %d [%s] with InstanceID %d, %d Axes, and %d Buttons.", joystick.index, joystick.name.c_str(), joystick.id, joystick.axesNum, joystick.buttonsNum);
+				logger->debug1("Opened Joystick %d [%s] with InstanceID %d, %d Axes, %d Hats, and %d Buttons.", joystick.index, joystick.name.c_str(), joystick.id, joystick.axesNum, joystick.hatsNum, joystick.buttonsNum);
 			}
 		}
 		SDL_JoystickEventState(SDL_ENABLE);
@@ -307,6 +309,7 @@ void SDLDriver::doHandleEvents(void) {
 	SDL_Event event;
 	SDLJoystickDevice *joystick;
 	double axisValue, buttonHeldSeconds;
+	int hatXValue, hatYValue;
 	while(SDL_PollEvent(&event)){
 		switch(event.type) {
 			case SDL_QUIT:
@@ -375,14 +378,14 @@ void SDLDriver::doHandleEvents(void) {
 				if(joystickEventsRaw) {
 					YerFace_MutexLock(callbacksMutex);
 					for(auto callback : onJoystickButtonEventCallbacks) {
-						callback(joystick->id, event.jbutton.button, event.jbutton.state == SDL_PRESSED, buttonHeldSeconds);
+						callback(event.jbutton.timestamp, joystick->id, event.jbutton.button, event.jbutton.state == SDL_PRESSED, buttonHeldSeconds);
 					}
 					YerFace_MutexUnlock(callbacksMutex);
 				}
 
 				break;
 			case SDL_JOYAXISMOTION:
-				joystick = &joysticks[event.jbutton.which];
+				joystick = &joysticks[event.jaxis.which];
 				axisValue = 0.0;
 				if(abs(event.jaxis.value) > joystick->axisMin) {
 					axisValue = (double)event.jaxis.value / (double)joystick->axisMax;
@@ -392,12 +395,39 @@ void SDLDriver::doHandleEvents(void) {
 				} else if(axisValue < -1.0) {
 					axisValue = -1.0;
 				}
-				logger->debug2("Joystick ID %d, Axis %d, Value: %.02f (%d)", joystick->id, event.jaxis.axis, axisValue, event.jaxis.value);
+				if(axisValue != joystick->axesValues[event.jaxis.axis]) {
+					joystick->axesValues[event.jaxis.axis] = axisValue;
+					logger->debug2("Joystick ID %d, Axis %d, Value: %.02f (%d)", joystick->id, event.jaxis.axis, axisValue, event.jaxis.value);
+
+					if(joystickEventsRaw) {
+						YerFace_MutexLock(callbacksMutex);
+						for(auto callback : onJoystickAxisEventCallbacks) {
+							callback(event.jaxis.timestamp, joystick->id, event.jaxis.axis, axisValue);
+						}
+						YerFace_MutexUnlock(callbacksMutex);
+					}
+				}
+				break;
+			case SDL_JOYHATMOTION:
+				joystick = &joysticks[event.jbutton.which];
+				hatXValue = 0;
+				hatYValue = 0;
+				if(event.jhat.value == SDL_HAT_LEFTUP || event.jhat.value == SDL_HAT_LEFT || event.jhat.value == SDL_HAT_LEFTDOWN) {
+					hatXValue = -1;
+				} else if(event.jhat.value == SDL_HAT_RIGHTUP || event.jhat.value == SDL_HAT_RIGHT || event.jhat.value == SDL_HAT_RIGHTDOWN) {
+					hatXValue = 1;
+				}
+				if(event.jhat.value == SDL_HAT_LEFTUP || event.jhat.value == SDL_HAT_UP || event.jhat.value == SDL_HAT_RIGHTUP) {
+					hatYValue = -1;
+				} else if(event.jhat.value == SDL_HAT_LEFTDOWN || event.jhat.value == SDL_HAT_DOWN || event.jhat.value == SDL_HAT_RIGHTDOWN) {
+					hatYValue = 1;
+				}
+				logger->debug2("Joystick ID %d, Hat %d, X: %d, Y: %d", joystick->id, event.jhat.which, hatXValue, hatYValue);
 
 				if(joystickEventsRaw) {
 					YerFace_MutexLock(callbacksMutex);
-					for(auto callback : onJoystickAxisEventCallbacks) {
-						callback(joystick->id, event.jaxis.axis, axisValue);
+					for(auto callback : onJoystickHatEventCallbacks) {
+						callback(event.jhat.timestamp, joystick->id, event.jhat.hat, hatXValue, hatYValue);
 					}
 					YerFace_MutexUnlock(callbacksMutex);
 				}
@@ -412,15 +442,21 @@ void SDLDriver::onBasisFlagEvent(function<void(void)> callback) {
 	YerFace_MutexUnlock(callbacksMutex);
 }
 
-void SDLDriver::onJoystickButtonEvent(function<void(int deviceId, int button, bool pressed, double heldSeconds)> callback) {
+void SDLDriver::onJoystickButtonEvent(function<void(Uint32 relativeTimestamp, int deviceId, int button, bool pressed, double heldSeconds)> callback) {
 	YerFace_MutexLock(callbacksMutex);
 	onJoystickButtonEventCallbacks.push_back(callback);
 	YerFace_MutexUnlock(callbacksMutex);
 }
 
-void SDLDriver::onJoystickAxisEvent(function<void(int deviceId, int axis, double value)> callback) {
+void SDLDriver::onJoystickAxisEvent(function<void(Uint32 relativeTimestamp, int deviceId, int axis, double value)> callback) {
 	YerFace_MutexLock(callbacksMutex);
 	onJoystickAxisEventCallbacks.push_back(callback);
+	YerFace_MutexUnlock(callbacksMutex);
+}
+
+void SDLDriver::onJoystickHatEvent(function<void(Uint32 relativeTimestamp, int deviceId, int hat, int x, int y)> callback) {
+	YerFace_MutexLock(callbacksMutex);
+	onJoystickHatEventCallbacks.push_back(callback);
 	YerFace_MutexUnlock(callbacksMutex);
 }
 

@@ -50,7 +50,9 @@ public:
 	string name;
 	int axesNum;
 	int buttonsNum;
+	int hatsNum;
 	vector<Uint32> buttonsPressedTime;
+	vector<double> axesValues;
 	int buttonEventMappingBasis;
 	int buttonEventMappingPreviewDebugDensity;
 	double axisMin;
@@ -67,8 +69,9 @@ public:
 	void doRenderPreviewFrame(cv::Mat previewFrame);
 	void doHandleEvents(void);
 	void onBasisFlagEvent(function<void(void)> callback);
-	void onJoystickButtonEvent(function<void(int deviceId, int button, bool pressed, double heldSeconds)> callback);
-	void onJoystickAxisEvent(function<void(int deviceId, int axis, double value)> callback);
+	void onJoystickButtonEvent(function<void(Uint32 relativeTimestamp, int deviceId, int button, bool pressed, double heldSeconds)> callback);
+	void onJoystickAxisEvent(function<void(Uint32 relativeTimestamp, int deviceId, int axis, double value)> callback);
+	void onJoystickHatEvent(function<void(Uint32 relativeTimestamp, int deviceId, int hat, int x, int y)> callback);
 	static void SDLAudioCallback(void* userdata, Uint8* stream, int len);
 	static void FFmpegDriverAudioFrameCallback(void *userdata, uint8_t *buf, int audioSamples, int audioBytes, double timestamp);
 	static void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
@@ -98,8 +101,9 @@ private:
 
 	SDL_mutex *callbacksMutex;
 	std::vector<function<void(void)>> onBasisFlagCallbacks;
-	std::vector<function<void(int deviceId, int button, bool pressed, double heldSeconds)>> onJoystickButtonEventCallbacks;
-	std::vector<function<void(int deviceId, int axis, double value)>> onJoystickAxisEventCallbacks;
+	std::vector<function<void(Uint32 relativeTimestamp, int deviceId, int button, bool pressed, double heldSeconds)>> onJoystickButtonEventCallbacks;
+	std::vector<function<void(Uint32 relativeTimestamp, int deviceId, int axis, double value)>> onJoystickAxisEventCallbacks;
+	std::vector<function<void(Uint32 relativeTimestamp, int deviceId, int hat, int x, int y)>> onJoystickHatEventCallbacks;
 
 	SDL_mutex *frameTimestampsNowMutex;
 	FrameTimestamps frameTimestampsNow;
