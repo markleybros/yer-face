@@ -5,9 +5,13 @@ using namespace std;
 
 namespace YerFace {
 
-EventLogger::EventLogger(json config, string myEventFile, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
+EventLogger::EventLogger(json config, string myEventFile, double myEventFileStartSeconds, Status *myStatus, OutputDriver *myOutputDriver, FrameServer *myFrameServer) {
 	replayWorkerPool = NULL;
 	eventFilename = myEventFile;
+	eventFileStartSeconds = myEventFileStartSeconds;
+	if(eventFileStartSeconds < 0.0) {
+		throw invalid_argument("you probably don't want your start seconds to be negative");
+	}
 	status = myStatus;
 	if(status == NULL) {
 		throw invalid_argument("status cannot be NULL");
@@ -104,6 +108,7 @@ void EventLogger::registerEventType(EventType eventType) {
 }
 
 void EventLogger::logEvent(string eventName, json payload, FrameTimestamps frameTimestamps, bool propagate, json sourcePacket) {
+	// logger->info("Got logEvent() at frame #" YERFACE_FRAMENUMBER_FORMAT " of type [%s] with payload: %s", frameTimestamps.frameNumber, eventName.c_str(), payload.dump(-1, ' ', true).c_str());
 	YerFace_MutexLock(myMutex);
 	bool eventFound = false;
 	EventType event;
@@ -129,19 +134,31 @@ void EventLogger::logEvent(string eventName, json payload, FrameTimestamps frame
 		insertEventInCompletedFrameData = event.replayCallback(eventName, payload, sourcePacket);
 	}
 	if(insertEventInCompletedFrameData) {
-		frameEvents[frameTimestamps.frameNumber][eventName] = payload;
+		if(frameEvents[frameTimestamps.frameNumber].find(eventName) == frameEvents[frameTimestamps.frameNumber].end()) {
+			frameEvents[frameTimestamps.frameNumber][eventName] = payload;
+		} else {
+			if(frameEvents[frameTimestamps.frameNumber][eventName].is_array() && payload.is_array()) {
+				for(json eventElement : payload) {
+					frameEvents[frameTimestamps.frameNumber][eventName].push_back(eventElement);
+				}
+			} else {
+				throw logic_error("trying to propagate logged event data multiple times for the same frame, but not in a supported manner");
+			}
+		}
 	}
 	YerFace_MutexUnlock(myMutex);
 }
 
 void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
+	// logger->info("Got processNextPacket()");
 	if(nextPacket.size()) {
 		double frameDurationHalf = (frameTimestamps.estimatedEndTimestamp - frameTimestamps.startTimestamp) / 2.0;
 		double frameStart = frameTimestamps.startTimestamp;
 		double frameEnd = frameTimestamps.estimatedEndTimestamp - frameDurationHalf;
 		double packetTime = nextPacket["meta"]["startTime"];
+		packetTime -= eventFileStartSeconds;
 		// if(nextPacket.find("events") != nextPacket.end()) {
-		// 	logger->verbose("==== EVENT REPLAY ATTEMPT: [packetTime: %lf, currentFrameNumber: " YERFACE_FRAMENUMBER_FORMAT ", currentFrameStart: %lf, currentFrameEnd: %lf]; Candidate Packet Events: %s", packetTime, frameTimestamps.frameNumber, frameStart, frameEnd, nextPacket["events"].dump(-1, ' ', true).c_str());
+		// 	logger->info("==== EVENT REPLAY ATTEMPT: [packetTime: %lf, currentFrameNumber: " YERFACE_FRAMENUMBER_FORMAT ", currentFrameStart: %lf, currentFrameEnd: %lf]; Candidate Packet Events: %s", packetTime, frameTimestamps.frameNumber, frameStart, frameEnd, nextPacket["events"].dump(-1, ' ', true).c_str());
 		// }
 		if(packetTime < frameEnd) {
 			if(packetTime >= 0.0 && packetTime < (frameStart - frameDurationHalf)) {
@@ -164,7 +181,7 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 			}
 			nextPacket = json::object();
 		} else {
-			// logger->verbose("==== EVENT REPLAY HOLDING...");
+			// logger->info("==== EVENT REPLAY HOLDING...");
 			eventReplayHold = true;
 		}
 	}
@@ -246,7 +263,7 @@ bool EventLogger::replayWorkerHandler(WorkerPoolWorker *worker) {
 
 		self->eventReplayHold = false;
 
-		// self->logger->verbose("EVENT REPLAY: Playing up to frame %lu at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+		self->logger->debug4("EVENT REPLAY: Playing up to frame #" YERFACE_FRAMENUMBER_FORMAT " at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 
 		YerFace_MutexLock(self->myMutex);
 		self->processNextPacket(frameTimestamps);
@@ -255,12 +272,12 @@ bool EventLogger::replayWorkerHandler(WorkerPoolWorker *worker) {
 			self->nextPacket = json::parse(line);
 			self->processNextPacket(frameTimestamps);
 		}
-		// if(self->eventReplayHold) {
-		// 	self->logger->verbose("HOLDING...");
-		// }
+		if(self->eventReplayHold) {
+			self->logger->debug4("HOLDING...");
+		}
 		YerFace_MutexUnlock(self->myMutex);
 
-		// self->logger->verbose("DONE EVENT REPLAY: Finished frame %lu at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
+		self->logger->debug4("DONE EVENT REPLAY: Finished frame #" YERFACE_FRAMENUMBER_FORMAT " at time: %lf-%lf", frameTimestamps.frameNumber, frameTimestamps.startTimestamp, frameTimestamps.estimatedEndTimestamp);
 
 		self->frameServer->setWorkingFrameStatusCheckpoint(myFrameNumber, FRAME_STATUS_PREPROCESS, "eventLogger.ran");
 

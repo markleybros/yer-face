@@ -323,6 +323,19 @@ Important notes:
 		Input event data / replay file. (Previously generated outEventData, for re-processing recorded sessions.)
 ```
 
+### Input Event Data Start Seconds
+_Use this parameter to compensate for alignment issues between the event data timestamps and the input video timestamps._
+
+Important notes:
+- Often you only want to use a part of a recorded performance capture session.
+- You can trim the input video/audio before running it through YerFace again.
+- This leads to alignment issues between the video timestamps and the event timestamps, which can be corrected with this argument.
+
+```
+	--inEventDataStartSeconds (value:0.0)
+		Offset for input event data / replay file timestamps. (Useful if the capture session was trimmed.)
+```
+
 
 Preview Settings
 ----------------

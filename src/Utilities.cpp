@@ -47,6 +47,10 @@ Point2d Utilities::averagePoint(vector<Point2d> points) {
 	return result;
 }
 
+double Utilities::morph(double a, double b, double progress) {
+	return a + ((b - a) * progress);
+}
+
 double Utilities::lineDistance(Point2d a, Point2d b) {
 	Point2d d = a - b;
 	return std::sqrt(std::pow(d.x, 2.0) + std::pow(d.y, 2.0));
