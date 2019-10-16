@@ -32,8 +32,10 @@ _log "Uploading build/${OUTPUT_HASH_FILE} to ${ARTIFACT_BASES3}/Windows/"
 aws s3 cp build/"${OUTPUT_HASH_FILE}" "${ARTIFACT_BASES3}"/Windows/ --acl public-read --content-type text/plain --content-disposition attachment || _die "Failed uploading hash file."
 
 GIT_BRANCH=$("${BASEPATH}"/ci/branch.sh) || _die "Failed resolving branch."
-if [ "${GIT_BRANCH}" != "master" ]; then
-	_log "This is not a master build, so we won't update the latest file."
+echo "${GIT_BRANCH}" | egrep -i 'master|tag:' >/dev/null
+GIT_BRANCH_MATCH=${?}
+if [ "${GIT_BRANCH_MATCH}" -ne 0 ]; then
+	_log "This does not appear to be either a master or tag build, so we won't update the latest file."
 	exit 0
 fi
 
