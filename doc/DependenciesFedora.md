@@ -5,7 +5,7 @@ Fedora Dependencies
 Introduction
 ------------
 
-This document is intended to serve as a rough guide for setting up your Fedora (circa 29) system for building Yer-Face. Hopefully this will only be necessary until we figure out a good binary packaging strategy. :)
+This document is intended to serve as a rough guide for setting up your Fedora (circa 31) system for building Yer-Face. Hopefully this will only be necessary until we figure out a good binary packaging strategy. :)
 
 
 SDL2
@@ -25,12 +25,30 @@ Follow the directions at RPM Fusion:
 In brief:
 
 - You'll want to install RPM Fusion and get your Nvidia drivers working via their repository. They're generally more up-to-date than the CUDA ones.
-- Now install the CUDA 10.1 repository for Fedora 29: `sudo dnf install https://developer.download.nvidia.com/compute/cuda/repos/fedora29/x86_64/cuda-repo-fedora29-10.1.105-1.x86_64.rpm`
-    - Make sure you add this line to your `/etc/yum.repos.d/cuda.repo` file: `exclude=xorg-x11-drv-nvidia*,akmod-nvidia*,kmod-nvidia*,nvidia-driver*,nvidia-settings,nvidia-xconfig,nvidia-persistenced,cuda-nvidia-kmod-common,dkms-nvidia,nvidia-libXNVCtrl`
+- Now install the CUDA 10.2 repository for Fedora 29 (should work on Fedora 31): `sudo dnf config-manager --add-repo http://developer.download.nvidia.com/compute/cuda/repos/fedora29/x86_64/cuda-fedora29.repo`
+    - Edit your `/etc/yum.repos.d/cuda-fedora29.repo` file and add this line at the end: `exclude=xorg-x11-drv-nvidia*,akmod-nvidia*,kmod-nvidia*,nvidia-driver*,nvidia-settings,nvidia-xconfig,nvidia-persistenced,cuda-nvidia-kmod-common,dkms-nvidia,nvidia-libXNVCtrl`
     - This will prevent the Cuda repository from trashing your Nvidia driver setup.
 - Now install the Cuda metapackage: `sudo dnf install cuda`
   - This will install the Cuda tools as well as the Cuda libraries and toolkit as needed.
   - As mentioned above, make sure it doesn't install any nvidia kernel modules, as these will conflict with the RPM Fusion ones.
+
+
+CUDA-Compatible GCC
+-------------------
+
+As mentioned at RPM Fusion's wiki under [_Known Issues, GCC Version_](https://rpmfusion.org/Howto/CUDA#GCC_version), the version of GCC which ships with Fedora is too new to be supported by Cuda, so we need to install GCC 8 in a non-destructive way.
+
+My preferred method for dealing with this is Software Collections. Install the `devtoolset-8-toolchain` like so:
+
+```
+dnf install https://rpmfind.net/linux/centos/7/extras/x86_64/Packages/centos-release-scl-rh-2-3.el7.centos.noarch.rpm
+dnf install http://dl.kwizart.net/compat-libgfortran5-8.3.1-1.fc29.noarch.rpm
+dnf install devtoolset-8-toolchain
+```
+
+Once this is done, you can use `scl run devtoolset-8 bash` to enable a shell with the GCC 8 that you need.
+
+**Important:** You _must_ use the `scl run` command to enable GCC 8 for any subsequent compilation instructions.
 
 
 OpenCV
