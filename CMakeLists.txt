@@ -46,15 +46,15 @@ set(UPDATE_DISCONNECTED_IF_AVAILABLE "UPDATE_DISCONNECTED 1")
 
 include(CMakeModules/DownloadProject.cmake)
 download_project(PROJ	googletest
-	URL https://github.com/google/googletest/archive/release-1.8.1.tar.gz
-	URL_HASH SHA256=9bf1fe5182a604b4135edc1a425ae356c9ad15e9b23f9f12a02e80184c3a249c
+	URL https://github.com/google/googletest/archive/release-1.11.0.tar.gz
+	URL_HASH SHA256=b4870bf121ff7795ba20d20bcdd8627b8e088f2d1dab299a031c1034eddc93d5
 	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	jsoncpp
-	URL https://github.com/nlohmann/json/releases/download/v3.9.1/json.hpp
-	URL_HASH SHA256=7804b38146921d03374549c9e2a5e3acda097814c43caf2b96a0278e58df26e0
+	URL https://github.com/nlohmann/json/releases/download/v3.10.5/json.hpp
+	URL_HASH SHA256=e832d339d9e0c042e7dff807754769d778cf5d6ae9730ce21eed56de99cb5e86
 	DOWNLOAD_NO_PROGRESS TRUE
 	DOWNLOAD_NO_EXTRACT TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
@@ -63,8 +63,8 @@ download_project(PROJ	jsoncpp
 download_project(PROJ	asio
 #	URL https://github.com/chriskohlhoff/asio/archive/asio-1-13-0.tar.gz
 #	URL_HASH SHA256=54a1208d20f2104dbd6b7a04a9262f5ab649f4b7a9faf7eac4c2294e9e104c06
-	URL https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-18-2.tar.gz
-	URL_HASH SHA256=8d67133b89e0f8b212e9f82fdcf1c7b21a978d453811e2cd941c680e72c2ca32
+	URL https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-21-0.tar.gz
+	URL_HASH SHA256=5d2d2dcb7bfb39bff941cabbfc8c27ee322a495470bf0f3a7c5238648cf5e6a9
 	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
