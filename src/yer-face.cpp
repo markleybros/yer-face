@@ -20,6 +20,9 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
 using namespace std;
 using namespace cv;
 using namespace YerFace;
@@ -111,6 +114,7 @@ void parseConfigFile(void);
 void handleFrameStatusChange(void *userdata, WorkingFrameStatus newStatus, FrameTimestamps frameTimestamps);
 void handleFrameServerDrainedEvent(void *userdata);
 void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bool mirrorMode);
+bool fileExists(string filePath);
 
 int main(int argc, char *argv[]) {
 	try {
@@ -241,6 +245,9 @@ int yerface(int argc, char *argv[]) {
 		outLogFile = "-";
 		Logger::setLoggingTarget(stderr);
 	} else {
+		if(fileExists(outLogFile)) {
+			throw invalid_argument("Refusing to overwrite outLogFile. Specified file already exists!");
+		}
 		Logger::setLoggingTarget(outLogFile);
 	}
 	if(outLogColors.length() == 0 || outLogColors == "auto") {
@@ -301,12 +308,18 @@ int yerface(int argc, char *argv[]) {
 		ffmpegDriver->openInputMedia(inAudio, AVMEDIA_TYPE_AUDIO, inAudioFormat, "", inAudioChannels, inAudioRate, inAudioCodec, inAudioChannelMap, true);
 	}
 	if(outVideo.length() > 0) {
+		if(fileExists(outVideo)) {
+			throw invalid_argument("Refusing to overwrite outVideo. Specified file already exists!");
+		}
 		ffmpegDriver->openOutputMedia(outVideo);
 	}
 	sdlDriver = new SDLDriver(config, status, frameServer, ffmpegDriver, headless, previewAudio && ffmpegDriver->getIsAudioInputPresent());
 	faceDetector = new FaceDetector(config, status, frameServer);
 	faceTracker = new FaceTracker(config, status, sdlDriver, frameServer, faceDetector);
 	faceMapper = new FaceMapper(config, status, frameServer, faceTracker, previewHUD);
+	if(outEventData.length() > 0 && fileExists(outEventData)) {
+		throw invalid_argument("Refusing to overwrite outEventData. Specified file already exists!");
+	}
 	outputDriver = new OutputDriver(config, outEventData, status, frameServer, faceTracker, sdlDriver);
 	if(ffmpegDriver->getIsAudioInputPresent()) {
 		sphinxDriver = new SphinxDriver(config, status, frameServer, ffmpegDriver, sdlDriver, outputDriver, previewHUD, lowLatency);
@@ -599,4 +612,12 @@ void renderPreviewHUD(Mat previewFrame, FrameNumber frameNumber, int density, bo
 	Utilities::drawText(previewFrame, metrics->getTimesString().c_str(), origin, Scalar(200,200,200), fontSize);
 	origin.y += lineskip;
 	Utilities::drawText(previewFrame, metrics->getFPSString().c_str(), origin, Scalar(200,200,200), fontSize);
+}
+
+bool fileExists(string filePath) {
+	struct stat statbuf;
+	if(stat(filePath.c_str(), &statbuf) == 0) {
+		return true;
+	}
+	return false;
 }
