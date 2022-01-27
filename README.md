@@ -29,3 +29,8 @@ You will find...
 Since this project is still in its infancy, unfortunately resources are still rather sparse. Please feel free to think of that as an opportunity to get involved!
 
 Pull requests, issue reports, and conversation are all welcome.
+
+Sponsorship
+-----------
+
+If you appreciate this project, [please consider becoming a patron of Markley Bros. Entertainment!](https://www.patreon.com/bePatron?u=15961889)

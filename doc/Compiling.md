@@ -19,7 +19,7 @@ mkdir build
 cd build
 
 # Configure the build system.
-cmake --config Release ..
+cmake ..
 
 # Compile with an appropriate number of threads.
 make -j 4

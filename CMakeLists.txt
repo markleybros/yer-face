@@ -46,15 +46,15 @@ set(UPDATE_DISCONNECTED_IF_AVAILABLE "UPDATE_DISCONNECTED 1")
 
 include(CMakeModules/DownloadProject.cmake)
 download_project(PROJ	googletest
-	URL https://github.com/google/googletest/archive/release-1.8.1.tar.gz
-	URL_HASH SHA256=9bf1fe5182a604b4135edc1a425ae356c9ad15e9b23f9f12a02e80184c3a249c
+	URL https://github.com/google/googletest/archive/release-1.11.0.tar.gz
+	URL_HASH SHA256=b4870bf121ff7795ba20d20bcdd8627b8e088f2d1dab299a031c1034eddc93d5
 	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	jsoncpp
-	URL https://github.com/nlohmann/json/releases/download/v3.6.1/json.hpp
-	URL_HASH SHA256=d2eeb25d2e95bffeb08ebb7704cdffd2e8fca7113eba9a0b38d60a5c391ea09a
+	URL https://github.com/nlohmann/json/releases/download/v3.10.5/json.hpp
+	URL_HASH SHA256=e832d339d9e0c042e7dff807754769d778cf5d6ae9730ce21eed56de99cb5e86
 	DOWNLOAD_NO_PROGRESS TRUE
 	DOWNLOAD_NO_EXTRACT TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
@@ -63,15 +63,15 @@ download_project(PROJ	jsoncpp
 download_project(PROJ	asio
 #	URL https://github.com/chriskohlhoff/asio/archive/asio-1-13-0.tar.gz
 #	URL_HASH SHA256=54a1208d20f2104dbd6b7a04a9262f5ab649f4b7a9faf7eac4c2294e9e104c06
-	URL https://github.com/chriskohlhoff/asio/archive/asio-1-12-2.tar.gz
-	URL_HASH SHA256=1de23266b956674e766cd0b6c929a11259f2284ea8e96b765cc8c67b1689e0fd
+	URL https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-21-0.tar.gz
+	URL_HASH SHA256=5d2d2dcb7bfb39bff941cabbfc8c27ee322a495470bf0f3a7c5238648cf5e6a9
 	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
 
 download_project(PROJ	websocketpp
-	URL https://github.com/zaphoyd/websocketpp/archive/0.8.1.tar.gz
-	URL_HASH SHA256=178899de48c02853b55b1ea8681599641cedcdfce59e56beaff3dd0874bf0286
+	URL https://github.com/zaphoyd/websocketpp/archive/refs/tags/0.8.2.tar.gz
+	URL_HASH SHA256=6ce889d85ecdc2d8fa07408d6787e7352510750daa66b5ad44aacb47bea76755
 	DOWNLOAD_NO_PROGRESS TRUE
 	${UPDATE_DISCONNECTED_IF_AVAILABLE}
 )
@@ -89,6 +89,7 @@ include_directories("src" "${asio_SOURCE_DIR}/asio/include")
 
 include_directories("src" "${websocketpp_SOURCE_DIR}")
 
+find_package( Threads )
 find_package( PkgConfig REQUIRED )
 find_package( OpenCV 4 REQUIRED COMPONENTS core calib3d imgcodecs )
 find_package( dlib REQUIRED )

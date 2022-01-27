@@ -5,7 +5,7 @@ Ubuntu Dependencies
 Introduction
 ------------
 
-This document is intended to serve as a rough guide for setting up your Ubuntu (circa 18.04 LTS) system for building Yer-Face. Hopefully this will only be necessary until we figure out a good binary packaging strategy. :)
+This document is intended to serve as a rough guide for setting up your Ubuntu (circa 20.04 LTS) system for building Yer-Face. (You shouldn't need this! Try one of the binary downloads instead.)
 
 
 SDL2
@@ -22,13 +22,8 @@ CUDA
 **IMPORTANT:** It's best if you do **not** already have the proprietary Nvidia drivers installed, as CUDA will want to install them for itself.
 
 That said:
-- Fetch the `deb (network)` file from here: https://developer.nvidia.com/cuda-downloads
-- It'll be a URL like: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-repo-ubuntu1804_10.1.105-1_amd64.deb
-- There will be installation instructions on the page like:
-  - `sudo dpkg -i cuda-repo-ubuntu1804_10.1.105-1_amd64.deb`
-  - `sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub`
-  - `sudo apt-get update`
-  - `sudo apt-get install cuda`
+- You'll most likely need CUDA 11.
+- Follow the `deb (network)` installation instructions found here: https://developer.nvidia.com/cuda-downloads
 - At least one post-installation step is required:
   - `echo 'export PATH="${PATH}":/usr/local/cuda/bin' | sudo tee /etc/profile.d/cuda.sh`
 - You will probably need to reboot to get everything working.
@@ -37,34 +32,11 @@ That said:
 OpenCV
 ------
 
-You will probably need to build OpenCV from scratch. :( **FIXME:** When OpenCV 4+ is available in the repositories, this will no longer be necessary.
+As of Ubuntu 20.04, we no longer need to build OpenCV from source. Install from apt like so:
 
 ```
-# Clone the OpenCV and OpenCV Contrib Modules projects. Make sure you clone them into these exact directories!
-git clone https://github.com/opencv/opencv.git opencv
-git clone https://github.com/opencv/opencv_contrib.git opencv_contrib
-
-# Change into the build directory.
-cd opencv
-mkdir build
-cd build
-
-# Configure the source tree. (See below for CMAKE NOTES.)
-cmake -D WITH_CUDA=ON -D ENABLE_FAST_MATH=1 -D CUDA_FAST_MATH=1 -D WITH_CUBLAS=1 -D BUILD_LIST=core,calib3d,cudev,imgcodecs -D CMAKE_INSTALL_PREFIX=/usr/local -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ ..
-
-# Compile with a sufficient number of threads.
-cmake --build . --config Release -- -j 8
-
-# Install on the system.
-sudo cmake --build . --config Release --target install
+apt-get install libopencv-dev libopencv-calib3d-dev libopencv-imgcodecs-dev libopencv-core-dev
 ```
-
-**CMAKE NOTES:**
-
-_NOTE:_ Make sure in the CMake output, under "OpenCV modules," the list includes:
-- core
-- calib3d
-- imgcodecs
 
 
 Dlib
@@ -73,7 +45,7 @@ Dlib
 You will probably need to build Dlib from scratch, especially if you want Cuda to work.
 
 ```
-sudo apt-get install libopenblas-base libopenblas-dev
+apt-get install libopenblas-base libopenblas-dev
 ```
 
 You'll want to install cuDNN:
@@ -81,7 +53,7 @@ You'll want to install cuDNN:
 - https://developer.nvidia.com/cudnn
 - http://docs.nvidia.com/deeplearning/sdk/cudnn-install/index.html
 - Download the appropriate debian packages, then install them with something like:
-  - `sudo dpkg -i libcudnn7_7.5.0.56-1+cuda10.1_amd64.deb libcudnn7-dev_7.5.0.56-1+cuda10.1_amd64.deb`
+  - `sudo dpkg -i libcudnn8_8.2.2.26-1+cuda11.4_amd64.deb libcudnn8-dev_8.2.2.26-1+cuda11.4_amd64.deb`
 
 Then download the latest version of Dlib from:
 - http://dlib.net/

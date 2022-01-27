@@ -139,13 +139,13 @@ git clone https://github.com/cmusphinx/pocketsphinx.git
 
 # Build sphinxbase
 cd sphinxbase
-./autogen.sh
+./autogen.sh --without-python
 make
 sudo make install
 
 # Build pocketsphinx
 cd ../pocketsphinx
-./autogen.sh
+./autogen.sh --without-python
 make
 sudo make install
 ```
