@@ -37,7 +37,7 @@ rm AppDir/usr/local/bin/yer-face
 export PATH=".:${PATH}"
 export OUTPUT="${VERSION_STRING}-x86_64.AppImage"
 export VERSION="${VERSION_STRING}"
-linuxdeploy --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage
+linuxdeploy --appdir AppDir --plugin checkrt --create-desktop-file --executable yer-face --icon-file AppDir/usr/local/share/yer-face/doc/images/yer-face.png --output appimage --library /usr/lib/x86_64-linux-gnu/libcudnn_ops_infer.so.8 --library /usr/lib/x86_64-linux-gnu/libcudnn_cnn_infer.so.8 --library /usr/lib/x86_64-linux-gnu/libcudnn_cnn_train.so.8
 
 _log "Creating SHA256SUM file..."
 sha256sum "${OUTPUT}" > "${VERSION_STRING}".SHA256SUMS
