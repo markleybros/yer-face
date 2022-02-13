@@ -7,6 +7,13 @@ Introduction
 
 This document is intended to serve as a rough guide for setting up your Ubuntu (circa 20.04 LTS) system for building Yer-Face. (You shouldn't need this! Try one of the binary downloads instead.)
 
+CMake
+-----
+
+```
+apt-get install cmake
+```
+
 
 SDL2
 ----
@@ -44,18 +51,13 @@ Dlib
 
 You will probably need to build Dlib from scratch, especially if you want Cuda to work.
 
+Dependencies for Dlib include cuDNN. Recently, cuDNN became available within the Nvidia Cuda apt repository, so you can install all of Dlib's dependencies via apt.
+
 ```
-apt-get install libopenblas-base libopenblas-dev
+apt-get install libopenblas-base libopenblas-dev libcudnn8 libcudnn8-dev
 ```
 
-You'll want to install cuDNN:
-- It will require you to sign up for a free Nvidia Developer account.
-- https://developer.nvidia.com/cudnn
-- http://docs.nvidia.com/deeplearning/sdk/cudnn-install/index.html
-- Download the appropriate debian packages, then install them with something like:
-  - `sudo dpkg -i libcudnn8_8.2.2.26-1+cuda11.4_amd64.deb libcudnn8-dev_8.2.2.26-1+cuda11.4_amd64.deb`
-
-Then download the latest version of Dlib from:
+Download the latest version of Dlib from:
 - http://dlib.net/
 
 ```
@@ -97,14 +99,13 @@ git clone https://github.com/cmusphinx/pocketsphinx.git
 
 # Build sphinxbase
 cd sphinxbase
-./autogen.sh
+./autogen.sh --without-python
 make
 sudo make install
 
 # Build pocketsphinx
 cd ../pocketsphinx
-./autogen.sh
+./autogen.sh --without-python
 make
 sudo make install
 ```
-
