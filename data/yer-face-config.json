@@ -175,8 +175,8 @@
         "controllerSettings": {
           "default": {
             "buttonEventMapping": {
-              "basis": 9,
-              "previewDebugDensity": 8
+              "basis": 0,
+              "previewDebugDensity": 1
             },
             "axisSettings": {
               "max": 32767,
@@ -194,13 +194,75 @@
             }
           },
           "Generic X-Box pad": {
+            "alternateNames": [
+              "Xbox Series X Controller",
+              "Xbox 360 Controller",
+              "Microsoft X-Box 360 pad",
+              "8Bitdo SN30 Pro"
+            ],
             "buttonEventMapping": {
               "basis": 7,
+              "previewDebugDensity": 6
+            },
+            "axisSettings": {
+              "max": 32767,
+              "min": 10
+            }
+          },
+          "Pro Controller": {
+            "buttonEventMapping": {
+              "basis": 9,
               "previewDebugDensity": 8
             },
             "axisSettings": {
               "max": 32767,
-              "min": 50
+              "min": 10
+            }
+          },
+          "Logitech WingMan Action Pad": {
+            "buttonEventMapping": {
+              "basis": 8,
+              "previewDebugDensity": 5
+            },
+            "axisSettings": {
+              "max": 32767,
+              "min": 10
+            }
+          },
+          "Generic SNES Gamepad": {
+            "alternateNames": [
+              "USB Gamepad "
+            ],
+            "buttonEventMapping": {
+              "basis": 9,
+              "previewDebugDensity": 8
+            },
+            "axisSettings": {
+              "max": 32767,
+              "min": 10
+            }
+          },
+          "Generic SNES Gamepad 2": {
+            "alternateNames": [
+              "USB Wheel   "
+            ],
+            "buttonEventMapping": {
+              "basis": 6,
+              "previewDebugDensity": 7
+            },
+            "axisSettings": {
+              "max": 32767,
+              "min": 10
+            }
+          },
+          "DragonRise Inc.   Generic   USB  Joystick  ": {
+            "buttonEventMapping": {
+              "basis": 9,
+              "previewDebugDensity": 8
+            },
+            "axisSettings": {
+              "max": 32767,
+              "min": 10
             }
           }
         }
