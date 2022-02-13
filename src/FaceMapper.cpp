@@ -136,6 +136,9 @@ void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densit
 		markerTracker->renderPreviewHUD(frame, frameNumber, density, mirrorMode);
 	}
 	if(density > 0) {
+		Scalar neutralColor = Scalar(255, 255, 255);
+		Scalar leftColor = Scalar(255, 0, 0);
+		Scalar rightColor = Scalar(0, 0, 255);
 		int gridIncrement = 15; //FIXME - magic numbers
 		Rect2d previewRect;
 		Point2d previewCenter;
@@ -161,7 +164,37 @@ void FaceMapper::renderPreviewHUD(Mat frame, FrameNumber frameNumber, int densit
 				Point2d previewPoint = Point2d(
 						(markerPoint.point3d.x * previewPointScale * mirrorFlip) + previewCenter.x,
 						(markerPoint.point3d.y * previewPointScale) + previewCenter.y);
-				Utilities::drawX(frame, previewPoint, Scalar(255, 255, 255)); // FIXME - proportional drawing
+				bool didDraw = false;
+				if(density >= 5) {
+					switch(markerTracker->getMarkerType().type) {
+						default:
+						case Jaw:
+							break;
+						case EyelidLeftTop:
+						case EyelidLeftBottom:
+						case EyebrowLeftInner:
+						case EyebrowLeftMiddle:
+						case EyebrowLeftOuter:
+						case LipsLeftCorner:
+						case LipsLeftTop:
+						case LipsLeftBottom:
+							Utilities::drawX(frame, previewPoint, leftColor); // FIXME - proportional drawing
+							break;
+						case EyelidRightTop:
+						case EyelidRightBottom:
+						case EyebrowRightInner:
+						case EyebrowRightMiddle:
+						case EyebrowRightOuter:
+						case LipsRightCorner:
+						case LipsRightTop:
+						case LipsRightBottom:
+							Utilities::drawX(frame, previewPoint, rightColor); // FIXME - proportional drawing
+							break;
+					}
+				}
+				if(!didDraw) {
+					Utilities::drawX(frame, previewPoint, neutralColor); // FIXME - proportional drawing
+				}
 			}
 		}
 	}
