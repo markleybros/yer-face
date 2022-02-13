@@ -170,7 +170,7 @@ void EventLogger::processNextPacket(FrameTimestamps frameTimestamps) {
 			// we should remap now.
 			nextPacket["meta"]["frameNumber"] = frameTimestamps.frameNumber;
 
-			if(nextPacket.find("events") == nextPacket.end()) {
+			if(!nextPacket.contains("events")) {
 				nextPacket = json::object();
 				return;
 			}

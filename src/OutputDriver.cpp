@@ -390,7 +390,7 @@ void OutputDriver::setEventLogger(EventLogger *myEventLogger) {
 		}
 		FrameNumber frameNumber = (FrameNumber)sourcePacket["meta"]["frameNumber"];
 		YerFace_MutexLock(workerMutex);
-		if(pendingFrames[frameNumber].frame.find("controller") == pendingFrames[frameNumber].frame.end()) {
+		if(!pendingFrames[frameNumber].frame.contains("controller")) {
 			pendingFrames[frameNumber].frame["controller"] = eventPayload;
 		} else {
 			if(pendingFrames[frameNumber].frame["controller"].is_array() && eventPayload.is_array()) {
@@ -418,7 +418,7 @@ void OutputDriver::handleOutputFrame(OutputFrameContainer *outputFrame) {
 	// outputFrame->frame["meta"] = json::object();
 	outputFrame->frame["meta"]["frameNumber"] = outputFrame->frameTimestamps.frameNumber;
 	outputFrame->frame["meta"]["startTime"] = outputFrame->frameTimestamps.startTimestamp;
-	if(outputFrame->frame["meta"].find("basis") == outputFrame->frame["meta"].end()) {
+	if(!outputFrame->frame["meta"].contains("basis")) {
 		//Default basis unless set earlier.
 		outputFrame->frame["meta"]["basis"] = false;
 	}
@@ -475,7 +475,7 @@ void OutputDriver::insertFrameData(string key, json value, FrameNumber frameNumb
 	if(pendingFrames.find(frameNumber) == pendingFrames.end()) {
 		throw runtime_error("Somebody is trying to insert frame data into a frame number which does not exist!");
 	}
-	if(pendingFrames[frameNumber].waitingOn.find(key) == pendingFrames[frameNumber].waitingOn.end()) {
+	if(!pendingFrames[frameNumber].waitingOn.contains(key)) {
 		throw runtime_error("Somebody is trying to insert frame data which was not previously registered!");
 	}
 	if(pendingFrames[frameNumber].waitingOn[key] != true) {
