@@ -139,17 +139,48 @@ SDLDriver::SDLDriver(json config, Status *myStatus, FrameServer *myFrameServer, 
 				json controllerSettingsList = config["YerFace"]["SDLDriver"]["joystick"]["controllerSettings"];
 				json controllerSettings = controllerSettingsList["default"];
 
-				if(controllerSettingsList.find(joystick.name) != controllerSettingsList.end()) {
+				bool controllerSettingsFound = false;
+				if(controllerSettingsList.contains(joystick.name)) {
 					controllerSettings = controllerSettingsList[joystick.name];
+					controllerSettingsFound = true;
+				} else {
+					for(json settings : controllerSettingsList) {
+						if(settings.contains("alternateNames")) {
+							for(std::string alternateName : settings["alternateNames"]) {
+								if(joystick.name == alternateName) {
+									controllerSettings = settings;
+									controllerSettingsFound = true;
+									break;
+								}
+							}
+						}
+						if(controllerSettingsFound) {
+							break;
+						}
+					}
 				}
 
-				joystick.buttonEventMappingBasis = controllerSettings["buttonEventMapping"]["basis"];
-				joystick.buttonEventMappingPreviewDebugDensity = controllerSettings["buttonEventMapping"]["previewDebugDensity"];
-				joystick.axisMin = controllerSettings["axisSettings"]["min"];
-				joystick.axisMax = controllerSettings["axisSettings"]["max"];
+				joystick.buttonEventMappingBasis = -1;
+				joystick.buttonEventMappingPreviewDebugDensity = -1;
+				if(controllerSettings.contains("buttonEventMapping")) {
+					if(controllerSettings["buttonEventMapping"].contains("basis")) {
+						joystick.buttonEventMappingBasis = controllerSettings["buttonEventMapping"]["basis"];
+					}
+					if(controllerSettings["buttonEventMapping"].contains("previewDebugDensity")) {
+						joystick.buttonEventMappingPreviewDebugDensity = controllerSettings["buttonEventMapping"]["previewDebugDensity"];
+					}
+				}
+				joystick.axisMin = 10;
+				joystick.axisMax = 32767;
+				if(controllerSettings.contains("axisSettings")) {
+					if(controllerSettings["axisSettings"].contains("min")) {
+						joystick.axisMin = controllerSettings["axisSettings"]["min"];
+						joystick.axisMax = controllerSettings["axisSettings"]["max"];
+					}
+				}
 
 				joysticks[joystick.id] = joystick;
-				logger->debug1("Opened Joystick %d [%s] with InstanceID %d, %d Axes, %d Hats, and %d Buttons.", joystick.index, joystick.name.c_str(), joystick.id, joystick.axesNum, joystick.hatsNum, joystick.buttonsNum);
+				logger->debug1("Opened Joystick %d [%s] with InstanceID %d, %d Axes, %d Hats, and %d Buttons. Joystick configuration %s found.", joystick.index, joystick.name.c_str(), joystick.id, joystick.axesNum, joystick.hatsNum, joystick.buttonsNum, controllerSettingsFound ? "WAS" : "WAS NOT");
 			}
 		}
 		SDL_JoystickEventState(SDL_ENABLE);
