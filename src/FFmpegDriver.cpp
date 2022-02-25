@@ -49,6 +49,8 @@ MediaOutputContext::MediaOutputContext(void) {
 
 FFmpegDriver::FFmpegDriver(Status *myStatus, FrameServer *myFrameServer, bool myLowLatency, bool myListAllAvailableOptions) {
 	videoCaptureWorkerPool = NULL;
+	firstFormatStartTime = 0.0;
+	firstFormatStartTimeIsSet = false;
 	logger = new Logger("FFmpegDriver");
 
 	status = myStatus;
@@ -321,17 +323,29 @@ void FFmpegDriver::openInputMedia(string inFile, enum AVMediaType type, string i
 	inputContext->initialized = true;
 
 	//// At this point (probably not before) we can assume formatContext.start_time has been populated with meaningful information.
-	double formatStartSeconds = 0.0;
+	double effectiveStartSeconds = 0.0;
 	if(inputContext->formatContext->start_time == AV_NOPTS_VALUE) {
 		logger->warning("Input format has bad start time! We're guessing the start time is zero, but that's probably wrong.");
 	} else {
-		formatStartSeconds = (double)inputContext->formatContext->start_time / (double)AV_TIME_BASE;
+		double myStartSeconds = (double)inputContext->formatContext->start_time / (double)AV_TIME_BASE;
+		effectiveStartSeconds = myStartSeconds;
+		if(firstFormatStartTimeIsSet) {
+			if(myStartSeconds < firstFormatStartTime) {
+				logger->warning("First input had start time of %.04lfs, but this input has a start time of %.04lfs! This implies there will be synchronization issues.", firstFormatStartTime, myStartSeconds);
+			}
+			effectiveStartSeconds = firstFormatStartTime;
+			logger->debug1("For synchronization purposes, this input's start time will be considered %.04lfs. (Actual reported start time is %.04lfs.)", effectiveStartSeconds, myStartSeconds);
+		}
 	}
 	if(inputContext->videoDecoderContext) {
-		inputContext->videoStreamPTSOffset = (int64_t)((double)(formatStartSeconds) / (double)videoStreamTimeBase);
+		inputContext->videoStreamPTSOffset = (int64_t)((double)(effectiveStartSeconds) / (double)videoStreamTimeBase);
 	}
 	if(inputContext->audioDecoderContext) {
-		inputContext->audioStreamPTSOffset = (int64_t)((double)(formatStartSeconds) / (double)audioStreamTimeBase);
+		inputContext->audioStreamPTSOffset = (int64_t)((double)(effectiveStartSeconds) / (double)audioStreamTimeBase);
+	}
+	if(!firstFormatStartTimeIsSet) {
+		firstFormatStartTime = effectiveStartSeconds;
+		firstFormatStartTimeIsSet = true;
 	}
 }
 

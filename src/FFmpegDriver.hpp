@@ -201,6 +201,9 @@ private:
 
 	Logger *logger;
 
+	double firstFormatStartTime;
+	bool firstFormatStartTimeIsSet;
+
 	std::list<double> frameStartTimes;
 
 	MediaInputContext videoInContext, audioInContext;
